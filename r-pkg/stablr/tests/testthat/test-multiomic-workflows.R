@@ -1,0 +1,480 @@
+test_that("stabl_multiomic_train_validate fits each omic and returns selected matrices", {
+  set.seed(101)
+  n <- 36L
+
+  x_a <- matrix(rnorm(n * 8L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(8L))))
+  x_b <- matrix(rnorm(n * 6L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(6L))))
+
+  y <- setNames(0.7 * x_a[, 1L] - 0.5 * x_b[, 2L] + rnorm(n, sd = 0.8), rownames(x_a))
+  groups <- setNames(rep(paste0("id", seq_len(n / 3L)), each = 3L), rownames(x_a))
+
+  x_train_list <- list(omic_a = x_a, omic_b = x_b)
+  lambda_grid <- data.frame(lambda = c(0.2, 0.1, 0.05))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list = x_train_list,
+    y_train = y,
+    lambda_grid = lambda_grid,
+    groups_train = groups,
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 6L,
+    family = "gaussian",
+    random_state = 11L
+  )
+
+  expect_s3_class(fit, "stabl_multiomic_fit")
+  expect_named(fit$fits, c("omic_a", "omic_b"))
+  expect_true(all(vapply(fit$fits, inherits, logical(1L), what = "stabl_fit")))
+
+  expect_named(fit$selected_train, c("omic_a", "omic_b"))
+  expect_equal(nrow(fit$selected_train$omic_a), n)
+  expect_equal(nrow(fit$selected_train$omic_b), n)
+
+  expect_named(fit$selected_features, c("omic_a", "omic_b"))
+  expect_true(all(vapply(fit$selected_features, is.character, logical(1L))))
+})
+
+test_that("stabl_multiomic_train_validate errors on misaligned train samples", {
+  x_a <- matrix(rnorm(20), nrow = 10,
+                dimnames = list(paste0("s", 1:10), paste0("a", 1:2)))
+  x_b <- matrix(rnorm(20), nrow = 10,
+                dimnames = list(paste0("t", 1:10), paste0("b", 1:2)))
+  y <- setNames(rnorm(10), paste0("s", 1:10))
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = x_a, omic_b = x_b),
+      y_train = y,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 2L
+    ),
+    "Sample mismatch"
+  )
+})
+
+test_that("stabl_multiomic_train_validate errors on validation omic name mismatch", {
+  x <- matrix(rnorm(20), nrow = 10,
+              dimnames = list(paste0("s", 1:10), paste0("f", 1:2)))
+  y <- setNames(rnorm(10), rownames(x))
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = x),
+      y_train = y,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      x_valid_list = list(other_omic = x),
+      y_valid = y,
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 2L
+    ),
+    "names must match"
+  )
+})
+
+test_that("stabl_multiomic_train_validate errors on misaligned validation samples", {
+  x <- matrix(rnorm(20), nrow = 10,
+              dimnames = list(paste0("s", 1:10), paste0("f", 1:2)))
+  y <- setNames(rnorm(10), rownames(x))
+  y_bad <- setNames(rnorm(10), paste0("v", 1:10))
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = x),
+      y_train = y,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      x_valid_list = list(omic_a = x),
+      y_valid = y_bad,
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 2L
+    ),
+    "Sample mismatch"
+  )
+})
+
+test_that("stabl_multiomic_cv returns deterministic fold diagnostics and selected matrices", {
+  set.seed(202)
+  n <- 18L
+
+  x_a <- matrix(rnorm(n * 6L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(6L))))
+  x_b <- matrix(rnorm(n * 5L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(5L))))
+  y <- setNames(0.8 * x_a[, 1L] - 0.6 * x_b[, 2L] + rnorm(n, sd = 0.6), rownames(x_a))
+
+  fit <- stabl_multiomic_cv(
+    x_list = list(omic_a = x_a, omic_b = x_b),
+    y = y,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1, 0.05)),
+    v = 3L,
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 5L,
+    random_state = 19L,
+    family = "gaussian"
+  )
+
+  expect_s3_class(fit, "stabl_multiomic_cv")
+  expect_length(fit$folds, 3L)
+  expect_named(fit$fold_results, c("Fold1", "Fold2", "Fold3"))
+  expect_true(all(vapply(fit$fold_results, inherits, logical(1L), what = "stabl_multiomic_fit")))
+
+  expect_equal(sort(unlist(lapply(fit$folds, `[[`, "valid_ids"))),
+               sort(rownames(x_a)))
+  expect_equal(nrow(fit$diagnostics), 6L)
+  expect_named(fit$diagnostics,
+               c("fold", "omic", "n_selected", "threshold", "max_score"))
+
+  fold1 <- fit$fold_results[["Fold1"]]
+  expect_named(fold1$selected_valid, c("omic_a", "omic_b"))
+  expect_equal(nrow(fold1$selected_valid$omic_a), length(fit$folds[[1L]]$valid_ids))
+  expect_equal(nrow(fold1$selected_train$omic_b), length(fit$folds[[1L]]$train_ids))
+})
+
+test_that("stabl_multiomic_cv keeps grouped samples in the same assessment fold", {
+  set.seed(303)
+  n_groups <- 6L
+  reps <- 3L
+  n <- n_groups * reps
+
+  x <- matrix(rnorm(n * 4L), nrow = n,
+              dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(4L))))
+  y <- setNames(rnorm(n), rownames(x))
+  groups <- setNames(rep(paste0("id", seq_len(n_groups)), each = reps), rownames(x))
+
+  fit <- stabl_multiomic_cv(
+    x_list = list(omic_a = x),
+    y = y,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    v = 3L,
+    groups = groups,
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    random_state = 7L,
+    family = "gaussian"
+  )
+
+  for (fold in fit$folds) {
+    valid_groups <- unique(groups[fold$valid_ids])
+    group_counts <- table(groups[names(groups) %in% fold$valid_ids])
+    expect_true(all(group_counts == reps))
+    expect_false(any(groups[fold$train_ids] %in% valid_groups))
+  }
+})
+
+test_that("stabl_multiomic_cv errors when folds exceed grouped units", {
+  x <- matrix(rnorm(24), nrow = 12,
+              dimnames = list(paste0("s", 1:12), paste0("f", 1:2)))
+  y <- setNames(rnorm(12), rownames(x))
+  groups <- setNames(rep(c("g1", "g2", "g3"), each = 4L), rownames(x))
+
+  expect_error(
+    stabl_multiomic_cv(
+      x_list = list(omic_a = x),
+      y = y,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      v = 4L,
+      groups = groups,
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 2L
+    ),
+    "number of folds"
+  )
+})
+
+# ---------------------------------------------------------------------------
+# stacked_multi_omic tests
+# ---------------------------------------------------------------------------
+
+test_that("stacked_multi_omic returns correct structure for binary task", {
+  set.seed(7)
+  y <- rep(c(0L, 1L), 10)
+  preds <- data.frame(
+    omic_a = y + rnorm(20, sd = 0.4),
+    omic_b = y + rnorm(20, sd = 1.0)
+  )
+  res <- stacked_multi_omic(preds, y, task_type = "binary",
+                             n_iter = 500L, random_state = 42L)
+
+  expect_named(res, c("predictions", "weights", "score"))
+  expect_s3_class(res$predictions, "data.frame")
+  expect_true("Stacked Gen. Predictions" %in% names(res$predictions))
+  expect_equal(nrow(res$predictions), 20L)
+  expect_s3_class(res$weights, "data.frame")
+  expect_equal(nrow(res$weights), 2L)
+  expect_true(res$score > 0.5)            # should be better than chance
+})
+
+test_that("stacked_multi_omic returns correct structure for regression task", {
+  set.seed(8)
+  n <- 30L
+  y <- rnorm(n)
+  preds <- data.frame(
+    omic_a = y + rnorm(n, sd = 0.3),
+    omic_b = y + rnorm(n, sd = 1.2)
+  )
+  res <- stacked_multi_omic(preds, y, task_type = "regression",
+                             n_iter = 500L, random_state = 99L)
+
+  expect_true(res$score > 0)              # positive R² expected
+  expect_equal(length(res$weights$Associated_weight), 2L)
+})
+
+test_that("stacked_multi_omic is reproducible with random_state", {
+  set.seed(1)
+  y <- rep(c(0L, 1L), 8)
+  preds <- data.frame(a = y + rnorm(16), b = y + rnorm(16))
+
+  r1 <- stacked_multi_omic(preds, y, task_type = "binary",
+                            n_iter = 200L, random_state = 77L)
+  r2 <- stacked_multi_omic(preds, y, task_type = "binary",
+                            n_iter = 200L, random_state = 77L)
+
+  expect_equal(r1$score, r2$score)
+  expect_equal(r1$weights, r2$weights)
+})
+
+test_that("stacked_multi_omic handles NA predictions per-row", {
+  y <- c(0L, 1L, 0L, 1L)
+  preds <- data.frame(
+    omic_a = c(0.1, 0.9, 0.2, 0.8),
+    omic_b = c(NA,  0.8, NA, 0.7)
+  )
+  res <- stacked_multi_omic(preds, y, task_type = "binary",
+                             n_iter = 200L, random_state = 5L)
+  # Rows 1 and 3 have NA in omic_b — stacked prediction should still be non-NA
+  expect_false(any(is.na(res$predictions[["Stacked Gen. Predictions"]])))
+})
+
+# ---------------------------------------------------------------------------
+# Early fusion tests
+# ---------------------------------------------------------------------------
+
+test_that("early_fusion = TRUE adds early_fusion field with correct structure", {
+  set.seed(21)
+  n <- 30L
+  x_a <- matrix(rnorm(n * 5L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(5L))))
+  x_b <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(4L))))
+  y <- setNames(x_a[, 1L] - x_b[, 2L] + rnorm(n), rownames(x_a))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list    = list(omic_a = x_a, omic_b = x_b),
+    y_train         = y,
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1, 0.05)),
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 4L,
+    family          = "gaussian",
+    random_state    = 3L,
+    early_fusion    = TRUE
+  )
+
+  expect_false(is.null(fit$early_fusion))
+  ef <- fit$early_fusion
+  expect_named(ef, c("fit", "selected_features", "selected_train", "selected_valid"))
+  expect_s3_class(ef$fit, "stabl_fit")
+  expect_true(is.character(ef$selected_features))
+  # Number of columns in selected_train should equal length of selected_features
+  expect_equal(ncol(ef$selected_train), length(ef$selected_features))
+  # No validation supplied => selected_valid is NULL
+  expect_null(ef$selected_valid)
+})
+
+test_that("early_fusion = TRUE with validation populates selected_valid", {
+  set.seed(22)
+  n_tr <- 24L; n_va <- 12L
+  x_a_tr <- matrix(rnorm(n_tr * 4L), nrow = n_tr,
+                   dimnames = list(paste0("tr", seq_len(n_tr)), paste0("a", seq_len(4L))))
+  x_b_tr <- matrix(rnorm(n_tr * 3L), nrow = n_tr,
+                   dimnames = list(paste0("tr", seq_len(n_tr)), paste0("b", seq_len(3L))))
+  x_a_va <- matrix(rnorm(n_va * 4L), nrow = n_va,
+                   dimnames = list(paste0("va", seq_len(n_va)), paste0("a", seq_len(4L))))
+  x_b_va <- matrix(rnorm(n_va * 3L), nrow = n_va,
+                   dimnames = list(paste0("va", seq_len(n_va)), paste0("b", seq_len(3L))))
+  y_tr <- setNames(rnorm(n_tr), rownames(x_a_tr))
+  y_va <- setNames(rnorm(n_va), rownames(x_a_va))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list    = list(omic_a = x_a_tr, omic_b = x_b_tr),
+    y_train         = y_tr,
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1)),
+    x_valid_list    = list(omic_a = x_a_va, omic_b = x_b_va),
+    y_valid         = y_va,
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 4L,
+    early_fusion    = TRUE,
+    random_state    = 4L
+  )
+
+  ef <- fit$early_fusion
+  expect_false(is.null(ef$selected_valid))
+  expect_equal(nrow(ef$selected_valid), n_va)
+  expect_equal(ncol(ef$selected_valid), ncol(ef$selected_train))
+})
+
+test_that("early_fusion = FALSE leaves early_fusion field NULL", {
+  set.seed(23)
+  n <- 20L
+  x <- matrix(rnorm(n * 4L), nrow = n,
+              dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(4L))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list    = list(omic_a = x),
+    y_train         = y,
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 4L,
+    early_fusion    = FALSE,
+    random_state    = 5L
+  )
+
+  expect_null(fit$early_fusion)
+})
+
+# ---------------------------------------------------------------------------
+# Late fusion tests
+# ---------------------------------------------------------------------------
+
+test_that("late_fusion = TRUE adds late_fusion field with weights and predictions", {
+  set.seed(31)
+  n <- 30L
+  x_a <- matrix(rnorm(n * 5L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(5L))))
+  x_b <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(4L))))
+  y_raw <- x_a[, 1L] - x_b[, 2L] + rnorm(n)
+  y <- setNames(y_raw, rownames(x_a))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list    = list(omic_a = x_a, omic_b = x_b),
+    y_train         = y,
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1, 0.05)),
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 4L,
+    family          = "gaussian",
+    random_state    = 10L,
+    late_fusion     = TRUE,
+    n_iter_lf       = 200L
+  )
+
+  expect_false(is.null(fit$late_fusion))
+  lf <- fit$late_fusion
+  expect_named(lf, c("weights", "train_predictions", "valid_predictions", "score"))
+  expect_s3_class(lf$weights, "data.frame")
+  expect_equal(nrow(lf$weights), 2L)             # one row per omic
+  expect_s3_class(lf$train_predictions, "data.frame")
+  expect_true("Stacked Gen. Predictions" %in% names(lf$train_predictions))
+  expect_null(lf$valid_predictions)              # no validation supplied
+})
+
+test_that("late_fusion = TRUE with validation returns valid_predictions vector", {
+  set.seed(32)
+  n_tr <- 24L; n_va <- 12L
+  x_a_tr <- matrix(rnorm(n_tr * 4L), nrow = n_tr,
+                   dimnames = list(paste0("tr", seq_len(n_tr)), paste0("a", seq_len(4L))))
+  x_b_tr <- matrix(rnorm(n_tr * 3L), nrow = n_tr,
+                   dimnames = list(paste0("tr", seq_len(n_tr)), paste0("b", seq_len(3L))))
+  x_a_va <- matrix(rnorm(n_va * 4L), nrow = n_va,
+                   dimnames = list(paste0("va", seq_len(n_va)), paste0("a", seq_len(4L))))
+  x_b_va <- matrix(rnorm(n_va * 3L), nrow = n_va,
+                   dimnames = list(paste0("va", seq_len(n_va)), paste0("b", seq_len(3L))))
+  y_tr <- setNames(rnorm(n_tr), rownames(x_a_tr))
+  y_va <- setNames(rnorm(n_va), rownames(x_a_va))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list    = list(omic_a = x_a_tr, omic_b = x_b_tr),
+    y_train         = y_tr,
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1)),
+    x_valid_list    = list(omic_a = x_a_va, omic_b = x_b_va),
+    y_valid         = y_va,
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 4L,
+    family          = "gaussian",
+    random_state    = 11L,
+    late_fusion     = TRUE,
+    n_iter_lf       = 200L
+  )
+
+  lf <- fit$late_fusion
+  expect_false(is.null(lf$valid_predictions))
+  expect_equal(length(lf$valid_predictions), n_va)
+})
+
+test_that("late_fusion = FALSE leaves late_fusion field NULL", {
+  set.seed(33)
+  n <- 20L
+  x <- matrix(rnorm(n * 4L), nrow = n,
+              dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(4L))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list    = list(omic_a = x),
+    y_train         = y,
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 4L,
+    late_fusion     = FALSE,
+    random_state    = 6L
+  )
+
+  expect_null(fit$late_fusion)
+})
+
+test_that("print.stabl_multiomic_fit runs and reports class header", {
+  set.seed(34)
+  n <- 18L
+  x_a <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(4L))))
+  x_b <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(3L))))
+  y <- setNames(rnorm(n), rownames(x_a))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list    = list(omic_a = x_a, omic_b = x_b),
+    y_train         = y,
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 3L,
+    random_state    = 12L
+  )
+
+  expect_output(print(fit), "stabl_multiomic_fit")
+})
+
+test_that("print.stabl_multiomic_cv runs and reports class header", {
+  set.seed(35)
+  n <- 18L
+  x <- matrix(rnorm(n * 5L), nrow = n,
+              dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(5L))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  fit <- stabl_multiomic_cv(
+    x_list          = list(omic_a = x),
+    y               = y,
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1)),
+    v               = 3L,
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 3L,
+    random_state    = 13L
+  )
+
+  expect_output(print(fit), "stabl_multiomic_cv")
+})

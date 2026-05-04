@@ -1,0 +1,26 @@
+Package: stablr
+Title: Sparse and Stable Biomarker Discovery in R
+Version: 0.0.0.9000
+Authors@R:
+    person(given = "stablr", family = "contributors", role = c("aut", "cre"), email = "maintainer@example.org")
+Description: R implementation of STABL for sparse and reliable biomarker
+    discovery with a model-first architecture and tidymodels compatibility.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Depends:
+    R (>= 4.4.0)
+Imports:
+    glmnet,
+    stats,
+    utils
+Suggests:
+    furrr,
+    future,
+    ggplot2,
+    knockoff,
+    sparsegl,
+    survival,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

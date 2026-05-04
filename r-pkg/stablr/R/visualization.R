@@ -1,0 +1,529 @@
+# visualization.R — ggplot2 diagnostic and result plots for stablr
+# R port of the plot functions in stabl/stabl.py and stabl/visualization.py
+
+# Color palette matching the Python STABL implementation
+.stablr_colors <- list(
+  selected   = "#C41E3A",  # cardinal red for stable/selected features
+  noise      = "#4D4F53",  # dark grey for noise features
+  artificial = "#9E9E9E",  # medium grey for artificial features
+  threshold  = "#000000",  # black for threshold lines
+  chance     = "#4D4F53",  # dark grey for chance diagonal
+  ci         = "#e3819d"   # pink for CI bands
+)
+
+# ── Stability path ────────────────────────────────────────────────────────────
+
+#' Plot the STABL Stability Path
+#'
+#' Produces a ggplot2 line chart showing the stability score (frequency of
+#' selection) of each feature across the regularisation path.  Selected
+#' features are highlighted in red; noise features are shown in dark grey.
+#' When artificial features were used during fitting, their stability path is
+#' overlaid as thin dotted grey lines.  The FDP+-optimal (or hard) threshold
+#' is shown as a dashed horizontal line.
+#'
+#' When the lambda grid contains an `alpha` column (elastic-net mixed-alpha
+#' path), the plot is automatically faceted by `alpha`.
+#'
+#' @param object A fitted `"stabl_fit"` object from [stabl_fit()].
+#' @param new_hard_threshold Numeric in `(0, 1]` or `NULL`.  When supplied,
+#'   overrides the threshold stored in `object`.
+#' @param title Character; plot title (default `"STABL Stability Path"`).
+#'
+#' @return A `ggplot` object.
+#' @export
+plot_stabl_path <- function(object, new_hard_threshold = NULL,
+                            title = "STABL Stability Path") {
+  .check_fitted_stabl(object)
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting. ",
+         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
+  }
+
+  scores     <- object$stabl_scores_
+  feat_names <- object$feature_names
+  lam_grid   <- object$fitted_lambda_grid
+  n_lambda   <- ncol(scores)
+
+  threshold <- if (!is.null(new_hard_threshold)) {
+    new_hard_threshold
+  } else if (!is.null(object$hard_threshold)) {
+    object$hard_threshold
+  } else {
+    object$fdr_min_threshold_
+  }
+
+  support <- get_support(object, new_hard_threshold = new_hard_threshold)
+
+  # Determine whether to facet by alpha
+  has_alpha <- "alpha" %in% names(lam_grid)
+  x_var     <- if (has_alpha) "lambda_idx" else "lambda_idx"
+
+  # Build long data frame for real features
+  lambda_vals <- unname(lam_grid$lambda)
+  df_list <- vector("list", length(feat_names))
+  for (i in seq_along(feat_names)) {
+    df_list[[i]] <- data.frame(
+      feature    = feat_names[i],
+      lambda_idx = seq_len(n_lambda),
+      lambda     = lambda_vals,
+      score      = unname(scores[i, ]),
+      selected   = unname(support[i]),
+      alpha      = if (has_alpha) unname(lam_grid$alpha) else NA_real_,
+      stringsAsFactors = FALSE
+    )
+  }
+  df_real <- do.call(rbind, df_list)
+
+  # Build long data frame for artificial features (if present)
+  df_art <- NULL
+  if (!is.null(object$stabl_scores_artificial_) &&
+      !is.null(object$artificial_type)) {
+    art_scores <- object$stabl_scores_artificial_
+    n_art      <- nrow(art_scores)
+    art_list   <- vector("list", n_art)
+    for (i in seq_len(n_art)) {
+      art_list[[i]] <- data.frame(
+        feature    = paste0("artificial.", i),
+        lambda_idx = seq_len(n_lambda),
+        lambda     = lambda_vals,
+        score      = unname(art_scores[i, ]),
+        alpha      = if (has_alpha) unname(lam_grid$alpha) else NA_real_,
+        stringsAsFactors = FALSE
+      )
+    }
+    df_art <- do.call(rbind, art_list)
+  }
+
+  p <- ggplot2::ggplot()
+
+  # Artificial feature lines (drawn first, below real features)
+  if (!is.null(df_art)) {
+    p <- p + ggplot2::geom_line(
+      data    = df_art,
+      mapping = ggplot2::aes(x = lambda_idx, y = score, group = feature),
+      colour  = .stablr_colors$artificial,
+      alpha   = 0.4,
+      linewidth = 0.4,
+      linetype = "dotted"
+    )
+  }
+
+  # Noise features
+  df_noise <- df_real[!df_real$selected, , drop = FALSE]
+  if (nrow(df_noise) > 0L) {
+    p <- p + ggplot2::geom_line(
+      data    = df_noise,
+      mapping = ggplot2::aes(x = lambda_idx, y = score, group = feature),
+      colour  = .stablr_colors$noise,
+      alpha   = 0.8,
+      linewidth = 0.5
+    )
+  }
+
+  # Selected features (on top)
+  df_sel <- df_real[df_real$selected, , drop = FALSE]
+  if (nrow(df_sel) > 0L) {
+    p <- p + ggplot2::geom_line(
+      data    = df_sel,
+      mapping = ggplot2::aes(x = lambda_idx, y = score, group = feature),
+      colour  = .stablr_colors$selected,
+      alpha   = 1,
+      linewidth = 1
+    )
+  }
+
+  # Threshold line
+  if (!is.null(threshold)) {
+    thresh_label <- if (!is.null(object$hard_threshold) &&
+                        is.null(new_hard_threshold)) {
+      sprintf("Hard threshold = %.2f", threshold)
+    } else if (!is.null(object$fdr_min_threshold_) &&
+               is.null(new_hard_threshold)) {
+      sprintf("FDP+ threshold = %.2f", threshold)
+    } else {
+      sprintf("Threshold = %.2f", threshold)
+    }
+    p <- p + ggplot2::geom_hline(
+      yintercept = threshold,
+      linetype   = "dashed",
+      colour     = .stablr_colors$threshold,
+      linewidth  = 0.7
+    ) + ggplot2::annotate(
+      "text",
+      x     = Inf, y = threshold,
+      label = thresh_label,
+      hjust = 1.05, vjust = -0.4,
+      size  = 3, colour = .stablr_colors$threshold
+    )
+  }
+
+  p <- p +
+    ggplot2::scale_y_continuous(limits = c(0, 1), expand = ggplot2::expansion(add = 0.02)) +
+    ggplot2::labs(
+      title = title,
+      x     = expression(lambda ~ "index"),
+      y     = "Frequency of selection"
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      panel.grid.major.x = ggplot2::element_blank(),
+      panel.grid.minor   = ggplot2::element_blank(),
+      axis.text.x        = ggplot2::element_blank(),
+      axis.ticks.x       = ggplot2::element_blank()
+    )
+
+  # Facet by alpha if multiple alpha values present
+  if (has_alpha && length(unique(lam_grid$alpha)) > 1L) {
+    p <- p + ggplot2::facet_wrap(
+      ~ alpha,
+      labeller = ggplot2::label_both,
+      scales   = "free_x"
+    )
+  }
+
+  p
+}
+
+# ── FDR diagnostic graph ──────────────────────────────────────────────────────
+
+#' Plot the FDP+ FDR Estimate Curve
+#'
+#' Plots the estimated FDR at each stability threshold, with a vertical dashed
+#' line marking the optimal threshold (the one minimising the FDR estimate).
+#' Requires that `object` was fitted with `artificial_type` set (not `NULL`).
+#'
+#' @param object A fitted `"stabl_fit"` object.
+#' @param title Character; plot title.
+#'
+#' @return A `ggplot` object.
+#' @export
+plot_fdr_graph <- function(object, title = "FDR Estimate") {
+  .check_fitted_stabl(object)
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting. ",
+         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
+  }
+  if (is.null(object$FDRs_) || is.null(object$fdr_threshold_range)) {
+    stop(
+      "`object` was fitted without artificial features (artificial_type = NULL). ",
+      "FDR graph requires FDRs_ and fdr_threshold_range to be present.",
+      call. = FALSE
+    )
+  }
+
+  thresh_grid <- object$fdr_threshold_range
+  fdrs        <- object$FDRs_
+  df          <- data.frame(threshold = thresh_grid, FDR = fdrs)
+
+  # Optimal threshold
+  if (!is.null(object$min_fdr_) && object$min_fdr_ > 1) {
+    optimal_thresh <- 1.0
+    opt_label      <- "No optimal threshold (min FDR > 1)"
+  } else {
+    optimal_thresh <- thresh_grid[which.min(fdrs)]
+    opt_label      <- sprintf("Optimal threshold = %.2f", optimal_thresh)
+  }
+
+  ggplot2::ggplot(df, ggplot2::aes(x = threshold, y = FDR)) +
+    ggplot2::geom_line(colour = .stablr_colors$noise, linewidth = 1) +
+    ggplot2::geom_vline(
+      xintercept = optimal_thresh,
+      linetype   = "dashed",
+      colour     = .stablr_colors$selected,
+      linewidth  = 0.8
+    ) +
+    ggplot2::annotate(
+      "text",
+      x     = optimal_thresh,
+      y     = max(fdrs) * 0.95,
+      label = opt_label,
+      hjust = -0.05,
+      size  = 3,
+      colour = .stablr_colors$selected
+    ) +
+    ggplot2::labs(
+      title = title,
+      x     = "Stability threshold",
+      y     = "FDR estimate"
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(
+      panel.grid.minor   = ggplot2::element_blank()
+    )
+}
+
+# ── ROC curve ─────────────────────────────────────────────────────────────────
+
+#' Plot a ROC Curve
+#'
+#' Generates a ggplot2 ROC curve from binary outcome labels and predicted
+#' probabilities.  A chance-level diagonal is included for reference.
+#'
+#' @param y_true Integer or logical vector of binary outcomes (0/1 or
+#'   `FALSE`/`TRUE`).
+#' @param y_preds Numeric vector of predicted probabilities for the positive
+#'   class, of the same length as `y_true`.
+#' @param title Character; plot title.
+#'
+#' @return A `ggplot` object.
+#' @export
+plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting. ",
+         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
+  }
+  y_true  <- as.integer(y_true)
+  y_preds <- as.numeric(y_preds)
+  if (length(y_true) != length(y_preds)) {
+    stop("`y_true` and `y_preds` must have the same length.", call. = FALSE)
+  }
+
+  roc_df  <- .roc_curve(y_true, y_preds)
+  auc_val <- .trapz(roc_df$fpr, roc_df$tpr)
+
+  ggplot2::ggplot(roc_df, ggplot2::aes(x = fpr, y = tpr)) +
+    ggplot2::geom_abline(
+      slope     = 1, intercept = 0,
+      linetype  = "dashed",
+      colour    = .stablr_colors$chance,
+      linewidth = 0.8,
+      alpha     = 0.7
+    ) +
+    ggplot2::geom_line(colour = .stablr_colors$selected, linewidth = 1.2) +
+    ggplot2::scale_x_continuous(limits = c(0, 1), expand = ggplot2::expansion(0)) +
+    ggplot2::scale_y_continuous(limits = c(0, 1), expand = ggplot2::expansion(0)) +
+    ggplot2::labs(
+      title   = title,
+      x       = "False positive rate",
+      y       = "True positive rate",
+      caption = sprintf("AUC = %.3f", auc_val)
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
+}
+
+# ── PRC curve ─────────────────────────────────────────────────────────────────
+
+#' Plot a Precision-Recall Curve
+#'
+#' Generates a ggplot2 Precision-Recall curve (PRC) from binary outcome labels
+#' and predicted probabilities.  Iso-F1 reference lines are shown at four
+#' evenly spaced F1 levels.
+#'
+#' @param y_true Integer or logical vector of binary outcomes.
+#' @param y_preds Numeric vector of predicted probabilities for the positive
+#'   class.
+#' @param show_iso Logical; if `TRUE` (default) iso-F1 contour lines are
+#'   drawn.
+#' @param title Character; plot title.
+#'
+#' @return A `ggplot` object.
+#' @export
+plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall Curve") {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting. ",
+         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
+  }
+  y_true  <- as.integer(y_true)
+  y_preds <- as.numeric(y_preds)
+  if (length(y_true) != length(y_preds)) {
+    stop("`y_true` and `y_preds` must have the same length.", call. = FALSE)
+  }
+
+  prc_df  <- .prc_curve(y_true, y_preds)
+  auc_val <- .trapz(prc_df$recall, prc_df$precision)
+
+  p <- ggplot2::ggplot()
+
+  # Iso-F1 lines
+  if (show_iso) {
+    recall_seq <- seq(0.01, 1, length.out = 100)
+    for (f1_level in c(0.2, 0.4, 0.6, 0.8)) {
+      iso_prec <- f1_level * recall_seq / (2 * recall_seq - f1_level)
+      iso_prec[iso_prec < 0 | iso_prec > 1] <- NA_real_
+      iso_df <- data.frame(recall = recall_seq, precision = iso_prec)
+      p <- p + ggplot2::geom_line(
+        data    = iso_df[!is.na(iso_df$precision), ],
+        mapping = ggplot2::aes(x = recall, y = precision),
+        colour  = .stablr_colors$ci,
+        alpha   = 0.5,
+        linetype = "dotted",
+        linewidth = 0.5
+      )
+    }
+  }
+
+  p <- p +
+    ggplot2::geom_line(
+      data    = prc_df,
+      mapping = ggplot2::aes(x = recall, y = precision),
+      colour  = .stablr_colors$selected,
+      linewidth = 1.2
+    ) +
+    ggplot2::scale_x_continuous(limits = c(0, 1), expand = ggplot2::expansion(0)) +
+    ggplot2::scale_y_continuous(limits = c(0, 1), expand = ggplot2::expansion(0)) +
+    ggplot2::labs(
+      title   = title,
+      x       = "Recall",
+      y       = "Precision",
+      caption = sprintf("AUPRC = %.3f", auc_val)
+    ) +
+    ggplot2::theme_minimal(base_size = 11) +
+    ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
+
+  p
+}
+
+# ── Feature distribution plots ────────────────────────────────────────────────
+
+#' Boxplots of Selected Features Grouped by Outcome
+#'
+#' Produces a ggplot2 figure with one facet per selected feature, showing
+#' distributions stratified by the outcome variable.  Intended for binary and
+#' multiclass tasks.
+#'
+#' @param features Character vector of feature names to plot.  Features not
+#'   present in `x` are silently skipped.
+#' @param x Numeric matrix or data frame of predictors.  Row names must align
+#'   with the names/values of `y`.
+#' @param y Factor, character, or integer vector of outcome labels.
+#' @param title Character; plot title.
+#' @param ncol Integer; number of columns in the facet grid.  Default 3.
+#'
+#' @return A `ggplot` object.
+#' @export
+boxplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting. ",
+         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
+  }
+  features <- intersect(features, colnames(x))
+  if (length(features) == 0L) {
+    stop("None of the requested `features` are columns of `x`.", call. = FALSE)
+  }
+
+  df <- .features_long(features, x, y)
+
+  ggplot2::ggplot(
+    df,
+    ggplot2::aes(x = outcome, y = value, fill = outcome)
+  ) +
+    ggplot2::geom_boxplot(outlier.size = 0.8, alpha = 0.8, width = 0.6) +
+    ggplot2::geom_jitter(width = 0.15, size = 0.5, alpha = 0.5) +
+    ggplot2::facet_wrap(~ feature, scales = "free_y", ncol = as.integer(ncol)) +
+    ggplot2::labs(title = title, x = NULL, y = "Value") +
+    ggplot2::theme_minimal(base_size = 10) +
+    ggplot2::theme(
+      legend.position  = "none",
+      strip.text       = ggplot2::element_text(size = 8, face = "bold"),
+      panel.grid.minor = ggplot2::element_blank()
+    )
+}
+
+#' Scatterplots of Selected Features Against a Continuous Outcome
+#'
+#' Produces a ggplot2 figure with one facet per selected feature, showing
+#' the predictor value versus a continuous outcome with a LOESS smooth.
+#' Intended for regression tasks.
+#'
+#' @param features Character vector of feature names to plot.
+#' @param x Numeric matrix or data frame of predictors.
+#' @param y Numeric vector of continuous outcome values.
+#' @param title Character; plot title.
+#' @param ncol Integer; number of columns in the facet grid.  Default 3.
+#'
+#' @return A `ggplot` object.
+#' @export
+scatterplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting. ",
+         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
+  }
+  features <- intersect(features, colnames(x))
+  if (length(features) == 0L) {
+    stop("None of the requested `features` are columns of `x`.", call. = FALSE)
+  }
+
+  y_num <- as.numeric(y)
+  df_list <- lapply(features, function(f) {
+    data.frame(
+      feature = f,
+      value   = as.numeric(x[, f]),
+      outcome = y_num,
+      stringsAsFactors = FALSE
+    )
+  })
+  df <- do.call(rbind, df_list)
+
+  ggplot2::ggplot(df, ggplot2::aes(x = value, y = outcome)) +
+    ggplot2::geom_point(
+      colour = .stablr_colors$noise, alpha = 0.6, size = 1
+    ) +
+    ggplot2::geom_smooth(
+      method  = "loess",
+      formula = y ~ x,
+      colour  = .stablr_colors$selected,
+      se      = TRUE,
+      linewidth = 0.9
+    ) +
+    ggplot2::facet_wrap(~ feature, scales = "free_x", ncol = as.integer(ncol)) +
+    ggplot2::labs(title = title, x = "Feature value", y = "Outcome") +
+    ggplot2::theme_minimal(base_size = 10) +
+    ggplot2::theme(
+      strip.text       = ggplot2::element_text(size = 8, face = "bold"),
+      panel.grid.minor = ggplot2::element_blank()
+    )
+}
+
+# ── Internal computation helpers ──────────────────────────────────────────────
+
+# Compute ROC curve: returns data.frame(fpr, tpr)
+.roc_curve <- function(y_true, y_preds) {
+  ord    <- order(y_preds, decreasing = TRUE)
+  y_s    <- y_true[ord]
+  n_pos  <- sum(y_true)
+  n_neg  <- length(y_true) - n_pos
+  tp_cum <- cumsum(y_s)
+  fp_cum <- cumsum(1L - y_s)
+  data.frame(
+    fpr = c(0, fp_cum / max(n_neg, 1L), 1),
+    tpr = c(0, tp_cum / max(n_pos, 1L), 1)
+  )
+}
+
+# Compute PRC curve: returns data.frame(precision, recall)
+.prc_curve <- function(y_true, y_preds) {
+  ord    <- order(y_preds, decreasing = TRUE)
+  y_s    <- y_true[ord]
+  n_pos  <- sum(y_true)
+  tp_cum <- cumsum(y_s)
+  prec   <- tp_cum / seq_along(tp_cum)
+  rec    <- tp_cum / max(n_pos, 1L)
+  data.frame(
+    precision = c(1, prec),
+    recall    = c(0, rec)
+  )
+}
+
+# Trapezoidal numerical integration
+.trapz <- function(x, y) {
+  ord <- order(x)
+  x   <- x[ord]
+  y   <- y[ord]
+  sum(diff(x) * (head(y, -1) + tail(y, -1))) / 2
+}
+
+# Build long data frame for boxplot_features
+.features_long <- function(features, x, y) {
+  out_levels <- if (is.factor(y)) levels(y) else sort(unique(as.character(y)))
+  df_list <- lapply(features, function(f) {
+    data.frame(
+      feature = f,
+      value   = as.numeric(x[, f]),
+      outcome = factor(as.character(y), levels = out_levels),
+      stringsAsFactors = FALSE
+    )
+  })
+  do.call(rbind, df_list)
+}

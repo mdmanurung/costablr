@@ -140,3 +140,7 @@ dmypy.json
 # Synthetic dataset
 Sample Data/Synthetic/*
 !Sample Data/Synthetic/runner.jl
+
+# claude
+CLAUDE.md
+AGENTS.md
