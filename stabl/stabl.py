@@ -14,12 +14,43 @@ from sklearn.linear_model import LogisticRegression, Lasso, ElasticNet
 from sklearn.model_selection import ParameterGrid,  GroupShuffleSplit
 from sklearn.utils import safe_mask
 from sklearn.utils.class_weight import compute_sample_weight
-from sklearn.utils.validation import _check_feature_names_in, check_is_fitted
+from sklearn.utils.validation import _check_feature_names_in, check_array, check_is_fitted, check_X_y
 from tqdm.autonotebook import tqdm
 from .unionfind import UnionFind
 import warnings
 from .utils import auto_mode_lambda_grid
 from .visualization import boxplot_features, scatterplot_features
+
+
+def _map_all_finite_kw(kwargs):
+    mapped = dict(kwargs)
+    if "force_all_finite" in mapped and "ensure_all_finite" not in mapped:
+        mapped["ensure_all_finite"] = mapped.pop("force_all_finite")
+    return mapped
+
+
+def _validate_array_with_compat(X, **kwargs):
+    mapped_kwargs = _map_all_finite_kw(kwargs)
+    try:
+        return check_array(X, **mapped_kwargs)
+    except TypeError:
+        # Older sklearn expects force_all_finite instead of ensure_all_finite.
+        if "ensure_all_finite" in mapped_kwargs and "force_all_finite" not in mapped_kwargs:
+            mapped_kwargs["force_all_finite"] = mapped_kwargs.pop("ensure_all_finite")
+            return check_array(X, **mapped_kwargs)
+        raise
+
+
+def _validate_pair_with_compat(X, y, **kwargs):
+    mapped_kwargs = _map_all_finite_kw(kwargs)
+    try:
+        return check_X_y(X, y, **mapped_kwargs)
+    except TypeError:
+        # Older sklearn expects force_all_finite instead of ensure_all_finite.
+        if "ensure_all_finite" in mapped_kwargs and "force_all_finite" not in mapped_kwargs:
+            mapped_kwargs["force_all_finite"] = mapped_kwargs.pop("ensure_all_finite")
+            return check_X_y(X, y, **mapped_kwargs)
+        raise
 
 
 def classic_bootstrap(y, n_subsamples, replace=True, class_weight=None, rng=np.random.default_rng(None), **kwargs):
@@ -978,6 +1009,23 @@ class Stabl(SelectorMixin, BaseEstimator):
         self.fdr_min_threshold_ = None
         self.explore_threshold = None
         self.fitted_lambda_grid_ = None
+
+    def _validate_data(self, X=None, y=None, **kwargs):
+        base_validate = getattr(super(), "_validate_data", None)
+        if callable(base_validate):
+            try:
+                return base_validate(X=X, y=y, **kwargs)
+            except TypeError:
+                return base_validate(X=X, y=y, **_map_all_finite_kw(kwargs))
+
+        local_kwargs = dict(kwargs)
+        local_kwargs.pop("reset", None)
+        local_kwargs.pop("validate_separately", None)
+
+        if y is None:
+            return _validate_array_with_compat(X, **local_kwargs)
+
+        return _validate_pair_with_compat(X, y, **local_kwargs)
 
     def _check_lambda_grid(self):
         """Check if the lambda_grid is valid. Raise error if not.

@@ -72,6 +72,71 @@ Validation notes for this pass:
 - Scope: documentation-only optimization pass.
 - Test command execution: not rerun in this pass (no R source or test code modified).
 
+### Scope Update: Cox Parity Policy (2026-05-04)
+
+- Resolved Phase 8 Cox parity handling as non-applicable for frozen Python anchors because Python `stabl/` does not implement Cox.
+- Updated planning/handoff policy so Cox closure is governed by R-native hardening gates:
+  - deterministic repeated-fit behavior with fixed random state,
+  - structural invariants (lambda-grid alignment, bounded stability/support outputs),
+  - synthetic survival-signal behavior checks.
+- Synchronized `PLAN.md` deliverable/checklist language and `HANDOFF.md` next tasks/parity ledger to reflect the non-blocking Cox policy.
+
+Validation notes for this scope update:
+
+- Scope: documentation-only policy synchronization (`PLAN.md`, `PROGRESS.md`, `HANDOFF.md`).
+- Test command execution: not rerun in this update pass (no R source or test code modified).
+
+### Notebook Execution Hardening: Tutorial Flow (2026-05-04)
+
+- Executed the STABL tutorial sequence in `Notebook examples/Tutorial Notebook.ipynb` for the proteomics regression walkthrough:
+  - preprocessing pipeline creation,
+  - standardized matrix creation,
+  - `stabl_regression.fit(...)`,
+  - FDP and stability-path visualization cells.
+- Extracted sample datasets from `Sample Data/data.zip` so notebook data loaders can resolve Onset of Labor files in this workspace.
+- Added notebook-local compatibility shims for current scikit-learn API drift:
+  - `LowInfoFilter._validate_data` bridge (`force_all_finite` -> `ensure_all_finite` handling),
+  - `Stabl._validate_data` bridge via `check_X_y`/`check_array`,
+  - optional `ALogitLasso` constructor guard to avoid hard failure in environments where legacy logistic arguments are rejected.
+- Added robust data-path resolution in the tutorial data-loading cell to support both repository-root and notebook-relative execution contexts.
+
+Validation notes for this implementation step:
+
+- Notebook kernel: `scvi-test (Python 3.13.11)`.
+- `stabl_regression.fit(...)` completed successfully (progress bar reached 100%).
+- `plot_fdr_graph(...)` and `plot_stabl_path(...)` executed successfully and rendered figures.
+
+### Scope Update: Python Sklearn Compatibility Promotion + Metrics Parity Maintenance (2026-05-04)
+
+- Promoted sklearn validation compatibility bridges from notebook-local monkeypatching into shared Python source:
+  - `stabl/preprocessing.py`: `LowInfoFilter` now has an internal `_validate_data()` compatibility fallback that handles both `force_all_finite` and `ensure_all_finite` keyword conventions.
+  - `stabl/stabl.py`: `Stabl` now has an internal `_validate_data()` compatibility fallback using `check_array`/`check_X_y` with old/new sklearn keyword handling.
+- Simplified tutorial notebook setup by removing the now-redundant `_validate_data` monkeypatch block from `Notebook examples/Tutorial Notebook.ipynb`.
+- Maintained metrics frozen-fixture parity by regenerating Python fixtures and re-running focused parity tests.
+
+Validation notes for this implementation step:
+
+- Command: `PYTHONPATH=. conda run -n R4_51 python -W ignore r-pkg/stablr/scripts/generate_python_parity_refs.py`
+- Result: completed successfully (`Wrote fixture: gaussian`, `binomial`, `multinomial`, `metrics`).
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'python-parity-fixtures|phase7')"`
+- Result: `PASS 89`, `FAIL 0`, `WARN 0`, `SKIP 0`.
+- Command: `PYTHONPATH=. conda run -n R4_51 python -c "import numpy as np; from sklearn.linear_model import Lasso; from stabl.preprocessing import LowInfoFilter; from stabl.stabl import Stabl; rng=np.random.default_rng(7); X=rng.normal(size=(40,6)); X[0,0]=np.nan; y=rng.normal(size=40); LowInfoFilter(max_nan_fraction=0.5).fit(X); m=Stabl(base_estimator=Lasso(max_iter=5000, random_state=7), lambda_grid={'alpha':[0.1,0.05]}, n_bootstraps=5, artificial_type='random_permutation', random_state=7, n_jobs=1); m.fit(np.nan_to_num(X), y); print('ok', m.stabl_scores_.shape)"`
+- Result: `ok (6, 2)`.
+
+### M11: Phase 8 Export Hardening With Real Data (2026-05-04)
+
+- Added a Biobank SSI-backed real-data fixture loader in `r-pkg/stablr/tests/testthat/test-phase7.R` that reads directly from `Sample Data/data.zip`.
+- Added a new end-to-end regression test in `test-phase7.R` that:
+  - fits a deterministic binomial `stabl_fit()` model on aligned Biobank SSI proteomics/outcome data,
+  - validates `export_stabl_to_csv()` artifact schema (dimensions, lambda-derived column labels, sorted max-probability file),
+  - validates `save_stabl_results()` artifact layout (`STABL scores.csv`, `FDR Graph.png`, `Stability Path.png`, and `Selected Features/Selected features.csv`).
+- Hardened zip-path resolution in the fixture helper by anchoring to `testthat::test_path(...)` so the test runs regardless of the test working directory.
+
+Validation notes for this implementation step:
+
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'phase7')"`
+- Result: `PASS 62`, `FAIL 0`, `WARN 0`, `SKIP 0`.
+
 ### Scope Update: Cooperative Fusion Source Consolidation (2026-05-04)
 
 - Removed the standalone cooperative-learning archive directory (`cooperative-learning/`).
@@ -196,6 +261,24 @@ Validation notes for this pass:
 
 ## Latest Validation Snapshot
 
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'phase7|python-parity-fixtures')"`
+- Result: `PASS 89`, `FAIL 0`, `WARN 0`, `SKIP 0` (includes new frozen Python parity checks for `metrics.R`).
+
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'phase7')"`
+- Result: `PASS 62`, `FAIL 0`, `WARN 0`, `SKIP 0` (includes Biobank SSI real-data export hardening test).
+
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"`
+- Result: `PASS 265`, `FAIL 0`, `WARN 0`, `SKIP 0`.
+
+- Command: `PYTHONPATH=. conda run -n R4_51 python r-pkg/stablr/scripts/generate_python_parity_refs.py`
+- Result: completed successfully; generated frozen parity fixtures for gaussian/binomial/multinomial under `r-pkg/stablr/tests/testthat/fixtures/python_parity/`.
+
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'python-parity-fixtures')"`
+- Result: `PASS 9`, `FAIL 0`, `WARN 0`, `SKIP 0`.
+
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"`
+- Result: `PASS 256`, `FAIL 0`, `WARN 0`, `SKIP 0`.
+
 - Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"`
 - Result: `PASS 247`, `FAIL 0`, `WARN 0`, `SKIP 0` (Phase 7 complete: metrics, exports, visualization + 53 new tests).
 
@@ -270,6 +353,32 @@ Validation notes for this pass:
 - 53 new tests in `r-pkg/stablr/tests/testthat/test-phase7.R` covering metrics edge cases, CSV file creation, directory structure, ggplot object return types, and error paths.
 - Full suite result: `PASS 247`, `FAIL 0`, `WARN 0`, `SKIP 0`.
 
+### M11: Phase 8 — Frozen Python Parity Fixtures (2026-05-04)
+
+- Added deterministic Python fixture generator: `r-pkg/stablr/scripts/generate_python_parity_refs.py`.
+  - Generates synthetic fixtures and frozen Python references for `gaussian`, `binomial`, and `multinomial` paths.
+  - Writes fixture datasets and reference summaries under `r-pkg/stablr/tests/testthat/fixtures/python_parity/`.
+  - Includes compatibility shim for sklearn API drift (`Stabl._validate_data`) so reference generation remains runnable in current environments.
+- Added Phase 8 regression tests: `r-pkg/stablr/tests/testthat/test-python-parity-fixtures.R`.
+  - Validates cross-language parity against frozen Python references using feature-rank/signal-strength consistency checks.
+  - Covers gaussian, binomial, and multinomial fixtures with deterministic random-state settings.
+- Recorded explicit scope gap: Python reference implementation in `stabl/` does not provide Cox-family support, so Cox frozen-reference parity remains an open hardening item requiring an agreed surrogate anchor policy.
+
+### M12: Phase 8 — Metrics Python-Parity Closure (2026-05-04)
+
+- Extended the frozen Python fixture generator (`r-pkg/stablr/scripts/generate_python_parity_refs.py`) to emit deterministic `stabl.metrics` references:
+  - scalar outputs in `r-pkg/stablr/tests/testthat/fixtures/python_parity/metrics_scalars.csv`,
+  - vector/matrix outputs in `r-pkg/stablr/tests/testthat/fixtures/python_parity/metrics_vectors.csv`.
+- Added Phase 8 parity assertions in `r-pkg/stablr/tests/testthat/test-phase7.R` that compare R metrics outputs directly against frozen Python references for:
+  - `jaccard_similarity`, `jaccard_matrix(remove_diag=TRUE)`,
+  - `adjusted_similarity`, `adjusted_similarity_values`, `adjusted_similarity_measure`,
+  - `pearson_similarity`, `pearson_similarity_values`, `pearson_similarity_measure`,
+  - `fdr_similarity`, `tpr_similarity`, `fscore_similarity` (beta = 1 and 2).
+- Closed two behavior-level parity drifts in `r-pkg/stablr/R/metrics.R` discovered by the new tests:
+  - aligned upper-triangle value ordering with Python (`np.triu_indices_from(..., k=1)` row-major traversal),
+  - aligned `stat = "mean"` error with Python's population standard deviation (`np.std`, `ddof = 0`) instead of sample standard deviation.
+- Corrected `jaccard_matrix(..., remove_diag = TRUE)` shape semantics to match Python (`N x (N-1)`), and updated the corresponding structural test.
+
 ## Traceability To Active Plan Deliverables
 - R smoke benchmark script added and documented: complete (`r-pkg/stablr/scripts/run_smoke_stablr.R`).
 - Adapter usage documentation examples added: complete (`r-pkg/stablr/R/stabl_fit.R`, `r-pkg/stablr/R/learner_adapters.R`).
@@ -302,8 +411,8 @@ Validation notes for this pass:
 - Local test-suite validation remains green and is the active hardening path.
 
 ## Next Actions
-1. Continue Phase 6 (full glmnet compatibility): close remaining coefficient/path extraction parity checks across adapter types beyond structural coverage.
-2. Add targeted parity tests for coefficient-path behavior under edge regimes (high collinearity, near-zero lambda tails, and class-imbalance stress cases).
+1. Add Cox-path frozen-reference hardening policy (Python anchor unavailable) and implement the agreed surrogate parity fixture/test path.
+2. Stress-test `save_stabl_results()` and `export_stabl_to_csv()` on real `Sample Data/` inputs for end-to-end output layout validation.
 
 ### Scope Decision (2026-05-03)
 - Tidymodels integration (Phase 6 original plan) is **dropped**. No `parsnip`, `recipes`, `tune`, `workflows`, or `yardstick` dependencies will be introduced.
@@ -311,7 +420,7 @@ Validation notes for this pass:
 
 ## Risks To Track
 - Cross-backend differences for adaptive/sparse-group/knockoff behavior.
-- Scope pressure from remaining Phase 6 compatibility work (family/alpha conventions and coefficient-path parity coverage).
+- Lack of native Cox support in Python `stabl/` blocks direct Cox frozen-reference parity checks without a surrogate-anchor policy.
 
 ## Environment Notes
 - R runtime is available via conda environment `R4_51`.

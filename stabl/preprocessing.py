@@ -1,7 +1,27 @@
 import numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.feature_selection import SelectorMixin
+from sklearn.utils.validation import check_array
 from sklearn.utils.validation import check_is_fitted
+
+
+def _map_all_finite_kw(kwargs):
+    mapped = dict(kwargs)
+    if "force_all_finite" in mapped and "ensure_all_finite" not in mapped:
+        mapped["ensure_all_finite"] = mapped.pop("force_all_finite")
+    return mapped
+
+
+def _validate_array_with_compat(X, **kwargs):
+    mapped_kwargs = _map_all_finite_kw(kwargs)
+    try:
+        return check_array(X, **mapped_kwargs)
+    except TypeError:
+        # Older sklearn expects force_all_finite instead of ensure_all_finite.
+        if "ensure_all_finite" in mapped_kwargs and "force_all_finite" not in mapped_kwargs:
+            mapped_kwargs["force_all_finite"] = mapped_kwargs.pop("ensure_all_finite")
+            return check_array(X, **mapped_kwargs)
+        raise
 
 
 def remove_low_info_samples(X, threshold=1.0):
@@ -69,6 +89,15 @@ class LowInfoFilter(SelectorMixin, BaseEstimator):
         self.max_nan_fraction = max_nan_fraction
         self.n_samples = None
         self.nan_counts_ = None
+
+    def _validate_data(self, X, **kwargs):
+        base_validate = getattr(super(), "_validate_data", None)
+        if callable(base_validate):
+            try:
+                return base_validate(X, **kwargs)
+            except TypeError:
+                return base_validate(X, **_map_all_finite_kw(kwargs))
+        return _validate_array_with_compat(X, **kwargs)
 
     def fit(self, X, y=None):
         """Learn empirical Nan proportion in X.

@@ -48,20 +48,11 @@ jaccard_matrix <- function(list_of_lists, remove_diag = TRUE) {
     }
   }
   if (remove_diag) {
-    mat <- mat[, -seq(1, n * n, by = n + 1L), drop = FALSE]
-    # Equivalent to np array[~eye] reshape; remove diagonal column-wise.
-    # Re-implement: drop col j == row i (diagonal positions) per column index.
-    mat <- do.call(
-      cbind,
-      lapply(seq_len(n), function(i) {
-        col_data <- numeric(n - 1L)
-        idx <- setdiff(seq_len(n), i)
-        for (k in seq_along(idx)) col_data[k] <- jaccard_similarity(
-          list_of_lists[[i]], list_of_lists[[idx[k]]]
-        )
-        col_data
-      })
-    )
+    out <- matrix(0, nrow = n, ncol = n - 1L)
+    for (i in seq_len(n)) {
+      out[i, ] <- mat[i, setdiff(seq_len(n), i)]
+    }
+    mat <- out
   }
   mat
 }
@@ -125,7 +116,17 @@ adjusted_similarity_values <- function(list_of_lists, nb_total_elements) {
       )
     }
   }
-  mat[upper.tri(mat)]
+  vals <- numeric(n * (n - 1L) / 2L)
+  k <- 1L
+  if (n >= 2L) {
+    for (i in seq_len(n - 1L)) {
+      for (j in seq.int(i + 1L, n)) {
+        vals[k] <- mat[i, j]
+        k <- k + 1L
+      }
+    }
+  }
+  vals
 }
 
 #' Summary Statistic of Adjusted Similarity Values
@@ -197,7 +198,17 @@ pearson_similarity_values <- function(list_of_lists, d) {
       mat[i, j] <- pearson_similarity(list_of_lists[[i]], list_of_lists[[j]], d)
     }
   }
-  mat[upper.tri(mat)]
+  vals <- numeric(n * (n - 1L) / 2L)
+  k <- 1L
+  if (n >= 2L) {
+    for (i in seq_len(n - 1L)) {
+      for (j in seq.int(i + 1L, n)) {
+        vals[k] <- mat[i, j]
+        k <- k + 1L
+      }
+    }
+  }
+  vals
 }
 
 #' Summary Statistic of Pearson Similarity Values
@@ -278,9 +289,10 @@ fscore_similarity <- function(list1, list2, beta = 1) {
       err       = as.numeric(stats::quantile(vals, probs = c(0.25, 0.75)))
     )
   } else if (stat == "mean") {
+    mu <- mean(vals)
     list(
-      statistic = mean(vals),
-      err       = stats::sd(vals)
+      statistic = mu,
+      err       = sqrt(mean((vals - mu)^2))
     )
   } else {
     stop(

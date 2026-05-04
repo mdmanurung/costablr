@@ -153,10 +153,11 @@ Acceptance criteria:
 ## Current Planning Focus
 
 1. Maintain local hardening through deterministic local test-suite validation.
-2. Continue Phase 6 full glmnet compatibility: close remaining coefficient/path parity checks beyond structural family/alpha coverage.
+2. Keep Phase 8 Cox hardening under R-native validation gates (determinism, structural invariants, synthetic-signal behavior) as a maintained regression target.
 3. Keep `HANDOFF.md` synchronized after each implementation step so fresh sessions can execute without extra context.
 4. Treat cooperative fusion as an experimental, non-parity-blocking track sourced only from `multiview/` and staged through `MultiView.md`.
 5. Stage CF-RFC-01 implementation (two-view gaussian cooperative branch) only after CF-RFC-00 checklist gates are explicitly green.
+6. Keep Python-path compatibility under current scikit-learn APIs by maintaining source-level validation shims in `stabl/` and minimizing notebook-local monkeypatching.
 
 ## Experimental Track: Cooperative Fusion (Non-Blocking)
 
@@ -187,3 +188,7 @@ Acceptance criteria:
 - [x] Phase 6 edge-regime parity coverage added for high collinearity, near-zero lambda tails, and class-imbalance binomial stress. (`r-pkg/stablr/tests/testthat/test-stabl-fit.R`)
 - [x] Fresh-session bootstrap artifact added with operator runbook + parity ledger. (`HANDOFF.md`)
 - [x] Cooperative-fusion RFC checklist drafted from `MultiView.md` Proposal-tagged claims with explicit strict-parity test gates. (`MultiView.md`)
+- [x] Frozen Python parity fixtures + regression tests added for gaussian/binomial/multinomial signal ranking parity. (`r-pkg/stablr/scripts/generate_python_parity_refs.py`, `r-pkg/stablr/tests/testthat/fixtures/python_parity/*`, `r-pkg/stablr/tests/testthat/test-python-parity-fixtures.R`)
+- [x] Cox parity policy resolved as non-applicable for frozen Python anchors; Phase 8 closure uses R-native Cox hardening gates (determinism, structural invariants, synthetic-signal behavior). (Python `stabl/` reference does not implement Cox.)
+- [x] Real-data export hardening added for `export_stabl_to_csv()` and `save_stabl_results()` using Biobank SSI files from `Sample Data/data.zip`, including schema/layout assertions. (`r-pkg/stablr/tests/testthat/test-phase7.R`)
+- [x] Phase 8 metrics parity fixtures + assertions added against frozen Python `stabl.metrics` outputs, including upper-triangle ordering and mean-error semantics parity. (`r-pkg/stablr/R/metrics.R`, `r-pkg/stablr/scripts/generate_python_parity_refs.py`, `r-pkg/stablr/tests/testthat/fixtures/python_parity/metrics_*.csv`, `r-pkg/stablr/tests/testthat/test-phase7.R`)

@@ -29,6 +29,104 @@ library(stablr)
   ))
 }
 
+.load_real_biobank_binary_fixture <- function(max_features = 48L) {
+  anchored_zip <- testthat::test_path("..", "..", "..", "..", "Sample Data", "data.zip")
+  zip_candidates <- c(
+    anchored_zip,
+    file.path("Sample Data", "data.zip"),
+    file.path("..", "Sample Data", "data.zip"),
+    file.path("..", "..", "Sample Data", "data.zip")
+  )
+  existing <- zip_candidates[file.exists(zip_candidates)]
+  if (length(existing) == 0L) {
+    skip("Sample Data/data.zip not available in workspace.")
+  }
+  zip_path <- existing[[1L]]
+
+  prot <- utils::read.csv(
+    unz(zip_path, "Biobank SSI/Proteomics.csv"),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  out <- utils::read.csv(
+    unz(zip_path, "Biobank SSI/outcome.csv"),
+    stringsAsFactors = FALSE
+  )
+
+  if (!all(c("sampleID", "model1b") %in% colnames(out))) {
+    skip("Biobank SSI outcome schema does not match expected columns.")
+  }
+  if (!"sampleID" %in% colnames(prot)) {
+    skip("Biobank SSI proteomics schema does not contain sampleID.")
+  }
+
+  ids <- intersect(prot$sampleID, out$sampleID)
+  if (length(ids) < 20L) {
+    skip("Not enough aligned samples in Biobank SSI fixture.")
+  }
+
+  prot <- prot[match(ids, prot$sampleID), , drop = FALSE]
+  out <- out[match(ids, out$sampleID), , drop = FALSE]
+
+  n_feat <- min(max_features, ncol(prot) - 1L)
+  x <- as.matrix(prot[, seq.int(2L, n_feat + 1L), drop = FALSE])
+  storage.mode(x) <- "double"
+  rownames(x) <- prot$sampleID
+
+  y <- as.numeric(out$model1b)
+  names(y) <- out$sampleID
+
+  keep <- !is.na(y)
+  x <- x[keep, , drop = FALSE]
+  y <- y[keep]
+
+  if (length(unique(y)) < 2L) {
+    skip("Biobank SSI fixture requires at least two classes for binomial fit.")
+  }
+
+  list(x = x, y = y)
+}
+
+.load_python_metrics_reference <- function() {
+  base_dir <- testthat::test_path("fixtures", "python_parity")
+  scalars <- utils::read.csv(
+    file.path(base_dir, "metrics_scalars.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+  vectors <- utils::read.csv(
+    file.path(base_dir, "metrics_vectors.csv"),
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )
+
+  list(
+    scalars = stats::setNames(scalars$value, scalars$metric),
+    vectors = vectors
+  )
+}
+
+.get_python_metric_vector <- function(reference, metric_name) {
+  rows <- reference$vectors[reference$vectors$metric == metric_name, , drop = FALSE]
+  rows <- rows[order(rows$index), , drop = FALSE]
+  rows$value
+}
+
+.python_metric_inputs <- function() {
+  list(
+    pair_pred = c("f1", "f2", "f5"),
+    pair_true = c("f2", "f3", "f6"),
+    list_of_lists = list(
+      c("f1", "f2", "f3"),
+      c("f2", "f3", "f4"),
+      c("f1", "f4"),
+      character(0)
+    ),
+    nb_total = 8L,
+    d = 8L
+  )
+}
+
 # ── metrics.R ─────────────────────────────────────────────────────────────────
 
 test_that("jaccard_similarity returns 0 for disjoint sets", {
@@ -51,9 +149,123 @@ test_that("jaccard_similarity both empty returns 0", {
 test_that("jaccard_matrix returns correct dimensions with remove_diag", {
   lists <- list(c("a","b"), c("b","c"), c("a","c"))
   mat <- jaccard_matrix(lists, remove_diag = TRUE)
-  # 3 lists -> 3 columns with diagonal removed
-  expect_equal(ncol(mat), 3L)
-  expect_equal(nrow(mat), 2L)
+  # Python parity: N lists -> N rows and (N - 1) columns.
+  expect_equal(nrow(mat), 3L)
+  expect_equal(ncol(mat), 2L)
+})
+
+test_that("metrics functions match frozen Python reference values", {
+  ref <- .load_python_metrics_reference()
+  inp <- .python_metric_inputs()
+  tol <- 1e-12
+
+  expect_equal(
+    jaccard_similarity(inp$pair_pred, inp$pair_true),
+    unname(ref$scalars[["jaccard_similarity_pair"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    adjusted_similarity(inp$pair_pred, inp$pair_true, inp$nb_total),
+    unname(ref$scalars[["adjusted_similarity_pair"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    pearson_similarity(inp$pair_pred, inp$pair_true, inp$d),
+    unname(ref$scalars[["pearson_similarity_pair"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    fdr_similarity(inp$pair_pred, inp$pair_true),
+    unname(ref$scalars[["fdr_similarity_pair"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    tpr_similarity(inp$pair_pred, inp$pair_true),
+    unname(ref$scalars[["tpr_similarity_pair"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    fscore_similarity(inp$pair_pred, inp$pair_true, beta = 1),
+    unname(ref$scalars[["fscore_similarity_beta1_pair"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    fscore_similarity(inp$pair_pred, inp$pair_true, beta = 2),
+    unname(ref$scalars[["fscore_similarity_beta2_pair"]]),
+    tolerance = tol
+  )
+
+  r_jaccard_rowmajor <- as.vector(t(jaccard_matrix(inp$list_of_lists, remove_diag = TRUE)))
+  expect_equal(
+    r_jaccard_rowmajor,
+    .get_python_metric_vector(ref, "jaccard_matrix_remove_diag_rowmajor"),
+    tolerance = tol
+  )
+
+  expect_equal(
+    adjusted_similarity_values(inp$list_of_lists, inp$nb_total),
+    .get_python_metric_vector(ref, "adjusted_similarity_values"),
+    tolerance = tol
+  )
+  expect_equal(
+    pearson_similarity_values(inp$list_of_lists, inp$d),
+    .get_python_metric_vector(ref, "pearson_similarity_values"),
+    tolerance = tol
+  )
+
+  adj_med <- adjusted_similarity_measure(inp$list_of_lists, inp$nb_total, stat = "median")
+  expect_equal(
+    adj_med$statistic,
+    unname(ref$scalars[["adjusted_similarity_measure_median_stat"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    adj_med$err,
+    c(
+      unname(ref$scalars[["adjusted_similarity_measure_median_err_q25"]]),
+      unname(ref$scalars[["adjusted_similarity_measure_median_err_q75"]])
+    ),
+    tolerance = tol
+  )
+
+  adj_mean <- adjusted_similarity_measure(inp$list_of_lists, inp$nb_total, stat = "mean")
+  expect_equal(
+    adj_mean$statistic,
+    unname(ref$scalars[["adjusted_similarity_measure_mean_stat"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    adj_mean$err,
+    unname(ref$scalars[["adjusted_similarity_measure_mean_err_sd"]]),
+    tolerance = tol
+  )
+
+  pear_med <- pearson_similarity_measure(inp$list_of_lists, inp$d, stat = "median")
+  expect_equal(
+    pear_med$statistic,
+    unname(ref$scalars[["pearson_similarity_measure_median_stat"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    pear_med$err,
+    c(
+      unname(ref$scalars[["pearson_similarity_measure_median_err_q25"]]),
+      unname(ref$scalars[["pearson_similarity_measure_median_err_q75"]])
+    ),
+    tolerance = tol
+  )
+
+  pear_mean <- pearson_similarity_measure(inp$list_of_lists, inp$d, stat = "mean")
+  expect_equal(
+    pear_mean$statistic,
+    unname(ref$scalars[["pearson_similarity_measure_mean_stat"]]),
+    tolerance = tol
+  )
+  expect_equal(
+    pear_mean$err,
+    unname(ref$scalars[["pearson_similarity_measure_mean_err_sd"]]),
+    tolerance = tol
+  )
 })
 
 test_that("adjusted_similarity zero for empty set", {
@@ -235,6 +447,66 @@ test_that("save_stabl_results errors when directory exists and override = FALSE"
     save_stabl_results(fit, path, x = x, y = y),
     "already exists"
   )
+})
+
+test_that("real-data Biobank SSI export helpers write stable artifact schema", {
+  skip_if_not_installed("ggplot2")
+
+  fixture <- .load_real_biobank_binary_fixture(max_features = 48L)
+  lambda_grid <- data.frame(lambda = c(0.02, 0.05, 0.10))
+
+  fit <- suppressWarnings(stabl_fit(
+    x               = fixture$x,
+    y               = fixture$y,
+    family          = "binomial",
+    lambda_grid     = lambda_grid,
+    n_bootstraps    = 4L,
+    artificial_type = "random_permutation",
+    random_state    = 2026L
+  ))
+
+  csv_path <- tempfile("stablr_real_data_csv")
+  save_path <- tempfile("stablr real data save")
+  on.exit(unlink(c(csv_path, save_path), recursive = TRUE), add = TRUE)
+
+  export_stabl_to_csv(fit, csv_path)
+
+  scores_csv <- utils::read.csv(
+    file.path(csv_path, "STABL scores.csv"),
+    row.names = 1L,
+    check.names = FALSE
+  )
+  max_csv <- utils::read.csv(
+    file.path(csv_path, "Max STABL scores.csv"),
+    row.names = 1L,
+    check.names = FALSE
+  )
+
+  expect_equal(nrow(scores_csv), ncol(fixture$x))
+  expect_equal(ncol(scores_csv), nrow(fit$fitted_lambda_grid))
+  expect_equal(colnames(scores_csv), stablr:::.lambda_grid_row_labels(fit$fitted_lambda_grid))
+  expect_true(all(diff(max_csv[["Max Proba"]]) <= 0))
+
+  save_stabl_results(
+    object     = fit,
+    path       = save_path,
+    x          = fixture$x,
+    y          = fixture$y,
+    task_type  = "binary",
+    figure_fmt = "png",
+    override   = TRUE
+  )
+
+  expect_true(file.exists(file.path(save_path, "STABL scores.csv")))
+  expect_true(file.exists(file.path(save_path, "Stability Path.png")))
+  expect_true(file.exists(file.path(save_path, "FDR Graph.png")))
+  expect_true(file.exists(file.path(save_path, "Selected Features", "Selected features.csv")))
+
+  selected_df <- utils::read.csv(
+    file.path(save_path, "Selected Features", "Selected features.csv"),
+    check.names = FALSE
+  )
+  expect_true("Feature Name" %in% colnames(selected_df))
 })
 
 # ── visualization.R ──────────────────────────────────────────────────────────
