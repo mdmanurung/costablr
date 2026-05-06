@@ -16,6 +16,15 @@ stabl_multiomic_cv(
   artificial_type = "random_permutation",
   hard_threshold = NULL,
   random_state = NULL,
+  early_fusion = FALSE,
+  late_fusion = FALSE,
+  n_iter_lf = 10000L,
+  cooperative_fusion = FALSE,
+  rho = NULL,
+  cooperation_selection = c("cv", "validation"),
+  cooperation_selector = c("lambda.min", "lambda.1se"),
+  cooperation_type_measure = "default",
+  cooperation_nfolds = 5L,
   ...
 )
 }
@@ -47,16 +56,41 @@ the same group are assigned to the same assessment fold.}
 \item{random_state}{Optional integer seed used for deterministic fold
 assignment and forwarded to each per-fold \code{\link[=stabl_fit]{stabl_fit()}} call.}
 
+\item{early_fusion}{Logical.  Forwarded to each per-fold
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.}
+
+\item{late_fusion}{Logical.  Forwarded to each per-fold
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.}
+
+\item{n_iter_lf}{Forwarded to \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
+\item{cooperative_fusion}{Forwarded to
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
+\item{rho}{Forwarded to \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
+\item{cooperation_selection}{Forwarded to
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
+\item{cooperation_selector}{Forwarded to
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
+\item{cooperation_type_measure}{Forwarded to
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
+\item{cooperation_nfolds}{Forwarded to
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
 \item{...}{Additional arguments forwarded to \code{\link[=stabl_fit]{stabl_fit()}}.}
 }
 \value{
 A list with class \code{"stabl_multiomic_cv"} containing:
-\describe{
-\item{\code{folds}}{List of fold descriptors with \code{fold}, \code{train_ids}, and
+\\describe{
+\\item{\code{folds}}{List of fold descriptors with \code{fold}, \code{train_ids}, and
 \code{valid_ids}.}
-\item{\code{fold_results}}{Named list of per-fold \code{stabl_multiomic_fit}
-results.}
-\item{\code{diagnostics}}{Data frame with one row per fold/omic and columns
+\\item{\code{fold_results}}{Named list of per-fold
+\code{stabl_multiomic_fit} results.}
+\\item{\code{diagnostics}}{Data frame with one row per fold/omic and columns
 \code{fold}, \code{omic}, \code{n_selected}, \code{threshold}, and \code{max_score}.}
 }
 }
@@ -67,7 +101,6 @@ fold-wise selection diagnostics together with selected train/validation
 matrices for downstream inspection.
 }
 \details{
-This function keeps the first CV slice narrow: it performs per-omic STABL
-feature selection only and does not add downstream predictive refits,
-early fusion, or late fusion.
+Optional early-fusion, late-fusion, and cooperative-fusion branches are
+forwarded to each fold-specific \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.
 }

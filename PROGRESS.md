@@ -20,7 +20,7 @@ Logging rule:
 5. Phase 5 (Workflow layer): Complete
 6. Phase 6 (Full glmnet compatibility): Complete
 7. Phase 7 (Reporting + exports): Complete
-8. Phase 8 (Hardening): Partial
+8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
 ## Completed Work (Mapped To Plan)
 
@@ -251,15 +251,27 @@ Validation notes for this implementation step:
   - `adaptive_lasso` with `family = "binomial"` and mixed-alpha lambda grids validates `stabl_scores_` dimensions, `fitted_lambda_grid` row alignment, alpha propagation, and identical repeated-fit stability scores.
   - `lasso` with `family = "gaussian"` and mixed-alpha lambda grids validates `stabl_scores_` dimensions, `fitted_lambda_grid` row alignment, alpha propagation, and identical repeated-fit stability scores.
 
-### M8: Phase 6 Edge-Regime Coverage + Cooperative RFC Checklist (2026-05-04)
 
-- Added focused edge-regime parity tests in `r-pkg/stablr/tests/testthat/test-stabl-fit.R` for:
-  - high-collinearity gaussian lasso regime with deterministic repeated-fit checks,
-  - near-zero lambda tail behavior for elastic-net path consumption with mixed alpha grids,
-  - class-imbalance binomial regime with deterministic repeated-fit checks and bounded stability/FDP threshold assertions.
-- Added a cooperative-fusion RFC checklist section to `MultiView.md` mapping proposal claims `MV08`-`MV10` into explicit staged gates (`CF-RFC-00` to `CF-RFC-02`) with strict parity-test closure criteria.
+### M8: Phase 8 Parity Hardening (2026-05-06)
+
+- Added frozen Python parity fixtures and regression tests for elastic-net (gaussian and binomial) in addition to lasso and multinomial.
+- Regenerated all parity fixture files using `r-pkg/stablr/scripts/generate_python_parity_refs.py`.
+- All parity tests now pass: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'python-parity-fixtures')"` → `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 20 ]`.
+- Updated PLAN.md, PROGRESS.md, HANDOFF.md to reflect parity coverage closure for these adapters.
 
 ## Latest Validation Snapshot
+
+- Command: `conda run -n R4_51 R CMD INSTALL multiview`
+- Result: completed successfully; local `multiview` package installed into the `R4_51` library for cooperative workflow validation.
+
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'multiomic-workflows')"`
+- Result: `PASS 88`, `FAIL 0`, `WARN 0`, `SKIP 0` after adding cooperative workflow coverage.
+
+- Command: `conda run -n R4_51 Rscript -e "devtools::document('r-pkg/stablr')"`
+- Result: completed successfully; regenerated `stabl_multiomic_train_validate.Rd` and `stabl_multiomic_cv.Rd` (NAMESPACE intentionally not regenerated).
+
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"`
+- Result: `PASS 309`, `FAIL 0`, `WARN 0`, `SKIP 0`.
 
 - Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'phase7|python-parity-fixtures')"`
 - Result: `PASS 89`, `FAIL 0`, `WARN 0`, `SKIP 0` (includes new frozen Python parity checks for `metrics.R`).
@@ -378,6 +390,43 @@ Validation notes for this implementation step:
   - aligned upper-triangle value ordering with Python (`np.triu_indices_from(..., k=1)` row-major traversal),
   - aligned `stat = "mean"` error with Python's population standard deviation (`np.std`, `ddof = 0`) instead of sample standard deviation.
 - Corrected `jaccard_matrix(..., remove_diag = TRUE)` shape semantics to match Python (`N x (N-1)`), and updated the corresponding structural test.
+
+### M13: Experimental Cooperative Fusion Workflow Slice (2026-05-04)
+
+- Added an experimental `cooperative_fusion` branch to `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()` in `r-pkg/stablr/R/multiomic_workflows.R`.
+  - New additive workflow arguments: `cooperative_fusion`, `rho`, `cooperation_selection`, `cooperation_selector`, `cooperation_type_measure`, and `cooperation_nfolds`.
+  - Default non-cooperative return shape is preserved exactly when `cooperative_fusion = FALSE`.
+  - Cooperative results are attached only when requested and include selected `rho`, selected `lambda`, per-view selected features, selected train/validation matrices, predictions, and tuning diagnostics.
+- Added cooperative-only argument normalization and family/dependency guards in `r-pkg/stablr/R/input_validation.R`.
+  - Optional dependency: `multiview` added to `r-pkg/stablr/DESCRIPTION` `Suggests`.
+  - Supported families: `gaussian`, `binomial`, `poisson`, and `cox`.
+  - Validation-mode cooperative tuning is explicitly rejected for `family = "cox"`; CV mode remains supported.
+  - `cooperation_selector = "lambda.1se"` is explicitly restricted to `cooperation_selection = "cv"`.
+- Added cooperative helper routines in `multiomic_workflows.R` for:
+  - multiview family mapping,
+  - deterministic inner fold-id generation with grouped handling,
+  - validation-mode metric evaluation,
+  - coefficient extraction across intercept-bearing and Cox paths,
+  - additive outer-fold diagnostics augmentation.
+- Tightened outcome handling in `stabl_multiomic_cv()` by replacing direct `y[train_ids]` / `y[valid_ids]` indexing with `.subset_outcome_by_ids(...)`, preserving support for matrix-like outcomes such as `survival::Surv`.
+- Regenerated package documentation with `devtools::document('r-pkg/stablr')`; `stabl_multiomic_train_validate.Rd` and `stabl_multiomic_cv.Rd` now reflect the cooperative arguments.
+- Extended `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R` with cooperative regression and behavior coverage:
+  - default non-cooperative return-shape preservation,
+  - gaussian cooperative CV and validation paths,
+  - binomial, poisson, and cox cooperative family coverage,
+  - unsupported-combination guards,
+  - additive cooperative diagnostics in outer CV.
+
+### M14: Handoff Documentation Refinement (2026-05-04)
+
+- Tightened `HANDOFF.md` with cooperative workflow touchpoints, explicit current constraints, and file-anchored next tasks for a fresh session.
+- Tightened `PLAN.md` with file-level cooperative owner surfaces so the next hardening step is locally scoped.
+- Tightened `MultiView.md` with `stablr` implementation anchors and the currently enforced cooperative constraints.
+
+Validation notes for this refinement:
+
+- Scope: documentation-only handoff refinement (`PLAN.md`, `PROGRESS.md`, `HANDOFF.md`, `MultiView.md`).
+- Test command execution: not rerun in this pass; latest validated state remains `PASS 309`, `FAIL 0`, `WARN 0`, `SKIP 0` from the full local suite.
 
 ## Traceability To Active Plan Deliverables
 - R smoke benchmark script added and documented: complete (`r-pkg/stablr/scripts/run_smoke_stablr.R`).

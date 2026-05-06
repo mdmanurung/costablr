@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Lasso, LogisticRegression
+from sklearn.linear_model import ElasticNet, Lasso, LogisticRegression
 from sklearn.utils.validation import check_X_y
 
 from stabl.stabl import Stabl
@@ -260,6 +260,61 @@ def _build_multinomial(seed: int) -> tuple[np.ndarray, np.ndarray, list[str], li
     return x, y, feature_names, sample_names, stabl
 
 
+def _build_gaussian_elastic_net(
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, list[str], list[str], Stabl]:
+    rng = np.random.default_rng(seed)
+    n, p = 110, 10
+    feature_names = [f"f{i + 1}" for i in range(p)]
+    sample_names = [f"s{i + 1}" for i in range(n)]
+
+    x = rng.normal(size=(n, p))
+    y = 1.5 * x[:, 0] - 1.0 * x[:, 1] + 0.3 * x[:, 2] + rng.normal(scale=0.8, size=n)
+
+    stabl = Stabl(
+        base_estimator=ElasticNet(l1_ratio=0.6, max_iter=int(1e6), random_state=seed),
+        lambda_grid={"alpha": np.geomspace(0.3, 0.01, 6)},
+        n_bootstraps=60,
+        artificial_type="random_permutation",
+        random_state=seed,
+        n_jobs=1,
+    )
+    stabl.fit(x, y)
+    return x, y, feature_names, sample_names, stabl
+
+
+def _build_binomial_elastic_net(
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, list[str], list[str], Stabl]:
+    rng = np.random.default_rng(seed)
+    n, p = 120, 10
+    feature_names = [f"f{i + 1}" for i in range(p)]
+    sample_names = [f"s{i + 1}" for i in range(n)]
+
+    x = rng.normal(size=(n, p))
+    logits = 1.3 * x[:, 0] - 1.1 * x[:, 1] + 0.3 * x[:, 2] - 0.4
+    probs = 1.0 / (1.0 + np.exp(-logits))
+    y = rng.binomial(n=1, p=probs, size=n)
+
+    stabl = Stabl(
+        base_estimator=LogisticRegression(
+            penalty="elasticnet",
+            solver="saga",
+            l1_ratio=0.6,
+            class_weight="balanced",
+            max_iter=10000,
+            random_state=seed,
+        ),
+        lambda_grid={"C": np.geomspace(0.05, 3.0, 6)},
+        n_bootstraps=60,
+        artificial_type="random_permutation",
+        random_state=seed,
+        n_jobs=1,
+    )
+    stabl.fit(x, y)
+    return x, y, feature_names, sample_names, stabl
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -274,6 +329,8 @@ def main() -> None:
         "gaussian": _build_gaussian,
         "binomial": _build_binomial,
         "multinomial": _build_multinomial,
+        "gaussian_elastic_net": _build_gaussian_elastic_net,
+        "binomial_elastic_net": _build_binomial_elastic_net,
     }
 
     for idx, (name, builder) in enumerate(builders.items(), start=1):

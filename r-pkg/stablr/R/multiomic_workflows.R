@@ -2,11 +2,8 @@
 #'
 #' Fits [stabl_fit()] independently on each omic block from a named list,
 #' then returns per-omic fitted objects and selected-feature matrices for
-#' downstream composition.
-#'
-#' This function intentionally keeps scope narrow for the first Phase 5
-#' workflow slice: it orchestrates strict alignment checks and leakage-safe
-#' grouped fitting, but does not perform downstream predictive refitting.
+#' downstream composition. Optional early-fusion, late-fusion, and
+#' cooperative-fusion branches are additive to the per-omic STABL results.
 #'
 #' @param x_train_list Named list of training omic tables (`data.frame` or
 #'   numeric matrix), each with row names as sample IDs.
@@ -39,6 +36,23 @@
 #' @param n_iter_lf Number of random weight draws passed to
 #'   [stacked_multi_omic()] during late fusion.  Ignored when
 #'   `late_fusion = FALSE`.
+#' @param cooperative_fusion Logical. When `TRUE`, fit an experimental
+#'   multiview-based cooperative learning branch in addition to the existing
+#'   per-omic STABL fits. Requires the optional `multiview` package.
+#' @param rho Numeric scalar or vector of non-negative cooperation strengths.
+#'   When `NULL`, defaults to `0` following [multiview::multiview()].
+#' @param cooperation_selection Character scalar. Either `"cv"` or
+#'   `"validation"`. `"cv"` tunes over `rho` with shared inner fold
+#'   assignments. `"validation"` tunes over `rho` and `lambda` on the
+#'   supplied validation set.
+#' @param cooperation_selector Character scalar. Selection rule for the
+#'   cooperative `lambda`. `"lambda.1se"` is only available when
+#'   `cooperation_selection = "cv"`.
+#' @param cooperation_type_measure Character scalar controlling the cooperative
+#'   tuning metric. Supported values follow the active `family` and the
+#'   multiview CV API.
+#' @param cooperation_nfolds Number of inner folds used when
+#'   `cooperation_selection = "cv"`.
 #'
 #' @return A named list with class `"stabl_multiomic_fit"` containing:
 #'   \describe{
@@ -54,6 +68,10 @@
 #'     \item{`late_fusion`}{`NULL` when `late_fusion = FALSE`.  Otherwise a
 #'       list with `weights` (data.frame), `train_predictions` (data.frame),
 #'       `valid_predictions` (numeric vector or `NULL`), and `score`.}
+#'     \item{`cooperative_fusion`}{Present only when
+#'       `cooperative_fusion = TRUE`. A list containing the selected multiview
+#'       fit, chosen `rho` and `lambda`, selected features per view,
+#'       train/validation predictions, and tuning diagnostics.}
 #'   }
 #' @export
 stabl_multiomic_train_validate <- function(
@@ -72,6 +90,12 @@ stabl_multiomic_train_validate <- function(
     early_fusion    = FALSE,
     late_fusion     = FALSE,
     n_iter_lf       = 10000L,
+    cooperative_fusion = FALSE,
+    rho             = NULL,
+    cooperation_selection = c("cv", "validation"),
+    cooperation_selector = c("lambda.min", "lambda.1se"),
+    cooperation_type_measure = "default",
+    cooperation_nfolds = 5L,
     ...
 ) {
   validate_multiomic_inputs(x_list = x_train_list, y = y_train,
@@ -85,6 +109,21 @@ stabl_multiomic_train_validate <- function(
       x_valid_list = x_valid_list,
       y_valid = y_valid,
       train_omic_names = omic_names
+    )
+  }
+
+  cooperative_args <- NULL
+  if (isTRUE(cooperative_fusion)) {
+    cooperative_args <- .normalize_cooperative_multiomic_args(
+      x_list = x_train_list,
+      family = family,
+      rho = rho,
+      cooperative_selection = cooperation_selection,
+      cooperation_selector = cooperation_selector,
+      cooperation_type_measure = cooperation_type_measure,
+      cooperation_nfolds = cooperation_nfolds,
+      x_valid_list = x_valid_list,
+      y_valid = y_valid
     )
   }
 
@@ -246,15 +285,36 @@ stabl_multiomic_train_validate <- function(
     )
   }
 
+  # ---- Cooperative fusion --------------------------------------------------
+  cf_result <- NULL
+  if (isTRUE(cooperative_fusion)) {
+    cf_result <- .cooperative_multiomic_fit(
+      x_train_list = x_train_list,
+      y_train = y_train,
+      x_valid_list = x_valid_list,
+      y_valid = y_valid,
+      groups_train = groups_train,
+      family = family,
+      random_state = random_state,
+      cooperative_args = cooperative_args
+    )
+  }
+
+  out <- list(
+    fits              = fits,
+    selected_features = selected_features,
+    selected_train    = selected_train,
+    selected_valid    = selected_valid,
+    early_fusion      = ef_result,
+    late_fusion       = lf_result
+  )
+
+  if (!is.null(cf_result)) {
+    out$cooperative_fusion <- cf_result
+  }
+
   structure(
-    list(
-      fits              = fits,
-      selected_features = selected_features,
-      selected_train    = selected_train,
-      selected_valid    = selected_valid,
-      early_fusion      = ef_result,
-      late_fusion       = lf_result
-    ),
+    out,
     class = "stabl_multiomic_fit"
   )
 }
@@ -266,9 +326,8 @@ stabl_multiomic_train_validate <- function(
 #' fold-wise selection diagnostics together with selected train/validation
 #' matrices for downstream inspection.
 #'
-#' This function keeps the first CV slice narrow: it performs per-omic STABL
-#' feature selection only and does not add downstream predictive refits,
-#' early fusion, or late fusion.
+#' Optional early-fusion, late-fusion, and cooperative-fusion branches are
+#' forwarded to each fold-specific [stabl_multiomic_train_validate()] call.
 #'
 #' @param x_list Named list of omic tables (`data.frame` or numeric matrix),
 #'   each with row names as sample IDs.
@@ -291,6 +350,17 @@ stabl_multiomic_train_validate <- function(
 #' @param late_fusion Logical.  Forwarded to each per-fold
 #'   [stabl_multiomic_train_validate()] call.
 #' @param n_iter_lf Forwarded to [stabl_multiomic_train_validate()].
+#' @param cooperative_fusion Forwarded to
+#'   [stabl_multiomic_train_validate()].
+#' @param rho Forwarded to [stabl_multiomic_train_validate()].
+#' @param cooperation_selection Forwarded to
+#'   [stabl_multiomic_train_validate()].
+#' @param cooperation_selector Forwarded to
+#'   [stabl_multiomic_train_validate()].
+#' @param cooperation_type_measure Forwarded to
+#'   [stabl_multiomic_train_validate()].
+#' @param cooperation_nfolds Forwarded to
+#'   [stabl_multiomic_train_validate()].
 #' @param ... Additional arguments forwarded to [stabl_fit()].
 #'
 #' @return A list with class `"stabl_multiomic_cv"` containing:
@@ -318,6 +388,12 @@ stabl_multiomic_cv <- function(
   early_fusion    = FALSE,
   late_fusion     = FALSE,
   n_iter_lf       = 10000L,
+  cooperative_fusion = FALSE,
+  rho               = NULL,
+  cooperation_selection = c("cv", "validation"),
+  cooperation_selector = c("lambda.min", "lambda.1se"),
+  cooperation_type_measure = "default",
+  cooperation_nfolds = 5L,
   ...
 ) {
   validate_multiomic_inputs(x_list = x_list, y = y, groups = groups)
@@ -343,10 +419,10 @@ stabl_multiomic_cv <- function(
 
     fold_fit <- stabl_multiomic_train_validate(
       x_train_list    = .subset_multiomic_rows(x_list, train_ids),
-      y_train         = y[train_ids],
+      y_train         = .subset_outcome_by_ids(y, train_ids),
       lambda_grid     = lambda_grid,
       x_valid_list    = .subset_multiomic_rows(x_list, valid_ids),
-      y_valid         = y[valid_ids],
+      y_valid         = .subset_outcome_by_ids(y, valid_ids),
       groups_train    = if (is.null(groups)) NULL else groups[train_ids],
       base_learner    = base_learner,
       family          = family,
@@ -357,11 +433,20 @@ stabl_multiomic_cv <- function(
       early_fusion    = early_fusion,
       late_fusion     = late_fusion,
       n_iter_lf       = n_iter_lf,
+      cooperative_fusion = cooperative_fusion,
+      rho             = rho,
+      cooperation_selection = cooperation_selection,
+      cooperation_selector = cooperation_selector,
+      cooperation_type_measure = cooperation_type_measure,
+      cooperation_nfolds = cooperation_nfolds,
       ...
     )
 
     fold_results[[fold_index]] <- fold_fit
-    diagnostics[[fold_index]] <- .summarize_multiomic_fold(fold_fit, fold$fold)
+    diagnostics[[fold_index]] <- .augment_multiomic_fold_diagnostics(
+      .summarize_multiomic_fold(fold_fit, fold$fold),
+      fold_fit = fold_fit
+    )
   }
 
   structure(
@@ -546,6 +631,440 @@ stabl_multiomic_cv <- function(
   }
 
   NA_real_
+}
+
+.coerce_multiomic_matrix_list <- function(x_list) {
+  out <- lapply(x_list, function(x) {
+    if (is.data.frame(x)) as.matrix(x) else x
+  })
+  names(out) <- names(x_list)
+  out
+}
+
+.cooperative_family_to_multiview <- function(family) {
+  switch(
+    family,
+    gaussian = stats::gaussian(),
+    binomial = stats::binomial(),
+    poisson = stats::poisson(),
+    cox = "cox",
+    stop(
+      "`cooperative_fusion = TRUE` only supports family = 'gaussian', 'binomial', 'poisson', or 'cox'.",
+      call. = FALSE
+    )
+  )
+}
+
+.cooperative_prediction_type <- function(family, type_measure) {
+  if (identical(type_measure, "class")) {
+    return("class")
+  }
+
+  if (identical(family, "binomial") && identical(type_measure, "deviance")) {
+    return("response")
+  }
+
+  "link"
+}
+
+.cooperative_metric_direction <- function(type_measure) {
+  if (type_measure %in% c("auc", "C")) "max" else "min"
+}
+
+.select_cooperative_metric_index <- function(metric_values, direction) {
+  if (all(is.na(metric_values))) {
+    stop("Cooperative tuning failed: all candidate metric values were NA.",
+         call. = FALSE)
+  }
+
+  if (identical(direction, "max")) {
+    which.max(replace(metric_values, is.na(metric_values), -Inf))
+  } else {
+    which.min(replace(metric_values, is.na(metric_values), Inf))
+  }
+}
+
+.make_multiomic_foldid <- function(sample_ids,
+                                   groups,
+                                   v,
+                                   random_state = NULL) {
+  folds <- .make_multiomic_cv_folds(
+    sample_ids = sample_ids,
+    groups = groups,
+    v = v,
+    random_state = random_state
+  )
+
+  foldid <- integer(length(sample_ids))
+  names(foldid) <- sample_ids
+
+  for (fold_index in seq_along(folds)) {
+    foldid[folds[[fold_index]]$valid_ids] <- fold_index
+  }
+
+  unname(foldid[sample_ids])
+}
+
+.cooperative_coerce_binary_outcome <- function(y) {
+  if (is.factor(y)) {
+    return(as.integer(y) - 1L)
+  }
+
+  y_num <- as.numeric(y)
+  if (all(sort(unique(y_num)) %in% c(0, 1))) {
+    return(as.integer(y_num))
+  }
+
+  as.integer(as.factor(y)) - 1L
+}
+
+.cooperative_binomial_deviance <- function(pred, y) {
+  prob_min <- 1e-05
+  prob_max <- 1 - prob_min
+  nc <- dim(y)
+
+  if (is.null(nc)) {
+    y <- as.factor(y)
+    ntab <- table(y)
+    nc <- as.integer(length(ntab))
+    y <- diag(nc)[as.numeric(y), , drop = FALSE]
+  }
+
+  pred <- pmin(pmax(as.numeric(pred), prob_min), prob_max)
+  lp <- y[, 1] * log(1 - pred) + y[, 2] * log(pred)
+  ly <- log(y)
+  ly[y == 0] <- 0
+  ly <- drop((y * ly) %*% c(1, 1))
+  mean(2 * (ly - lp))
+}
+
+.cooperative_poisson_deviance <- function(eta, y) {
+  y <- as.numeric(y)
+  deveta <- y * eta - exp(eta)
+  devy <- y * log(y) - y
+  devy[y == 0] <- 0
+  mean(2 * (devy - deveta))
+}
+
+.cooperative_validation_metric <- function(true_y,
+                                           pred_y,
+                                           family,
+                                           type_measure) {
+  switch(
+    type_measure,
+    mse = mean((as.numeric(true_y) - as.numeric(pred_y))^2),
+    class = mean(as.character(true_y) != as.character(pred_y)),
+    auc = .r_auc(.cooperative_coerce_binary_outcome(true_y), as.numeric(pred_y)),
+    mae = mean(abs(as.numeric(true_y) - as.numeric(pred_y))),
+    deviance = switch(
+      family,
+      gaussian = mean((as.numeric(true_y) - as.numeric(pred_y))^2),
+      binomial = .cooperative_binomial_deviance(pred_y, true_y),
+      poisson = .cooperative_poisson_deviance(pred_y, true_y),
+      stop(
+        sprintf(
+          "Validation-based cooperative tuning does not support family '%s'.",
+          family
+        ),
+        call. = FALSE
+      )
+    ),
+    stop(sprintf("Unsupported cooperative type measure '%s'.", type_measure),
+         call. = FALSE)
+  )
+}
+
+.cooperative_predict <- function(fit,
+                                 newx,
+                                 s,
+                                 family,
+                                 type_measure) {
+  prediction_type <- .cooperative_prediction_type(
+    family = family,
+    type_measure = type_measure
+  )
+
+  if (identical(prediction_type, "link")) {
+    stats::predict(fit, newx = newx, s = s)
+  } else {
+    stats::predict(fit, newx = newx, s = s, type = prediction_type)
+  }
+}
+
+.cooperative_prediction_matrix <- function(pred, n_rows) {
+  if (length(dim(pred)) > 2L) {
+    pred <- pred[, 1L, , drop = TRUE]
+  }
+
+  out <- as.matrix(pred)
+  if (nrow(out) != n_rows) {
+    out <- matrix(out, nrow = n_rows)
+  }
+  out
+}
+
+.cooperative_prediction_vector <- function(pred, sample_ids) {
+  out <- as.vector(pred)
+  names(out) <- sample_ids
+  out
+}
+
+.cooperative_coefficient_table <- function(fit, s) {
+  fit_core <- if (inherits(fit, "cv.multiview")) fit$multiview.fit else fit
+  coef_mat <- as.matrix(stats::coef(fit, s = s))
+  coef_vec <- as.numeric(coef_mat)
+
+  col_names <- unlist(fit_core$colnames_list)
+  view <- rep(names(fit_core$p_x), unlist(fit_core$p_x))
+
+  if (length(coef_vec) == length(col_names) + 1L) {
+    coef_vec <- coef_vec[-1L]
+  }
+
+  if (length(coef_vec) != length(col_names)) {
+    stop(
+      "Cooperative coefficient extraction failed: coefficient length did not match the multiview feature layout.",
+      call. = FALSE
+    )
+  }
+
+  data.frame(
+    view = view,
+    view_col = col_names,
+    coef = coef_vec,
+    stringsAsFactors = FALSE
+  )
+}
+
+.cooperative_selected_features <- function(coef_table, omic_names) {
+  out <- setNames(vector("list", length(omic_names)), omic_names)
+
+  for (omic in omic_names) {
+    out[[omic]] <- character(0)
+  }
+
+  if (is.null(coef_table) || nrow(coef_table) == 0L) {
+    return(out)
+  }
+
+  for (omic in omic_names) {
+    keep <- coef_table$view == omic & coef_table$coef != 0
+    out[[omic]] <- unique(as.character(coef_table$view_col[keep]))
+  }
+
+  out
+}
+
+.augment_multiomic_fold_diagnostics <- function(diagnostics, fold_fit) {
+  cooperative <- fold_fit$cooperative_fusion
+  if (is.null(cooperative)) {
+    return(diagnostics)
+  }
+
+  diagnostics$cooperative_rho <- cooperative$rho
+  diagnostics$cooperative_lambda <- cooperative$selected_lambda
+  diagnostics$cooperative_selection <- cooperative$selection
+  diagnostics$cooperative_selector <- cooperative$selector
+  diagnostics$cooperative_type_measure <- cooperative$type_measure
+  diagnostics$cooperative_score <- cooperative$score
+  diagnostics$cooperative_prediction_type <- cooperative$prediction_type
+  diagnostics$cooperative_n_selected <- vapply(
+    diagnostics$omic,
+    function(omic) length(cooperative$selected_features[[omic]]),
+    integer(1L)
+  )
+
+  diagnostics
+}
+
+.cooperative_multiomic_fit <- function(x_train_list,
+                                       y_train,
+                                       x_valid_list = NULL,
+                                       y_valid = NULL,
+                                       groups_train = NULL,
+                                       family = "gaussian",
+                                       random_state = NULL,
+                                       cooperative_args) {
+  omic_names <- names(x_train_list)
+  x_train_mv <- .coerce_multiomic_matrix_list(x_train_list)
+  x_valid_mv <- if (is.null(x_valid_list)) NULL else .coerce_multiomic_matrix_list(x_valid_list)
+  mv_family <- .cooperative_family_to_multiview(family)
+  direction <- .cooperative_metric_direction(cooperative_args$cooperation_type_measure)
+
+  if (identical(cooperative_args$cooperative_selection, "cv")) {
+    foldid <- .make_multiomic_foldid(
+      sample_ids = rownames(x_train_mv[[1L]]),
+      groups = groups_train,
+      v = cooperative_args$cooperation_nfolds,
+      random_state = random_state
+    )
+
+    cv_fits <- lapply(cooperative_args$rho, function(rho_value) {
+      multiview::cv.multiview(
+        x_list = x_train_mv,
+        y = y_train,
+        family = mv_family,
+        rho = rho_value,
+        type.measure = cooperative_args$cooperation_type_measure,
+        foldid = foldid
+      )
+    })
+
+    diagnostics <- do.call(rbind, lapply(seq_along(cv_fits), function(i) {
+      fit <- cv_fits[[i]]
+      selector <- cooperative_args$cooperation_selector
+      lambda_value <- unname(fit[[selector]])
+      lambda_index <- match(lambda_value, fit$lambda)
+      data.frame(
+        rho = cooperative_args$rho[[i]],
+        lambda = lambda_value,
+        metric_value = fit$cvm[[lambda_index]],
+        selected = FALSE,
+        stringsAsFactors = FALSE
+      )
+    }))
+
+    best_index <- .select_cooperative_metric_index(diagnostics$metric_value,
+                                                   direction)
+    diagnostics$selected[[best_index]] <- TRUE
+
+    best_fit <- cv_fits[[best_index]]
+    best_rho <- diagnostics$rho[[best_index]]
+    best_lambda <- diagnostics$lambda[[best_index]]
+    best_score <- diagnostics$metric_value[[best_index]]
+    selector <- cooperative_args$cooperation_selector
+
+    train_pred <- .cooperative_predict(
+      fit = best_fit,
+      newx = x_train_mv,
+      s = selector,
+      family = family,
+      type_measure = cooperative_args$cooperation_type_measure
+    )
+    valid_pred <- if (is.null(x_valid_mv)) {
+      NULL
+    } else {
+      .cooperative_predict(
+        fit = best_fit,
+        newx = x_valid_mv,
+        s = selector,
+        family = family,
+        type_measure = cooperative_args$cooperation_type_measure
+      )
+    }
+    coef_table <- .cooperative_coefficient_table(best_fit, s = selector)
+  } else {
+    foldid <- NULL
+    mv_fits <- lapply(cooperative_args$rho, function(rho_value) {
+      multiview::multiview(
+        x_list = x_train_mv,
+        y = y_train,
+        family = mv_family,
+        rho = rho_value
+      )
+    })
+
+    diagnostics_list <- vector("list", length(mv_fits))
+    candidate_metric <- numeric(length(mv_fits))
+    candidate_lambda <- numeric(length(mv_fits))
+
+    for (i in seq_along(mv_fits)) {
+      fit <- mv_fits[[i]]
+      pred_path <- .cooperative_predict(
+        fit = fit,
+        newx = x_valid_mv,
+        s = fit$lambda,
+        family = family,
+        type_measure = cooperative_args$cooperation_type_measure
+      )
+      pred_path <- .cooperative_prediction_matrix(pred_path, length(y_valid))
+
+      metric_path <- vapply(seq_along(fit$lambda), function(lambda_index) {
+        .cooperative_validation_metric(
+          true_y = y_valid,
+          pred_y = pred_path[, lambda_index],
+          family = family,
+          type_measure = cooperative_args$cooperation_type_measure
+        )
+      }, numeric(1L))
+
+      selected_index <- .select_cooperative_metric_index(metric_path, direction)
+      candidate_metric[[i]] <- metric_path[[selected_index]]
+      candidate_lambda[[i]] <- fit$lambda[[selected_index]]
+      diagnostics_list[[i]] <- data.frame(
+        rho = cooperative_args$rho[[i]],
+        lambda = fit$lambda,
+        metric_value = metric_path,
+        selected = FALSE,
+        stringsAsFactors = FALSE
+      )
+    }
+
+    best_index <- .select_cooperative_metric_index(candidate_metric, direction)
+    best_fit <- mv_fits[[best_index]]
+    best_rho <- cooperative_args$rho[[best_index]]
+    best_lambda <- candidate_lambda[[best_index]]
+    best_score <- candidate_metric[[best_index]]
+    selector <- "lambda.min"
+
+    diagnostics <- do.call(rbind, diagnostics_list)
+    selected_row <- which(diagnostics$rho == best_rho & diagnostics$lambda == best_lambda)[1L]
+    diagnostics$selected[[selected_row]] <- TRUE
+
+    train_pred <- .cooperative_predict(
+      fit = best_fit,
+      newx = x_train_mv,
+      s = best_lambda,
+      family = family,
+      type_measure = cooperative_args$cooperation_type_measure
+    )
+    valid_pred <- .cooperative_predict(
+      fit = best_fit,
+      newx = x_valid_mv,
+      s = best_lambda,
+      family = family,
+      type_measure = cooperative_args$cooperation_type_measure
+    )
+    coef_table <- .cooperative_coefficient_table(best_fit, s = best_lambda)
+  }
+
+  selected_features <- .cooperative_selected_features(coef_table, omic_names)
+  selected_train <- setNames(vector("list", length(omic_names)), omic_names)
+  selected_valid <- if (is.null(x_valid_list)) NULL else setNames(vector("list", length(omic_names)), omic_names)
+
+  for (omic in omic_names) {
+    selected_train[[omic]] <- .subset_selected_matrix(x_train_list[[omic]], selected_features[[omic]])
+    if (!is.null(selected_valid)) {
+      selected_valid[[omic]] <- .subset_selected_matrix(x_valid_list[[omic]], selected_features[[omic]])
+    }
+  }
+
+  list(
+    fit = best_fit,
+    rho = best_rho,
+    rho_grid = cooperative_args$rho,
+    selection = cooperative_args$cooperative_selection,
+    selector = selector,
+    type_measure = cooperative_args$cooperation_type_measure,
+    prediction_type = .cooperative_prediction_type(
+      family = family,
+      type_measure = cooperative_args$cooperation_type_measure
+    ),
+    score = best_score,
+    selected_lambda = best_lambda,
+    selected_features = selected_features,
+    selected_train = selected_train,
+    selected_valid = selected_valid,
+    train_predictions = .cooperative_prediction_vector(
+      train_pred,
+      rownames(x_train_mv[[1L]])
+    ),
+    valid_predictions = if (is.null(valid_pred)) NULL else {
+      .cooperative_prediction_vector(valid_pred, rownames(x_valid_mv[[1L]]))
+    },
+    diagnostics = diagnostics,
+    foldid = foldid
+  )
 }
 
 # ---------------------------------------------------------------------------

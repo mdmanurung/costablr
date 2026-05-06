@@ -478,3 +478,289 @@ test_that("print.stabl_multiomic_cv runs and reports class header", {
 
   expect_output(print(fit), "stabl_multiomic_cv")
 })
+
+test_that("default multi-omic return structure is unchanged when cooperative_fusion is FALSE", {
+  set.seed(36)
+  n <- 18L
+
+  x_a <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(4L))))
+  x_b <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(4L))))
+  y <- setNames(rnorm(n), rownames(x_a))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    random_state = 14L
+  )
+
+  expect_named(
+    fit,
+    c("fits", "selected_features", "selected_train", "selected_valid",
+      "early_fusion", "late_fusion")
+  )
+  expect_false("cooperative_fusion" %in% names(fit))
+})
+
+test_that("cooperative_fusion with cv selection returns a multiview-backed branch", {
+  skip_if_not_installed("multiview")
+
+  set.seed(37)
+  n <- 18L
+
+  x_a <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(4L))))
+  x_b <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(4L))))
+  y <- setNames(0.9 * x_a[, 1L] - 0.7 * x_b[, 2L] + rnorm(n, sd = 0.3),
+                rownames(x_a))
+
+  fit_1 <- stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    family = "gaussian",
+    random_state = 15L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.3),
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  )
+
+  fit_2 <- stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    family = "gaussian",
+    random_state = 15L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.3),
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  )
+
+  cf <- fit_1$cooperative_fusion
+  expect_s3_class(cf$fit, "cv.multiview")
+  expect_equal(cf$selection, "cv")
+  expect_equal(cf$selector, "lambda.min")
+  expect_equal(length(cf$foldid), n)
+  expect_equal(cf$rho, fit_2$cooperative_fusion$rho)
+  expect_equal(cf$foldid, fit_2$cooperative_fusion$foldid)
+  expect_equal(names(cf$selected_features), c("omic_a", "omic_b"))
+  expect_equal(length(cf$train_predictions), n)
+})
+
+test_that("cooperative_fusion supports validation-based gaussian tuning", {
+  skip_if_not_installed("multiview")
+
+  set.seed(38)
+  n_tr <- 18L
+  n_va <- 10L
+
+  x_a_tr <- matrix(rnorm(n_tr * 4L), nrow = n_tr,
+                   dimnames = list(paste0("tr", seq_len(n_tr)), paste0("a", seq_len(4L))))
+  x_b_tr <- matrix(rnorm(n_tr * 4L), nrow = n_tr,
+                   dimnames = list(paste0("tr", seq_len(n_tr)), paste0("b", seq_len(4L))))
+  x_a_va <- matrix(rnorm(n_va * 4L), nrow = n_va,
+                   dimnames = list(paste0("va", seq_len(n_va)), paste0("a", seq_len(4L))))
+  x_b_va <- matrix(rnorm(n_va * 4L), nrow = n_va,
+                   dimnames = list(paste0("va", seq_len(n_va)), paste0("b", seq_len(4L))))
+
+  y_tr <- setNames(0.7 * x_a_tr[, 1L] - 0.5 * x_b_tr[, 2L] + rnorm(n_tr, sd = 0.4),
+                   rownames(x_a_tr))
+  y_va <- setNames(0.7 * x_a_va[, 1L] - 0.5 * x_b_va[, 2L] + rnorm(n_va, sd = 0.4),
+                   rownames(x_a_va))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a_tr, omic_b = x_b_tr),
+    y_train = y_tr,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    x_valid_list = list(omic_a = x_a_va, omic_b = x_b_va),
+    y_valid = y_va,
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    family = "gaussian",
+    random_state = 16L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.2),
+    cooperation_selection = "validation",
+    cooperation_selector = "lambda.min"
+  )
+
+  cf <- fit$cooperative_fusion
+  expect_s3_class(cf$fit, "multiview")
+  expect_equal(cf$selection, "validation")
+  expect_equal(cf$selector, "lambda.min")
+  expect_equal(length(cf$valid_predictions), n_va)
+  expect_equal(sum(cf$diagnostics$selected), 1L)
+  expect_true(nrow(cf$diagnostics) >= length(cf$rho_grid))
+})
+
+test_that("cooperative_fusion supports binomial, poisson, and cox families", {
+  skip_if_not_installed("multiview")
+  skip_if_not_installed("survival")
+
+  set.seed(39)
+  n <- 20L
+  x_a <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(4L))))
+  x_b <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(4L))))
+
+  y_bin <- setNames(rbinom(n, size = 1L, prob = plogis(0.9 * x_a[, 1L] - 0.8 * x_b[, 2L])),
+                    rownames(x_a))
+  fit_bin <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y_bin,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    family = "binomial",
+    random_state = 17L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.3),
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.1se",
+    cooperation_nfolds = 3L
+  ))
+
+  y_pois <- setNames(rpois(n, lambda = exp(0.2 + 0.4 * x_a[, 1L] - 0.2 * x_b[, 1L])),
+                     rownames(x_a))
+  fit_pois <- stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y_pois,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    family = "poisson",
+    random_state = 18L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.2),
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  )
+
+  y_cox <- survival::Surv(
+    time = rexp(n, rate = exp(0.3 + 0.2 * x_a[, 1L] - 0.2 * x_b[, 2L])),
+    event = rbinom(n, size = 1L, prob = 0.7)
+  )
+  rownames(y_cox) <- rownames(x_a)
+  fit_cox <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y_cox,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    artificial_type = "random_permutation",
+    n_bootstraps = 3L,
+    family = "cox",
+    random_state = 19L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.2),
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  ))
+
+  expect_s3_class(fit_bin$cooperative_fusion$fit, "cv.multiview")
+  expect_equal(fit_bin$cooperative_fusion$selector, "lambda.1se")
+  expect_s3_class(fit_pois$cooperative_fusion$fit, "cv.multiview")
+  expect_equal(length(fit_pois$cooperative_fusion$train_predictions), n)
+  expect_s3_class(fit_cox$cooperative_fusion$fit, "cv.multiview")
+  expect_equal(length(fit_cox$cooperative_fusion$train_predictions), n)
+})
+
+test_that("cooperative_fusion rejects unsupported selection combinations", {
+  skip_if_not_installed("multiview")
+
+  set.seed(40)
+  n <- 12L
+  x <- matrix(rnorm(n * 3L), nrow = n,
+              dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(3L))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = x),
+      y_train = y,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 2L,
+      cooperative_fusion = TRUE,
+      rho = c(0, 0.2)
+    ),
+    "at least two omic views"
+  )
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = x, omic_b = x),
+      y_train = y,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      x_valid_list = list(omic_a = x, omic_b = x),
+      y_valid = y,
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 2L,
+      cooperative_fusion = TRUE,
+      rho = c(0, 0.2),
+      cooperation_selection = "validation",
+      cooperation_selector = "lambda.1se"
+    ),
+    "lambda.1se"
+  )
+})
+
+test_that("stabl_multiomic_cv adds cooperative diagnostics when enabled", {
+  skip_if_not_installed("multiview")
+
+  set.seed(41)
+  n <- 18L
+  x_a <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(4L))))
+  x_b <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(4L))))
+  y <- setNames(0.8 * x_a[, 1L] - 0.4 * x_b[, 2L] + rnorm(n, sd = 0.4),
+                rownames(x_a))
+
+  fit <- stabl_multiomic_cv(
+    x_list = list(omic_a = x_a, omic_b = x_b),
+    y = y,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    v = 3L,
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    random_state = 20L,
+    family = "gaussian",
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.2),
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  )
+
+  expect_true(all(c(
+    "cooperative_rho", "cooperative_lambda", "cooperative_selection",
+    "cooperative_selector", "cooperative_type_measure",
+    "cooperative_score", "cooperative_prediction_type",
+    "cooperative_n_selected"
+  ) %in% names(fit$diagnostics)))
+  expect_equal(nrow(fit$diagnostics), 6L)
+})

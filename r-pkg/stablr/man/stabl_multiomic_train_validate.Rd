@@ -17,6 +17,15 @@ stabl_multiomic_train_validate(
   artificial_type = "random_permutation",
   hard_threshold = NULL,
   random_state = NULL,
+  early_fusion = FALSE,
+  late_fusion = FALSE,
+  n_iter_lf = 10000L,
+  cooperative_fusion = FALSE,
+  rho = NULL,
+  cooperation_selection = c("cv", "validation"),
+  cooperation_selector = c("lambda.min", "lambda.1se"),
+  cooperation_type_measure = "default",
+  cooperation_nfolds = 5L,
   ...
 )
 }
@@ -51,6 +60,43 @@ When supplied, grouped bootstrap sampling is used in each per-omic fit.}
 
 \item{random_state}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
+\item{early_fusion}{Logical.  When \code{TRUE}, a single \code{\link[=stabl_fit]{stabl_fit()}} is run on
+the column-bound concatenation of all omic matrices in addition to the
+per-omic fits.  Results are returned in the \code{early_fusion} field.}
+
+\item{late_fusion}{Logical.  When \code{TRUE}, a downstream predictor is fitted
+per omic on its selected features, and \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} combines the
+per-omic predictions.  Requires at least one feature to be selected across
+the omics.  The \code{task_type} (binary vs. regression) is inferred from
+\code{family}.  Results are returned in the \code{late_fusion} field.}
+
+\item{n_iter_lf}{Number of random weight draws passed to
+\code{\link[=stacked_multi_omic]{stacked_multi_omic()}} during late fusion.  Ignored when
+\code{late_fusion = FALSE}.}
+
+\item{cooperative_fusion}{Logical. When \code{TRUE}, fit an experimental
+multiview-based cooperative learning branch in addition to the existing
+per-omic STABL fits. Requires the optional \code{multiview} package.}
+
+\item{rho}{Numeric scalar or vector of non-negative cooperation strengths.
+When \code{NULL}, defaults to \code{0} following \code{\link[multiview:multiview]{multiview::multiview()}}.}
+
+\item{cooperation_selection}{Character scalar. Either \code{"cv"} or
+\code{"validation"}. \code{"cv"} tunes over \code{rho} with shared inner fold
+assignments. \code{"validation"} tunes over \code{rho} and \code{lambda} on the
+supplied validation set.}
+
+\item{cooperation_selector}{Character scalar. Selection rule for the
+cooperative \code{lambda}. \code{"lambda.1se"} is only available when
+\code{cooperation_selection = "cv"}.}
+
+\item{cooperation_type_measure}{Character scalar controlling the cooperative
+tuning metric. Supported values follow the active \code{family} and the
+multiview CV API.}
+
+\item{cooperation_nfolds}{Number of inner folds used when
+\code{cooperation_selection = "cv"}.}
+
 \item{...}{Additional arguments forwarded to \code{\link[=stabl_fit]{stabl_fit()}}.}
 }
 \value{
@@ -62,15 +108,21 @@ A named list with class \code{"stabl_multiomic_fit"} containing:
 selected features (possibly 0-column).}
 \item{\code{selected_valid}}{Named list of validation matrices restricted to
 selected features, or \code{NULL} when no validation input is provided.}
+\item{\code{early_fusion}}{\code{NULL} when \code{early_fusion = FALSE}.  Otherwise a
+list with \code{fit}, \code{selected_features}, \code{selected_train}, and
+\code{selected_valid} for the concatenated single-STABL run.}
+\item{\code{late_fusion}}{\code{NULL} when \code{late_fusion = FALSE}.  Otherwise a
+list with \code{weights} (data.frame), \code{train_predictions} (data.frame),
+\code{valid_predictions} (numeric vector or \code{NULL}), and \code{score}.}
+\item{\code{cooperative_fusion}}{Present only when
+\code{cooperative_fusion = TRUE}. A list containing the selected multiview
+fit, chosen \code{rho} and \code{lambda}, selected features per view,
+train/validation predictions, and tuning diagnostics.}
 }
 }
 \description{
 Fits \code{\link[=stabl_fit]{stabl_fit()}} independently on each omic block from a named list,
 then returns per-omic fitted objects and selected-feature matrices for
-downstream composition.
-}
-\details{
-This function intentionally keeps scope narrow for the first Phase 5
-workflow slice: it orchestrates strict alignment checks and leakage-safe
-grouped fitting, but does not perform downstream predictive refitting.
+downstream composition. Optional early-fusion, late-fusion, and
+cooperative-fusion branches are additive to the per-omic STABL results.
 }

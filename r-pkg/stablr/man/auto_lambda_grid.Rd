@@ -10,7 +10,8 @@ auto_lambda_grid(x, y, family = "gaussian", n_lambda = 30L, l1_ratio = NULL)
 \item{x}{Numeric matrix of predictors (samples by features).}
 
 \item{y}{Outcome vector (numeric for \code{"gaussian"}, factor or 0/1 integer
-for \code{"binomial"} or \code{"multinomial"}).}
+for \code{"binomial"}/\code{"multinomial"}, or a \code{survival::Surv} response for
+\code{"cox"}).}
 
 \item{family}{Character; \code{glmnet} response family.}
 

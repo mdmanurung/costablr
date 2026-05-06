@@ -13,7 +13,7 @@ make_sgl_adapter(
 }
 \arguments{
 \item{family}{Character; response family (\code{"gaussian"}, \code{"binomial"},
-or \code{"multinomial"}).}
+or \code{"multinomial"}). Cox is not supported for sparse-group lasso.}
 
 \item{feature_groups}{Integer/factor vector of length \code{p} assigning each
 feature to a group.}

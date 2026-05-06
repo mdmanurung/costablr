@@ -13,7 +13,7 @@ make_adaptive_lasso_adapter(
 }
 \arguments{
 \item{family}{Character; the \code{glmnet} response family, for example
-\code{"gaussian"}, \code{"binomial"}, or \code{"multinomial"}.}
+\code{"gaussian"}, \code{"binomial"}, \code{"multinomial"}, or \code{"cox"}.}
 
 \item{gamma}{Positive numeric scalar controlling weight sharpness.}
 

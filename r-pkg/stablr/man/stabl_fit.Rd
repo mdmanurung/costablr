@@ -34,7 +34,9 @@ stabl_fit(
 \item{x}{A numeric matrix or \code{data.frame} (samples \eqn{\times} features)
 with row names used as sample IDs.}
 
-\item{y}{A named numeric or factor vector whose names are sample IDs.}
+\item{y}{A named numeric/factor vector whose names are sample IDs, or a
+matrix-like outcome (for example \code{survival::Surv}) with row names as
+sample IDs.}
 
 \item{lambda_grid}{A pre-expanded \code{data.frame} (each row = one parameter
 combination) with at least a \code{lambda} column.  Pass \code{"auto"} to derive a
@@ -45,7 +47,7 @@ data-driven grid via \code{\link[=auto_lambda_grid]{auto_lambda_grid()}} (uses \
 \code{"adaptive_lasso"}, or \code{"sparse_group_lasso"}. Default: \code{"lasso"}.}
 
 \item{family}{Character; \code{glmnet} response family (\code{"gaussian"},
-\code{"binomial"}, or \code{"multinomial"}). Default: \code{"gaussian"}.}
+\code{"binomial"}, \code{"multinomial"}, or \code{"cox"}). Default: \code{"gaussian"}.}
 
 \item{n_bootstraps}{Positive integer; bootstrap iterations per lambda.
 Default: \code{1000L}.}

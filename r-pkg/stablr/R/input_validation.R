@@ -133,3 +133,132 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
 
   invisible(TRUE)
 }
+
+.supported_cooperation_type_measures <- function(family) {
+  switch(
+    family,
+    gaussian = c("default", "mse", "deviance", "mae"),
+    binomial = c("default", "mse", "deviance", "class", "auc", "mae"),
+    poisson = c("default", "mse", "deviance", "mae"),
+    cox = c("default", "deviance", "C"),
+    character(0)
+  )
+}
+
+.resolve_cooperation_type_measure <- function(family, type_measure) {
+  allowed <- .supported_cooperation_type_measures(family)
+
+  if (!(type_measure %in% allowed)) {
+    stop(
+      sprintf(
+        "`cooperation_type_measure` must be one of %s for family '%s'.",
+        paste(sprintf("'%s'", allowed), collapse = ", "),
+        family
+      ),
+      call. = FALSE
+    )
+  }
+
+  if (!identical(type_measure, "default")) {
+    return(type_measure)
+  }
+
+  switch(
+    family,
+    gaussian = "mse",
+    binomial = "deviance",
+    poisson = "deviance",
+    cox = "deviance"
+  )
+}
+
+.normalize_cooperative_multiomic_args <- function(x_list,
+                                                  family,
+                                                  rho = NULL,
+                                                  cooperative_selection = c("cv", "validation"),
+                                                  cooperation_selector = c("lambda.min", "lambda.1se"),
+                                                  cooperation_type_measure = "default",
+                                                  cooperation_nfolds = 5L,
+                                                  x_valid_list = NULL,
+                                                  y_valid = NULL) {
+  cooperative_selection <- match.arg(cooperative_selection)
+  cooperation_selector <- match.arg(cooperation_selector)
+
+  if (!requireNamespace("multiview", quietly = TRUE)) {
+    stop(
+      "`cooperative_fusion = TRUE` requires the optional 'multiview' package to be installed.",
+      call. = FALSE
+    )
+  }
+
+  if (length(x_list) < 2L) {
+    stop(
+      "`cooperative_fusion = TRUE` requires at least two omic views.",
+      call. = FALSE
+    )
+  }
+
+  if (!(family %in% c("gaussian", "binomial", "poisson", "cox"))) {
+    stop(
+      "`cooperative_fusion = TRUE` currently supports family = 'gaussian', 'binomial', 'poisson', or 'cox'.",
+      call. = FALSE
+    )
+  }
+
+  if (is.null(rho)) {
+    rho <- 0
+  }
+
+  if (!is.numeric(rho) || length(rho) == 0L || anyNA(rho) || any(!is.finite(rho))) {
+    stop("`rho` must be a non-empty numeric scalar or vector.", call. = FALSE)
+  }
+
+  if (any(rho < 0)) {
+    stop("`rho` must contain only non-negative values.", call. = FALSE)
+  }
+
+  if (length(cooperation_nfolds) != 1L || is.na(cooperation_nfolds)) {
+    stop("`cooperation_nfolds` must be a single non-missing integer.", call. = FALSE)
+  }
+
+  cooperation_nfolds <- as.integer(cooperation_nfolds)
+  if (cooperation_nfolds < 3L) {
+    stop("`cooperation_nfolds` must be greater than or equal to 3.", call. = FALSE)
+  }
+
+  if (identical(cooperative_selection, "validation")) {
+    if (identical(family, "cox")) {
+      stop(
+        "`cooperation_selection = 'validation'` is not supported for family = 'cox'; use `cooperation_selection = 'cv'`.",
+        call. = FALSE
+      )
+    }
+
+    if (is.null(x_valid_list) || is.null(y_valid)) {
+      stop(
+        "`cooperation_selection = 'validation'` requires both `x_valid_list` and `y_valid`.",
+        call. = FALSE
+      )
+    }
+
+    if (identical(cooperation_selector, "lambda.1se")) {
+      stop(
+        "`cooperation_selector = 'lambda.1se'` is only available when `cooperation_selection = 'cv'`.",
+        call. = FALSE
+      )
+    }
+  }
+
+  type_measure <- .resolve_cooperation_type_measure(
+    family = family,
+    type_measure = cooperation_type_measure
+  )
+
+  list(
+    rho = unique(as.numeric(rho)),
+    cooperative_selection = cooperative_selection,
+    cooperation_selector = cooperation_selector,
+    cooperation_type_measure = type_measure,
+    cooperation_nfolds = cooperation_nfolds
+  )
+}

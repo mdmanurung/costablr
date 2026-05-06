@@ -12,7 +12,7 @@ make_glmnet_adapter(
 }
 \arguments{
 \item{family}{Character; the \code{glmnet} response family, for example
-\code{"gaussian"}, \code{"binomial"}, or \code{"multinomial"}.}
+\code{"gaussian"}, \code{"binomial"}, \code{"multinomial"}, or \code{"cox"}.}
 
 \item{alpha_fixed}{Numeric scalar or \code{NULL}. When not \code{NULL}, this value
 overrides any \code{alpha} column in \code{lambda_val}.}

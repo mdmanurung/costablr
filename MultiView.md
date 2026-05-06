@@ -39,12 +39,38 @@ This file is the cooperative-fusion planning and evidence bridge between the mai
 
 Add a middle-fusion option to `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()` while preserving backward-compatible defaults and keeping core STABL parity work unblocked.
 
+Implementation status (2026-05-04):
+
+- The cooperative branch is now implemented as a `stablr`-only experimental extension in the workflow layer.
+- Public workflow arguments are `cooperative_fusion`, `rho`, `cooperation_selection`, `cooperation_selector`, `cooperation_type_measure`, and `cooperation_nfolds`.
+- CV-based cooperative tuning is implemented for gaussian, binomial, poisson, and cox.
+- Validation-based cooperative tuning is implemented for gaussian, binomial, and poisson; cox validation-mode tuning remains intentionally unsupported.
+- Default non-cooperative behavior remains unchanged and is covered by deterministic regression tests.
+
+## stablr implementation touchpoints
+
+- `r-pkg/stablr/R/multiomic_workflows.R`: public cooperative API, tuning helpers, coefficient extraction, and additive fold diagnostics.
+- `r-pkg/stablr/R/input_validation.R`: cooperative argument normalization, dependency checks, and family/selector constraints.
+- `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R`: current regression, family-coverage, and failure-mode tests for the cooperative branch.
+- `r-pkg/stablr/R/stabl_accessors.R`: next intended surface for cooperative print/report ergonomics.
+
+## Current enforced constraints
+
+- Cooperative mode is additive; the per-omic STABL path remains present in every run.
+- `cooperative_fusion = FALSE` preserves the current top-level return shape.
+- `rho` is the only public cooperation-strength name in `stablr`.
+- `lambda.1se` is available only for CV-based cooperative selection.
+- Cox cooperative tuning must use `cooperation_selection = "cv"`; validation-mode Cox tuning is intentionally unsupported.
+- `multiview` is an optional dependency and should not become a hard install requirement for non-cooperative users.
+
 Suggested API direction (RFC draft):
 
 - `cooperative_fusion = FALSE`
-- `cooperation_strength` (scalar or grid; maps to multiview `rho`)
+- `rho` (scalar or grid)
 - `cooperation_selector = c("lambda.min", "lambda.1se")`
 - `cooperation_selection = c("cv", "validation")`
+- `cooperation_type_measure`
+- `cooperation_nfolds`
 
 ## Strict claim labeling
 
@@ -63,7 +89,7 @@ Legend:
 | MV03 | Verified | `lambda.min` and `lambda.1se` are returned in `cv.multiview`. | return docs and object fields in `multiview/R/cv.multiview.R` | High | Expose selector policy in workflow API | P1 |
 | MV04 | Verified | Prediction selector supports `lambda.min`/`lambda.1se`. | `multiview/R/predict.cv.multiview.R` | High | Wire selector through cooperative outputs | P1 |
 | MV05 | Verified | Cooperative terms are explicit in optimization internals. | `multiview/R/get_start.R`, `multiview/R/coxpath.R` | High | Keep algorithm naming and diagnostics consistent | P1 |
-| MV06 | Verified | Active family paths include gaussian/binomial/poisson/cox. | `multiview/R/cv.multiview.R`, `multiview/R/coxpath.R` | High | Stage rollout: gaussian first, then binomial | P2 |
+| MV06 | Verified | Active family paths include gaussian/binomial/poisson/cox. | `multiview/R/cv.multiview.R`, `multiview/R/coxpath.R` | High | Keep cox restricted to CV-mode tuning until a source-backed validation criterion is defined | P2 |
 | MV07 | Verified | View-comparison utility exists for contribution analysis. | `multiview/R/view.contribution.R` | Medium | Add comparable `stablr` diagnostics output | P3 |
 | MV08 | Proposal | Add cooperative mode to `stablr` train/validate and CV workflows. | Derived from MV01-MV07 | Medium | Draft RFC + tests | P1 |
 | MV09 | Proposal | Add explicit `cooperation_selector` policy (`lambda.min`/`lambda.1se`). | Derived from MV03-MV04 | Medium | API + validation-path plumbing | P1 |
@@ -71,29 +97,31 @@ Legend:
 
 ## Step-by-step implementation plan (experimental track)
 
-1. Phase CF-0: RFC and interface lock
-- Write RFC for cooperative parameters and return contract.
-- Keep defaults off to preserve existing workflow behavior.
-- Gate: API schema review complete and documented in `PLAN.md`.
+Status note: the initial workflow implementation has landed. Remaining work is hardening and behavior-level validation, not first-pass API wiring.
 
-2. Phase CF-1: Two-view gaussian cooperative path
-- Add cooperative execution branch in workflow layer.
-- Implement deterministic synthetic tests comparing early/cooperative/late outputs.
-- Gate: behavior tests pass, no regressions in existing workflow tests.
+1. Phase CF-0: RFC and interface lock
+- Completed: cooperative parameter schema and return contract are now implemented in `stablr`.
+- Completed: defaults remain off to preserve existing workflow behavior.
+- Gate remaining: keep docs synchronized when the experimental contract evolves.
+
+2. Phase CF-1: Workflow execution + regression safety
+- Completed: cooperative execution branch is implemented in the workflow layer.
+- Completed: deterministic regression tests cover unchanged default behavior and cooperative execution across supported families.
+- Gate remaining: add behavior-level synthetic comparison tests for early/cooperative/late effects.
 
 3. Phase CF-2: Selector and tuning policy
-- Add `lambda.min`/`lambda.1se` selector wiring.
-- Add CV-over-`rho` orchestration using shared fold assignments.
-- Gate: deterministic selector-path tests and fold-consistency checks.
+- Completed: `lambda.min`/`lambda.1se` selector wiring is implemented for CV mode.
+- Completed: CV-over-`rho` orchestration with shared fold assignments is implemented.
+- Gate remaining: broaden selector edge-case coverage and optional-dependency failure-mode tests.
 
-4. Phase CF-3: Binomial extension
-- Extend cooperative path to binomial tasks.
-- Add metrics checks for deviance/AUC behavior under fixed seeds.
-- Gate: binomial cooperative tests pass with deterministic fixtures.
+4. Phase CF-3: Experimental hardening
+- Maintain gaussian/binomial/poisson/cox workflow coverage under fixed seeds.
+- Add stronger metric-behavior assertions for binomial/poisson/cox cooperative outputs.
+- Gate: behavior-level cooperative assertions pass under deterministic fixtures.
 
-5. Phase CF-4: Optional multi-view generalization
-- Extend from two-view workflows to named multi-view lists.
-- Add pairwise agreement and diagnostics summaries.
+5. Phase CF-4: Multi-view ergonomics and diagnostics
+- Keep cooperative routing compatible with named multi-view lists beyond two omics.
+- Add pairwise agreement/reporting diagnostics where they improve user inspection.
 - Gate: multi-view synthetic behavior tests pass and docs are updated.
 
 ## Acceptance and handoff discipline
@@ -111,29 +139,31 @@ RFC gate list for `stablr` cooperative fusion.
 
 ### CF-RFC-00: Interface lock (maps to MV08, MV09, MV10)
 
-- [ ] Document parameter schema in `stablr` workflow API:
+- [x] Document parameter schema in `stablr` workflow API:
   - `cooperative_fusion` (default `FALSE`),
   - `rho` (scalar or grid),
   - `cooperation_selector` (`lambda.min`/`lambda.1se`),
-  - `cooperation_selection` (`cv`/`validation`).
-- [ ] Define return contract for cooperative outputs (weights, selector used,
+  - `cooperation_selection` (`cv`/`validation`),
+  - `cooperation_type_measure`,
+  - `cooperation_nfolds`.
+- [x] Define return contract for cooperative outputs (weights, selector used,
   fold diagnostics, failure signals).
-- [ ] Backward-compatibility gate: existing workflow defaults produce identical
+- [x] Backward-compatibility gate: existing workflow defaults produce identical
   outputs when cooperative mode is disabled.
 
 Strict parity gate (required before CF-RFC-00 closure):
 
-- [ ] Deterministic API-level tests pass under fixed seeds with no changes to
+- [x] Deterministic API-level tests pass under fixed seeds with no changes to
   non-cooperative workflow outputs.
 
-### CF-RFC-01: Two-view gaussian cooperative tranche (maps to MV08, MV10)
+### CF-RFC-01: Initial workflow tranche (maps to MV08, MV10)
 
-- [ ] Add two-view cooperative branch in workflow layer using `multiview` as
-  the only source anchor.
+- [x] Add cooperative branch in workflow layer using `multiview` as the only
+  source anchor.
 - [ ] Add deterministic synthetic comparison tests:
   - early fusion vs cooperative vs late fusion on same folds,
   - fixed-seed reproducibility checks.
-- [ ] Add failure-mode checks for misaligned samples, invalid `rho`, and
+- [x] Add failure-mode checks for misaligned samples, invalid `rho`, and
   unsupported family routing.
 
 Strict parity gate (required before CF-RFC-01 closure):
@@ -144,10 +174,10 @@ Strict parity gate (required before CF-RFC-01 closure):
 
 ### CF-RFC-02: Selector policy + rho tuning (maps to MV09, MV10)
 
-- [ ] Wire `lambda.min` and `lambda.1se` through cooperative predict/extract
+- [x] Wire `lambda.min` and `lambda.1se` through cooperative predict/extract
   path.
-- [ ] Add explicit `rho`-grid CV loop with shared fold ids.
-- [ ] Persist fold-level diagnostics and chosen selector/rho in outputs.
+- [x] Add explicit `rho`-grid CV loop with shared fold ids.
+- [x] Persist fold-level diagnostics and chosen selector/rho in outputs.
 
 Strict parity gate (required before CF-RFC-02 closure):
 
