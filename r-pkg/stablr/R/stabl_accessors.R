@@ -60,11 +60,14 @@ get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
   max_scores <- get_importances(object)
   mask       <- max_scores > threshold
 
-  # explore fallback: top n_explore features if nothing passes threshold
+  # explore fallback: top n_explore features if nothing passes threshold.
+  # Use direct index selection to avoid over-selecting on tied scores
+  # (the old `sort()[n_exp] - 0.01` approach selected ALL features tied at
+  # the n_exp-th score, e.g. all-zero scores produced mask = all TRUE).
   if (!any(mask) && isTRUE(object$explore)) {
-    n_exp  <- min(object$n_explore, length(max_scores))
-    cutoff <- sort(max_scores, decreasing = TRUE)[n_exp] - 0.01
-    mask   <- max_scores > cutoff
+    n_exp       <- min(object$n_explore, length(max_scores))
+    top_idx     <- order(max_scores, decreasing = TRUE)[seq_len(n_exp)]
+    mask[top_idx] <- TRUE
   }
 
   mask

@@ -143,14 +143,15 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE, se
   }
 
   group_levels <- unique(groups)
+  # When replace = FALSE, each group may only be drawn once.
+  # Track the remaining available pool so we stop re-drawing exhausted groups.
+  remaining   <- group_levels
   sampled_idx <- integer(0)
 
-  while (length(sampled_idx) < n_subsamples) {
-    g <- sample(group_levels, size = 1L, replace = replace)
+  while (length(sampled_idx) < n_subsamples && length(remaining) > 0L) {
+    g         <- sample(remaining, size = 1L)
+    remaining <- if (replace) remaining else remaining[remaining != g]
     sampled_idx <- unique(c(sampled_idx, which(groups == g)))
-    if (!replace && length(sampled_idx) == n) {
-      break
-    }
   }
 
   sampled_idx <- sampled_idx[seq_len(min(length(sampled_idx), n_subsamples))]

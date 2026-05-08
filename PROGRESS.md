@@ -79,6 +79,91 @@ Closure: M12 closes work packages 1, 2, and 3 of the active milestone described 
 ("Cooperative Fusion Hardening (Experimental Track)"). Cooperative fusion has met its exit
 criteria from experimental status pending downstream operator-facing docs.
 
+### Fix 1: explore fallback tied-score bug (2026-05-08)
+
+**File changed:** `r-pkg/stablr/R/stabl_accessors.R`, function `get_support.stabl_fit`.
+
+**Bug:** The explore fallback used `sort(max_scores, decreasing=TRUE)[n_exp] - 0.01` as a
+cutoff, then applied `max_scores > cutoff`. When all scores are identical (e.g. all zero after
+heavy regularisation), the arithmetic `0 - 0.01 = -0.01` caused every feature to pass
+(`max_scores > -0.01`), expanding to all `p` features instead of exactly `n_explore`.
+
+**Fix:** Replaced cutoff arithmetic with `order(max_scores, decreasing=TRUE)[seq_len(n_exp)]`
+direct index selection and `mask[top_idx] <- TRUE`. This always selects exactly `n_explore`
+features regardless of tied scores.
+
+**Test added:** `test-stabl-fit.R` — "explore fallback selects exactly n_explore features even
+when all scores are tied". Uses `hard_threshold = 0.99` (nothing passes), `explore = TRUE,
+n_explore = 3`, very large lambda (scores ≈ 0). Asserts `sum(mask) == 3` and selected features
+match top-3 by importance.
+
+**Validation:**
+
+```bash
+conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"
+# -> PASS 330, FAIL 0, WARN 0, SKIP 3
+```
+
+### Fix 2: group_bootstrap_indices replace=FALSE leakage (2026-05-08)
+
+**File changed:** `r-pkg/stablr/R/bootstrap_helpers.R`, function `group_bootstrap_indices`.
+
+**Bug:** `sample(group_levels, size=1L, replace=replace)` — the `replace` argument had no
+effect on a size-1 draw, so `group_levels` never shrank. When `replace=FALSE`, the same group
+could be re-drawn multiple times, causing leakage across what should be disjoint subsamples.
+
+**Fix:** Introduced a mutable `remaining` vector initialised to `unique(groups)`. After each
+group draw, `remaining` is updated: when `replace=FALSE` the drawn group is removed.
+The `while` loop condition also guards `length(remaining) > 0L` to avoid infinite loops if
+`n_subsamples` cannot be met from the available groups.
+
+**Test added:** `test-bootstrap-helpers.R` — "group_bootstrap_indices replace=FALSE never
+re-draws the same group". Asserts that across 5 seeds no group appears more rows than its
+actual membership, and that unique group count is consistent.
+
+**Validation:**
+
+```bash
+conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"
+# -> PASS 350, FAIL 0, WARN 0, SKIP 3
+```
+
+### Fix 3: .build_corr_groups missing -0.1 offset (2026-05-08)
+
+**File changed:** `r-pkg/stablr/R/stabl_fit.R`, function `.build_corr_groups`.
+
+**Bug:** Python reference (`stabl/stabl.py` line 1142) computes
+`threshold = np.percentile(corr_val, perc) - 0.1`. The R port was missing the `- 0.1` offset,
+making the grouping threshold 0.1 units stricter than Python, resulting in fewer correlation
+groups and different SGL group assignments.
+
+**Fix:** Appended `- 0.1` to the `quantile(...)` cutoff line.
+
+**Test added:** `test-stabl-fit.R` — ".build_corr_groups applies -0.1 offset matching Python
+reference". Constructs a matrix with two near-identical columns (corr ≈ 0.99) at percentile 95,
+asserts they land in the same group.
+
+**Validation:** (running)
+
+### M13: Cooperative Fusion Vignette (2026-05-08)
+
+- Created `r-pkg/stablr/vignettes/stablr-cooperative.Rmd` (434 lines, 9 sections
+  plus closing guidance).
+- Vignette covers: overview and strategy comparison table; lambda grid setup;
+  `stabl_multiomic_train_validate()` with `cooperative_fusion = TRUE` and
+  `rho = c(0, 0.1, 0.3, 0.5)`; navigating `$cooperative_fusion` (chosen rho,
+  lambda, selected features per view, predictions, and tuning diagnostics);
+  policy guard demos (`lambda.1se` + validation, cox + validation); graceful
+  error note when `multiview` is absent; three-strategy comparison (cooperative
+  vs early vs late fusion); `stabl_multiomic_cv()` with cooperative parameters;
+  and rho/nfolds design guidance.
+- `knitr::purl()` syntax validation: clean, no chunk errors.
+- All cooperative code chunks guarded by `if (!requireNamespace("multiview",
+  quietly = TRUE)) knitr::opts_chunk$set(eval = FALSE)` in the setup chunk.
+- Registered via `%\VignetteIndexEntry{Cooperative Fusion for Multi-Omic Biomarker
+  Discovery}` in YAML header; no DESCRIPTION changes needed (`multiview` already
+  in `Suggests`).
+
 ### Phase 1-2: Foundation
 
 - Created R package scaffold under `r-pkg/stablr`.

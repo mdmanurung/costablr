@@ -73,18 +73,23 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
   }
 
   if (n_features > chunk_size) {
-    n_chunks   <- ceiling(n_features / chunk_size)
-    ko_blocks  <- vector("list", n_chunks)
+    n_chunks          <- ceiling(n_features / chunk_size)
+    ko_blocks         <- vector("list", n_chunks)
+    orig_map_blocks   <- vector("list", n_chunks)  # track source original-feature indices
     for (i in seq_len(n_chunks)) {
-      col_idx      <- sample.int(n_features, size = min(chunk_size, n_features),
-                                 replace = FALSE)
-      ko_blocks[[i]] <- .make_ko_chunk(x[, col_idx, drop = FALSE])
+      col_idx              <- sample.int(n_features, size = min(chunk_size, n_features),
+                                        replace = FALSE)
+      ko_blocks[[i]]       <- .make_ko_chunk(x[, col_idx, drop = FALSE])
+      orig_map_blocks[[i]] <- col_idx  # j-th column of ko_blocks[[i]] is knockoff of col_idx[j]
     }
-    x_art_full <- do.call(cbind, ko_blocks)  # n_samples × (n_chunks * chunk_size)
+    x_art_full <- do.call(cbind, ko_blocks)   # n_samples × (n_chunks * chunk_size)
+    orig_map   <- unlist(orig_map_blocks)      # maps each x_art_full col -> original feature idx
     keep_idx   <- sample.int(ncol(x_art_full), size = n_features, replace = FALSE)
     x_art_full <- x_art_full[, keep_idx, drop = FALSE]
+    orig_map   <- orig_map[keep_idx]           # keep map in sync after trim
   } else {
-    x_art_full <- .make_ko_chunk(x)  # n_samples × n_features
+    x_art_full <- .make_ko_chunk(x)  # n_samples × n_features, same column order as x
+    orig_map   <- seq_len(n_features)  # identity mapping: col j is knockoff of feature j
   }
 
   sel_idx <- sample.int(n = ncol(x_art_full), size = n_injected, replace = FALSE)
@@ -92,7 +97,9 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
 
   list(
     x_augmented      = cbind(x, x_art),
-    noise_col_indices = sel_idx
+    # Return original-feature indices (not x_art_full indices) so that
+    # .append_noise_groups in stabl_fit.R can look up SGL groups correctly.
+    noise_col_indices = orig_map[sel_idx]
   )
 }
 

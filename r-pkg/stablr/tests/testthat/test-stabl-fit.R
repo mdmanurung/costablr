@@ -88,6 +88,44 @@ test_that("get_support returns logical vector of correct length", {
   expect_type(mask, "logical")
 })
 
+test_that("explore fallback selects exactly n_explore features even when all scores are tied", {
+  # When hard_threshold = 0.99, nothing passes.  With explore = TRUE and
+  # n_explore = 3, exactly 3 features should be returned regardless of score
+  # ties (e.g. all scores identical / all zero).
+  set.seed(42)
+  n <- 30L; p <- 10L
+  x <- matrix(rnorm(n * p), n, p,
+               dimnames = list(paste0("s", seq_len(n)),
+                               paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+  # Use a very large lambda so all features score ~0 (maximum tie scenario)
+  lam_grid <- data.frame(lambda = c(10, 20))  # huge regularisation
+
+  fit <- stabl_fit(
+    x              = x,
+    y              = y,
+    lambda_grid    = lam_grid,
+    family         = "gaussian",
+    n_bootstraps   = 20L,
+    artificial_type = NULL,
+    hard_threshold = 0.99,   # nothing will pass
+    explore        = TRUE,
+    n_explore      = 3L
+  )
+
+  mask <- get_support(fit)
+
+  # Exactly n_explore features selected, not all p
+  expect_equal(sum(mask), 3L)
+  expect_length(mask, p)
+  expect_type(mask, "logical")
+
+  # The selected features must be the top-3 by importance score
+  importances <- get_importances(fit)
+  top3_names  <- names(sort(importances, decreasing = TRUE))[seq_len(3L)]
+  expect_setequal(names(mask)[mask], top3_names)
+})
+
 test_that("hard_threshold bypasses FDP+ path", {
   set.seed(5)
   n <- 30L; p <- 10L
@@ -1145,4 +1183,29 @@ test_that("multinomial high-collinearity regime is deterministic and bounded", {
   expect_equal(fit_1$stabl_scores_, fit_2$stabl_scores_)
   expect_true(all(fit_1$stabl_scores_ >= 0 & fit_1$stabl_scores_ <= 1))
   expect_equal(dim(fit_1$stabl_scores_), c(p, nrow(lam_grid)))
+})
+
+test_that(".build_corr_groups applies -0.1 offset matching Python reference", {
+  # Python stabl.py line 1142: threshold = np.percentile(corr_val, perc) - 0.1
+  # Without the offset, highly correlated pairs whose corr is *between* the raw
+  # percentile and (percentile - 0.1) are not grouped.  The offset must cause
+  # at least one additional pair to be joined relative to the raw-percentile cutoff.
+  set.seed(9)
+  n <- 50L
+  # f1 and f2 are nearly identical: pairwise corr ≈ 0.99
+  f1 <- rnorm(n)
+  f2 <- f1 + rnorm(n, sd = 0.05)
+  # Independent noise features
+  x_noise <- matrix(rnorm(n * 8L), n, 8L)
+  x <- cbind(f1, f2, x_noise)
+  colnames(x) <- paste0("f", seq_len(ncol(x)))
+
+  # Access the internal helper via ::: (exported in tests only)
+  grps_with_offset <- stablr:::.build_corr_groups(x, percentile = 95)
+
+  # f1 and f2 should be in the same group (offset drags threshold below ~0.99)
+  expect_equal(grps_with_offset[["f1"]], grps_with_offset[["f2"]])
+  # All groups are integers >= 1
+  expect_true(all(grps_with_offset >= 1L))
+  expect_length(grps_with_offset, ncol(x))
 })

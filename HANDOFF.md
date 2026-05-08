@@ -44,15 +44,69 @@ For details that must not be duplicated here:
 
 - Workspace mode: post-M9 hardening and polish.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
-- Cooperative fusion: implemented and experimental (non-parity-blocking) in workflow layer. Hardening milestone CLOSED on 2026-05-08 (M12 in `PROGRESS.md`).
+- Cooperative fusion: implemented and experimental (non-parity-blocking) in workflow layer. Hardening milestone CLOSED 2026-05-08 (M12). Vignette authored 2026-05-08 (M13, `stablr-cooperative.Rmd`, 434 lines, syntax clean).
 - Latest verified full-suite signal: `PASS 326`, `FAIL 0`, `WARN 0`, `SKIP 3` (sparsegl absent in env; see `PROGRESS.md` for command trail).
-- Latest verified vignette signal: all active vignettes build cleanly in `R4_51` (see `PROGRESS.md` vignette entries for exact commands/results).
+- Latest verified vignette signal: 4 of 5 vignettes built in `R4_51`; `stablr-cooperative.Rmd` authored and syntax-validated but not yet rendered (pending full build, ~10 min due to n_bootstraps=50 cooperative fits).
 
-### Immediate next 3 tasks
+### Immediate next tasks — Bug-fix audit milestone (2026-05-08)
 
-1. Promote cooperative fusion out of experimental status by drafting an operator-facing vignette section covering print output, `cooperation_selection`/`selector` policy, and the `rho` grid pattern.
-2. Re-validate `PASS 326` baseline after any subsequent edits (target: zero new skips beyond `sparsegl`).
-3. Decide whether to lift the `sparsegl` skip by installing it in `R4_51`, or leave skip as documented optional-dep behavior.
+Work through fixes in order; run the full suite after each fix; do not batch.
+
+```bash
+conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"
+```
+
+Expected baseline before starting: `PASS 326, FAIL 0, WARN 0, SKIP 3`.
+
+**Fix 1 — DONE** (`PASS 330`): `stabl_accessors.R` explore fallback replaced with `order()`-based
+direct indexing. New test "explore fallback selects exactly n_explore features even when all
+scores are tied" added to `test-stabl-fit.R`.
+
+**Fix 2 — DONE** (`PASS 350`): `bootstrap_helpers.R` `group_bootstrap_indices` — mutable
+`remaining` pool introduced; `replace=FALSE` now correctly removes each drawn group from the
+pool. Test "group_bootstrap_indices replace=FALSE never re-draws the same group" added.
+
+**Fix 3 — DONE** (running suite, expected PASS 351+): `stabl_fit.R` `.build_corr_groups` —
+appended `- 0.1` to the `quantile()` cutoff to match Python parity. Test added.
+
+**Fix 4 (correctness, p>3000 only — do next):**  
+File: `r-pkg/stablr/R/stabl_accessors.R`, function `get_support.stabl_fit`, explore fallback block.  
+Replace the `cutoff - 0.01` pattern with `order(...)[seq_len(n_exp)]` direct indexing.  
+Add test: `sum(get_support(fit_explore))` equals exactly `n_explore` when all scores are 0.  
+Full spec: `PLAN.md` → Fix 1.
+
+**Fix 2 (correctness — do second):**  
+File: `r-pkg/stablr/R/bootstrap_helpers.R`, function `group_bootstrap_indices`.  
+Replace `sample(group_levels, size=1L, replace=replace)` with a mutable `remaining` vector that shrinks when `replace=FALSE`.  
+Add test: verify no group appears more than once per call when `replace=FALSE`.  
+Full spec: `PLAN.md` → Fix 2.
+
+**Fix 3 (parity — do third):**  
+File: `r-pkg/stablr/R/stabl_fit.R`, function `.build_corr_groups`.  
+Append `- 0.1` to the `quantile(...)` cutoff to match Python (`stabl/stabl.py` line 1142).  
+Full spec: `PLAN.md` → Fix 3.
+
+**Fix 4 (correctness, p>3000 only — do fourth):**  
+File: `r-pkg/stablr/R/artificial_features.R`, function `make_knockoff_features`, chunked branch.  
+Track original-feature indices through the chunk-assemble-trim pipeline; return those as `noise_col_indices`.  
+Full spec: `PLAN.md` → Fix 4.
+
+**Fix 5 (memory — do fifth):**  
+File: `r-pkg/stablr/R/stabl_fit.R`, the `result_list` + accumulation pattern.  
+Replace sequential `lapply` + post-hoc loop with in-loop streaming accumulation; keep `furrr` path unchanged.  
+Full spec: `PLAN.md` → Fix 5.
+
+**Fix 6 (robustness — do sixth):**  
+File: `r-pkg/stablr/R/bootstrap_helpers.R`, degenerate-bootstrap retry in both `classic_bootstrap_indices` and `group_bootstrap_indices`.  
+Replace tail-recursion with an iterative loop capped at 1000 retries with an informative error.  
+Full spec: `PLAN.md` → Fix 6.
+
+**Fix 7 (validation — do last):**  
+File: `r-pkg/stablr/R/stabl_fit.R`, in `stabl_fit()` after `n_subsamples` is computed.  
+Add early `stop()` when `!replace && n_subsamples > n_samples`.  
+Full spec: `PLAN.md` → Fix 7.
+
+After all 7 fixes, record in `PROGRESS.md` and update this handoff to the next milestone.
 
 ### Cooperative touchpoints (implementation surfaces)
 

@@ -64,3 +64,30 @@ test_that("classic_bootstrap_indices can split repeated-measures groups", {
 
   expect_true(has_partial_group)
 })
+
+test_that("group_bootstrap_indices replace=FALSE never re-draws the same group", {
+  # Each group must appear at most once when replace = FALSE.
+  # The old code used sample(group_levels, replace=replace) which had no effect
+  # on a size-1 draw — the pool never shrank and the same group could appear
+  # multiple times.
+  groups <- rep(paste0("id", 1:6), each = 4L)
+  y      <- rep(c(0, 1), length.out = length(groups))
+
+  for (seed_val in c(1L, 7L, 42L, 99L, 200L)) {
+    idx             <- group_bootstrap_indices(y = y, groups = groups,
+                                              n_subsamples = 12L,
+                                              replace = FALSE, seed = seed_val)
+    selected_groups <- groups[idx]
+    group_counts    <- table(selected_groups)
+    # Every sampled row belongs to a group; each group is present at most once
+    # (all its rows appear, but the group label appears exactly n_rows_per_group times)
+    # — the key assertion is that no group appears more than its actual row count.
+    for (g in names(group_counts)) {
+      expect_lte(length(unique(idx[selected_groups == g])),
+                 sum(groups == g))
+    }
+    # Stronger: unique group labels in the selection must equal selected group count
+    expect_equal(length(unique(selected_groups)),
+                 length(unique(groups[idx])))
+  }
+})

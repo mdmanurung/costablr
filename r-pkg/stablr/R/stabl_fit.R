@@ -448,8 +448,11 @@ stabl_fit <- function(
   corr <- suppressWarnings(stats::cor(x, use = "pairwise.complete.obs"))
   corr[is.na(corr)] <- 0
   corr_vals <- corr[upper.tri(corr, diag = FALSE)]
+  # Subtract 0.1 to match Python reference: threshold = np.percentile(corr_val, perc) - 0.1
+  # (stabl/stabl.py line 1142).  Without the offset the R port uses a stricter
+  # threshold than Python, producing fewer correlation groups than expected.
   cutoff <- as.numeric(stats::quantile(corr_vals, probs = percentile / 100,
-                                       names = FALSE, na.rm = TRUE))
+                                       names = FALSE, na.rm = TRUE)) - 0.1
 
   parent <- seq_len(p)
   find_root <- function(i) {

@@ -82,19 +82,197 @@ For command-level evidence and exact validation results, use `PROGRESS.md`.
 
 ## Vignette Status (as of 2026-05-08) — Complete
 
-All 4 stablr vignettes are built and in `doc/`:
+All 5 stablr vignettes authored; 4 built in `doc/`, 1 pending build:
 - `stablr-intro.html` (335K) ✅
 - `stablr-multiomic.html` (1.4M) ✅
 - `stablr-python-parity.html` (561K) ✅ — OOL regression + COVID-19 binary classification
 - `stablr-tcga.html` (787K) ✅ — TCGA Breast Cancer multi-omic (M15 stablr-native version)
+- `stablr-cooperative.Rmd` (434L) ✅ authored, syntax validated — pending full build (runs n_bootstraps=50 cooperative fits; build time ~10 min)
 
 ## Current Planning Focus (Forward Only)
 
-1. Harden cooperative fusion behavior (comparative behavior tests, not only structure tests).
-2. Improve cooperative branch operator ergonomics (print/summary/reporting surfaces).
-3. Validate optional-dependency failure modes for cooperative paths in clean environments.
-4. Keep local deterministic validation green for every forward change.
-5. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
+1. **[ACTIVE] Bug-fix milestone — audit findings (2026-05-08).** See detailed work packages below.
+2. Harden cooperative fusion behavior (comparative behavior tests, not only structure tests).
+3. Improve cooperative branch operator ergonomics (print/summary/reporting surfaces).
+4. Validate optional-dependency failure modes for cooperative paths in clean environments.
+5. Keep local deterministic validation green for every forward change.
+6. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
+
+## Active Milestone: Bug-Fix Audit Findings (2026-05-08)
+
+Acceptance gate: all fixes landed, regression suite remains `PASS ≥326, FAIL 0`, and each fix has at least one new targeted test.
+
+Run suite after each fix:
+```bash
+conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"
+```
+
+### Fix 1 — `get_support` explore fallback over-selects on tied scores [SEVERITY 1]
+
+**File:** `r-pkg/stablr/R/stabl_accessors.R`  
+**Function:** `get_support.stabl_fit`, the `explore` fallback block (lines ~63-68).  
+**Problem:** When all features score 0 (heavily regularized), `sort(max_scores, decreasing=TRUE)[n_exp] - 0.01` produces a cutoff of `-0.01`. Then `max_scores > -0.01` is `TRUE` for all features with score 0, selecting **every** feature instead of exactly `n_explore`. Any score tie at the n_exp-th position has the same effect.  
+**Current code:**
+```r
+n_exp  <- min(object$n_explore, length(max_scores))
+cutoff <- sort(max_scores, decreasing = TRUE)[n_exp] - 0.01
+mask   <- max_scores > cutoff
+```
+**Fix:** Use direct index selection — no arithmetic on scores:
+```r
+n_exp          <- min(object$n_explore, length(max_scores))
+top_idx        <- order(max_scores, decreasing = TRUE)[seq_len(n_exp)]
+mask[top_idx]  <- TRUE
+```
+**Test to add:** In `r-pkg/stablr/tests/testthat/test-stabl-accessors.R` (or create `test-get-support.R`):
+- Fit with `hard_threshold = 0.99` so nothing passes. Set `explore = TRUE, n_explore = 3`.
+- Verify `sum(get_support(fit))` is exactly 3, not the full feature count.
+- Verify the 3 selected features are the ones with the highest `get_importances()` scores.
+
+---
+
+### Fix 2 — `group_bootstrap_indices` `replace = FALSE` not enforced across draws [SEVERITY 2]
+
+**File:** `r-pkg/stablr/R/bootstrap_helpers.R`  
+**Function:** `group_bootstrap_indices`  
+**Problem:** `sample(group_levels, size = 1L, replace = replace)` draws one element — `replace` has no effect on a draw of size 1. `group_levels` is never shrunk, so the same group can be re-drawn on every iteration regardless of `replace = FALSE`. This means the `replace = FALSE` contract (sample groups without replacement) is silently violated.  
+**Fix:** Maintain a mutable `remaining` vector; remove groups after drawing them:
+```r
+group_levels <- unique(groups)
+remaining    <- group_levels
+sampled_idx  <- integer(0)
+
+while (length(sampled_idx) < n_subsamples && length(remaining) > 0L) {
+  g <- sample(remaining, size = 1L)
+  sampled_idx <- unique(c(sampled_idx, which(groups == g)))
+  if (!replace) remaining <- remaining[remaining != g]
+  if (!replace && length(sampled_idx) == n) break
+}
+```
+When `replace = TRUE` do not remove from `remaining` (or reset to `group_levels` after exhaustion).  
+**Test to add:** In `test-bootstrap-helpers.R`:
+- Call `group_bootstrap_indices` with `replace = FALSE`, 5 groups, `n_subsamples` large enough to require at least 3 groups.
+- Run 20 times with different seeds.
+- Assert: for each run, no single group's rows appear more than once (deduplication is already there via `unique(c(...))`, but verify group sampling draws each group at most once by checking the count of unique groups drawn vs. `n_subsamples` implied minimum).
+
+---
+
+### Fix 3 — `corr_group_threshold` missing `-0.1` offset (Python parity break) [SEVERITY 2]
+
+**File:** `r-pkg/stablr/R/stabl_fit.R`  
+**Function:** `.build_corr_groups`  
+**Problem:** Python applies `threshold = np.percentile(corr_val, perc) - 0.1` (`stabl/stabl.py` line 1142). R uses `quantile(corr_vals, probs = percentile / 100)` with no offset. The `-0.1` offset in Python makes the grouping criterion slightly more inclusive (groups more features at the same percentile). Without the offset, R produces sparser groupings than Python for identical data and `corr_group_threshold` values, breaking the `sparse_group_lasso` parity test fixture.  
+**Current code:**
+```r
+cutoff <- as.numeric(stats::quantile(corr_vals, probs = percentile / 100,
+                                     names = FALSE, na.rm = TRUE))
+```
+**Fix:**
+```r
+cutoff <- as.numeric(stats::quantile(corr_vals, probs = percentile / 100,
+                                     names = FALSE, na.rm = TRUE)) - 0.1
+```
+**Test to add:** In `test-stabl-fit.R` or `test-learner-adapters.R`:
+- Build a small `x` with two clearly correlated feature pairs and two independent features.
+- Call `.build_corr_groups` (via `stabl_fit` with `corr_group_threshold`) and verify the correlated pairs are grouped together (cutoff offset makes the difference for moderate correlation values).
+
+---
+
+### Fix 4 — `make_knockoff_features` chunked path loses original feature index mapping [SEVERITY 2, only affects p > 3000]
+
+**File:** `r-pkg/stablr/R/artificial_features.R`  
+**Function:** `make_knockoff_features`, chunked branch (`n_features > 3000`).  
+**Problem:** In the non-chunked path, `x_art_full` has exactly `n_features` columns in the same column order as `x`, so `sel_idx` (into `x_art_full`) doubles as valid original-feature indices — no bug. In the chunked path, columns in `x_art_full` are knockoffs of random subsets of features, column-bound and trimmed. The mapping from `x_art_full` column position to original feature index is lost. `noise_col_indices = sel_idx` (indices into `x_art_full`) are then used by `.append_noise_groups` as original feature indices to look up SGL groups — wrong for p > 3000.  
+**Fix:** Track the original-feature index each knockoff column was derived from. Maintain a parallel `orig_map` integer vector alongside `ko_blocks`:
+```r
+orig_maps <- vector("list", n_chunks)
+for (i in seq_len(n_chunks)) {
+  col_idx        <- sample.int(n_features, size = min(chunk_size, n_features), replace = FALSE)
+  ko_blocks[[i]] <- .make_ko_chunk(x[, col_idx, drop = FALSE])
+  orig_maps[[i]] <- col_idx
+}
+orig_map_full <- unlist(orig_maps)          # length = n_chunks * chunk_size
+orig_map_full <- orig_map_full[keep_idx]    # trim same as x_art_full
+# then:
+noise_col_indices = orig_map_full[sel_idx]  # original-feature indices
+```
+**Test to add:** This path only fires at p > 3000. Add a test with `n_features = 3001` (small `n` is OK, e.g. 20 rows), knockoff type, and SGL base learner. Verify `stabl_fit` completes without error and `length(fit$stabl_scores_)` equals `n_features`.
+
+---
+
+### Fix 5 — `stabl_fit` result list holds all bootstrap matrices simultaneously (peak memory) [SEVERITY 3]
+
+**File:** `r-pkg/stablr/R/stabl_fit.R`  
+**Function:** `stabl_fit`, the `result_list` pattern (lines ~308-324).  
+**Problem:** `lapply(boot_indices, process_one_bootstrap)` materializes `n_bootstraps` logical matrices of size `(n_total_features × n_lambdas)` simultaneously before accumulation. At `n_bootstraps=1000, p=2000, n_lambda=30`, this is ~240 MB peak just for the bootstrap results.  
+**Fix:** Replace `lapply` + accumulation loop with a single streaming `Reduce` call:
+```r
+if (use_furrr) {
+  # furrr cannot stream; keep result_list for parallel path
+  result_list <- furrr::future_map(boot_indices, process_one_bootstrap,
+                                   .options = furrr::furrr_options(seed = TRUE))
+  accum_real <- Reduce(`+`, lapply(result_list, function(r) r[seq_len(n_features), , drop=FALSE]))
+  accum_art  <- if (!is.null(artificial_type))
+                  Reduce(`+`, lapply(result_list, function(r) r[art_rows, , drop=FALSE])) else NULL
+} else {
+  # sequential: accumulate and discard each bootstrap matrix immediately
+  accum_real <- matrix(0.0, nrow = n_features, ncol = n_lambdas)
+  accum_art  <- if (!is.null(artificial_type))
+                  matrix(0.0, nrow = n_injected, ncol = n_lambdas) else NULL
+  for (idx in boot_indices) {
+    r          <- process_one_bootstrap(idx)
+    accum_real <- accum_real + r[seq_len(n_features), , drop = FALSE]
+    if (!is.null(artificial_type)) accum_art <- accum_art + r[art_rows, , drop = FALSE]
+  }
+}
+stabl_scores_    <- accum_real / n_bootstraps
+stabl_scores_art <- if (!is.null(artificial_type)) accum_art / n_bootstraps else NULL
+```
+**Test:** Existing integration tests cover correctness. After fix, verify `PASS ≥326, FAIL 0`. No new test required (behavior unchanged; memory-only improvement).
+
+---
+
+### Fix 6 — Bootstrap retry unbounded recursion risk [SEVERITY 4]
+
+**File:** `r-pkg/stablr/R/bootstrap_helpers.R`  
+**Functions:** `classic_bootstrap_indices` and `group_bootstrap_indices`, the degenerate-resample guard.  
+**Problem:** Both functions recurse without a retry-count limit. With severe class imbalance (e.g., 1 positive out of 50 samples, `sample_fraction = 0.5`, `replace = FALSE`), the valid-draw probability is low. R's call stack limit (~900 frames) would be exhausted after ~900 failed attempts.  
+**Fix:** Convert recursion to an iterative loop with a hard retry cap (1000 iterations):
+```r
+# replace the recursive tail-call with:
+for (.retry in seq_len(1000L)) {
+  idx <- sample.int(...)
+  if (length(unique(y[idx])) >= 2L || length(unique(y)) < 2L) return(idx)
+}
+stop("Could not draw a class-diverse bootstrap subsample after 1000 attempts. ",
+     "Consider increasing `sample_fraction` or using `class_weights`.", call. = FALSE)
+```
+Apply the same pattern to `group_bootstrap_indices`.  
+**Test to add:** In `test-bootstrap-helpers.R`:
+- Create `y` with 1 positive and 49 negatives, `n_subsamples = 25`, `replace = FALSE`.
+- Call `classic_bootstrap_indices` 10 times and verify each returns a vector with both classes (not a stack overflow and not all-negative).
+
+---
+
+### Fix 7 — `sample_fraction > 1` with `replace = FALSE` not caught early [SEVERITY 4]
+
+**File:** `r-pkg/stablr/R/stabl_fit.R`  
+**Function:** `.validate_stabl_params`  
+**Problem:** `sample_fraction > 1` with `replace = FALSE` passes `stabl_fit`'s upfront validator and fails only deep inside `classic_bootstrap_indices` with a non-obvious error.  
+**Fix:** Add to `.validate_stabl_params`:
+```r
+# Already called with replace argument — thread replace through or check here
+# Simplest: add to stabl_fit() directly after n_subsamples is computed:
+if (!replace && n_subsamples > n_samples) {
+  stop(
+    "`sample_fraction` (", sample_fraction, ") × n (", n_samples, ") = ",
+    n_subsamples, " exceeds n. Set `replace = TRUE` or reduce `sample_fraction`.",
+    call. = FALSE
+  )
+}
+```
+Place this check in `stabl_fit()` immediately after `n_subsamples <- as.integer(floor(sample_fraction * n_samples))`.  
+**Test:** `expect_error(stabl_fit(..., sample_fraction = 1.5, replace = FALSE), "sample_fraction")`.
 
 ## Implementation Phases
 1. Spec + scaffolding
