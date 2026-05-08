@@ -104,8 +104,11 @@ test_that("classic_bootstrap_indices errors after max retries on impossible clas
 
 test_that("group_bootstrap_indices errors after max retries on impossible class diversity", {
   groups <- rep(paste0("id", 1:5), each = 4L)
-  y      <- c(0L, rep(1L, length(groups) - 1L))   # 2-class, but one group has 0
-  # n_subsamples = 1 → single observation → can never include both classes
+  # All 4 rows of "id1" are class 0; all other groups are class 1.
+  # Every single-group draw is therefore single-class, so the retry loop
+  # can never produce a class-diverse subsample and must error.
+  y      <- c(rep(0L, 4L), rep(1L, length(groups) - 4L))
+  # n_subsamples = 1 → one group drawn (4 rows) → always single-class → error
   expect_error(
     group_bootstrap_indices(y = y, groups = groups, n_subsamples = 1L,
                             replace = FALSE, seed = 1L),
