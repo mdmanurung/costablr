@@ -91,3 +91,24 @@ test_that("group_bootstrap_indices replace=FALSE never re-draws the same group",
                  length(unique(groups[idx])))
   }
 })
+
+test_that("classic_bootstrap_indices errors after max retries on impossible class diversity", {
+  # n_subsamples = 1 can never contain both classes, even though the population
+  # has 2 classes, so the iterative retry loop must hit its cap and stop().
+  y <- c(0L, rep(1L, 19L))   # 2-class population
+  expect_error(
+    classic_bootstrap_indices(y = y, n_subsamples = 1L, replace = FALSE, seed = 1L),
+    "could not draw a class-diverse subsample"
+  )
+})
+
+test_that("group_bootstrap_indices errors after max retries on impossible class diversity", {
+  groups <- rep(paste0("id", 1:5), each = 4L)
+  y      <- c(0L, rep(1L, length(groups) - 1L))   # 2-class, but one group has 0
+  # n_subsamples = 1 → single observation → can never include both classes
+  expect_error(
+    group_bootstrap_indices(y = y, groups = groups, n_subsamples = 1L,
+                            replace = FALSE, seed = 1L),
+    "could not draw a class-diverse subsample"
+  )
+})

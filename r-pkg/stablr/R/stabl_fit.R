@@ -268,6 +268,16 @@ stabl_fit <- function(
   n_total_features <- ncol(x_fit)
   n_subsamples     <- as.integer(floor(sample_fraction * n_samples))
 
+  # Fix 7: reject impossible configuration before entering bootstrap
+  if (!replace && n_subsamples > n_samples) {
+    stop(
+      "`sample_fraction` (= ", sample_fraction, ") implies n_subsamples = ",
+      n_subsamples, " > n_samples = ", n_samples,
+      " but `replace = FALSE`. Reduce `sample_fraction` or set `replace = TRUE`.",
+      call. = FALSE
+    )
+  }
+
   # ---- Bootstrap index lists ------------------------------------------------
   if (!is.null(random_state)) set.seed(random_state)
 
@@ -309,18 +319,26 @@ stabl_fit <- function(
   }
 
   if (use_furrr) {
+    # Parallel path: must collect all results before accumulating.
     result_list <- furrr::future_map(
       boot_indices, process_one_bootstrap,
       .options = furrr::furrr_options(seed = TRUE)
     )
+    for (r in result_list) {
+      stabl_scores_ <- stabl_scores_ + r[seq_len(n_features), , drop = FALSE]
+      if (!is.null(artificial_type)) {
+        stabl_scores_art <- stabl_scores_art + r[art_rows, , drop = FALSE]
+      }
+    }
   } else {
-    result_list <- lapply(boot_indices, process_one_bootstrap)
-  }
-
-  for (r in result_list) {
-    stabl_scores_ <- stabl_scores_ + r[seq_len(n_features), , drop = FALSE]
-    if (!is.null(artificial_type)) {
-      stabl_scores_art <- stabl_scores_art + r[art_rows, , drop = FALSE]
+    # Sequential path: stream-accumulate one bootstrap at a time so we never
+    # hold more than a single result matrix in memory (Fix 5).
+    for (idx in boot_indices) {
+      r <- process_one_bootstrap(idx)
+      stabl_scores_ <- stabl_scores_ + r[seq_len(n_features), , drop = FALSE]
+      if (!is.null(artificial_type)) {
+        stabl_scores_art <- stabl_scores_art + r[art_rows, , drop = FALSE]
+      }
     }
   }
   stabl_scores_ <- stabl_scores_ / n_bootstraps

@@ -71,14 +71,23 @@ classic_bootstrap_indices <- function(
   idx <- sample.int(n = n, size = n_subsamples, replace = replace, prob = probs)
 
   # Avoid degenerate binary resamples with a single class.
-  if (length(unique(y[idx])) < 2L && length(unique(y)) >= 2L) {
-    return(classic_bootstrap_indices(
-      y = y,
-      n_subsamples = n_subsamples,
-      replace = replace,
-      class_weights = class_weights,
-      seed = NULL
-    ))
+  # Use an iterative loop (not tail recursion) so severe class imbalance cannot
+  # exhaust the call stack (Fix 6).
+  if (length(unique(y)) >= 2L) {
+    max_retries <- 1000L
+    attempt     <- 0L
+    while (length(unique(y[idx])) < 2L) {
+      attempt <- attempt + 1L
+      if (attempt > max_retries) {
+        stop(
+          "classic_bootstrap_indices: could not draw a class-diverse subsample ",
+          "after ", max_retries, " attempts. ",
+          "Check class balance or increase `sample_fraction`.",
+          call. = FALSE
+        )
+      }
+      idx <- sample.int(n = n, size = n_subsamples, replace = replace, prob = probs)
+    }
   }
 
   idx
@@ -156,14 +165,30 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE, se
 
   sampled_idx <- sampled_idx[seq_len(min(length(sampled_idx), n_subsamples))]
 
-  if (length(unique(y[sampled_idx])) < 2L && length(unique(y)) >= 2L) {
-    return(group_bootstrap_indices(
-      y = y,
-      groups = groups,
-      n_subsamples = n_subsamples,
-      replace = replace,
-      seed = NULL
-    ))
+  # Avoid degenerate resamples.  Use an iterative loop (not tail recursion) so
+  # severe class imbalance cannot exhaust the call stack (Fix 6).
+  if (length(unique(y)) >= 2L) {
+    max_retries <- 1000L
+    attempt     <- 0L
+    while (length(unique(y[sampled_idx])) < 2L) {
+      attempt <- attempt + 1L
+      if (attempt > max_retries) {
+        stop(
+          "group_bootstrap_indices: could not draw a class-diverse subsample ",
+          "after ", max_retries, " attempts. ",
+          "Check class balance or group structure.",
+          call. = FALSE
+        )
+      }
+      remaining   <- group_levels
+      sampled_idx <- integer(0)
+      while (length(sampled_idx) < n_subsamples && length(remaining) > 0L) {
+        g         <- sample(remaining, size = 1L)
+        remaining <- if (replace) remaining else remaining[remaining != g]
+        sampled_idx <- unique(c(sampled_idx, which(groups == g)))
+      }
+      sampled_idx <- sampled_idx[seq_len(min(length(sampled_idx), n_subsamples))]
+    }
   }
 
   sampled_idx

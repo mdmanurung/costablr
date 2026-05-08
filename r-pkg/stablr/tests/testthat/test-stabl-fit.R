@@ -1201,11 +1201,12 @@ test_that(".build_corr_groups applies -0.1 offset matching Python reference", {
   colnames(x) <- paste0("f", seq_len(ncol(x)))
 
   # Access the internal helper via ::: (exported in tests only)
-  grps_with_offset <- stablr:::.build_corr_groups(x, percentile = 95)
+  # Returns an unnamed integer vector: grps[i] is the group id of column i.
+  grps <- stablr:::.build_corr_groups(x, percentile = 95)
 
-  # f1 and f2 should be in the same group (offset drags threshold below ~0.99)
-  expect_equal(grps_with_offset[["f1"]], grps_with_offset[["f2"]])
+  # f1 (col 1) and f2 (col 2) should be in the same group
+  expect_equal(grps[[1L]], grps[[2L]])
   # All groups are integers >= 1
-  expect_true(all(grps_with_offset >= 1L))
-  expect_length(grps_with_offset, ncol(x))
+  expect_true(all(grps >= 1L))
+  expect_length(grps, ncol(x))
 })

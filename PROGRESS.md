@@ -145,6 +145,67 @@ asserts they land in the same group.
 
 **Validation:** (running)
 
+### Fix 4: knockoff chunked path original-index tracking (2026-05-08)
+
+**File changed:** `r-pkg/stablr/R/artificial_features.R`, function `make_knockoff_features`.
+
+**Bug:** In the chunked path (p > 3000), `sel_idx` indexed into the reshuffled
+`x_art_full`, not into the original feature matrix. `.append_noise_groups` in `stabl_fit.R`
+used those indices to look up SGL groups in the original-feature group vector, producing wrong
+group assignments whenever `artificial_type = "knockoff"` and `p > 3000`.
+
+**Fix:** Introduced `orig_map` tracking which original-feature column each knockoff column
+corresponds to, updated in sync through the chunk-assemble-trim pipeline. Returned
+`noise_col_indices = orig_map[sel_idx]` instead of the raw `sel_idx`. The non-chunked
+path uses an identity map.
+
+**Validated with:** Fix 3 suite run (PASS 353, no knockoff-specific test added as p>3000
+requires knockoff package not present in CI env).
+
+### Fix 5: sequential bootstrap memory streaming (2026-05-08)
+
+**File changed:** `r-pkg/stablr/R/stabl_fit.R`, bootstrap accumulation block.
+
+**Bug:** Sequential path used `lapply(boot_indices, process_one_bootstrap)` materialising
+all `n_bootstraps` result matrices simultaneously, then iterated to accumulate. Peak memory
+was O(n_bootstraps × n_features × n_lambdas) instead of O(n_features × n_lambdas).
+
+**Fix:** Replaced sequential `lapply` + post-hoc loop with a direct `for (idx in boot_indices)`
+loop that accumulates each result matrix immediately and discards it. The furrr parallel path
+is unchanged (must collect all results before accumulating).
+
+### Fix 6: recursion → iteration in degenerate-bootstrap retry (2026-05-08)
+
+**Files changed:** `r-pkg/stablr/R/bootstrap_helpers.R`, both `classic_bootstrap_indices`
+and `group_bootstrap_indices`.
+
+**Bug:** Both functions used tail recursion for the degenerate-bootstrap retry (all-one-class
+subsample). With severe class imbalance, ~900 retries were needed before a diverse sample was
+found, hitting R's call stack limit.
+
+**Fix:** Replaced recursion with a `while` loop capped at 1 000 retries. Loop issues an
+informative `stop()` if the cap is hit. Applied identically in both functions.
+
+**Tests added:** `test-bootstrap-helpers.R` — two tests asserting that an all-same-class
+outcome produces the expected error message from each function.
+
+### Fix 7: sample_fraction > 1 early validator (2026-05-08)
+
+**File changed:** `r-pkg/stablr/R/stabl_fit.R`, `stabl_fit()` body after `n_subsamples` is
+computed.
+
+**Bug:** No early check for `!replace && n_subsamples > n_samples`; user would get an opaque
+error deep inside the bootstrap machinery.
+
+**Fix:** Added an explicit `stop()` immediately after `n_subsamples` is computed when
+`!replace && n_subsamples > n_samples`, with a message explaining both the computed value
+and the remediation options.
+
+**Test added:** `test-input-validation.R` — asserts `stabl_fit()` raises an error matching
+"reduce.*sample_fraction|replace = TRUE" when `sample_fraction = 1.5, replace = FALSE`.
+
+**Validation:** PASS 356 | FAIL 0 | WARN 0 | SKIP 3 (sparsegl absent as expected). All 7 bug-fix audit items closed.
+
 ### M13: Cooperative Fusion Vignette (2026-05-08)
 
 - Created `r-pkg/stablr/vignettes/stablr-cooperative.Rmd` (434 lines, 9 sections

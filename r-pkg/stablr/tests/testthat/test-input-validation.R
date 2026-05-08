@@ -23,3 +23,29 @@ test_that("validate_multiomic_inputs enforces named list and sample order", {
     "identical sample order"
   )
 })
+
+test_that("stabl_fit errors early when sample_fraction > 1 and replace = FALSE", {
+  # Fix 7: validator must fire before the bootstrap loop to give a clear message.
+  set.seed(1L)
+  n <- 20L; p <- 5L
+  x <- matrix(rnorm(n * p), n, p,
+               dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+  lam_grid <- data.frame(lambda = c(0.1, 0.2))
+
+  expect_error(
+    stabl_fit(
+      x               = x,
+      y               = y,
+      lambda_grid     = lam_grid,
+      family          = "gaussian",
+      n_bootstraps    = 5L,
+      artificial_type = NULL,
+      hard_threshold  = 0.3,
+      sample_fraction = 1.5,   # > 1 with replace = FALSE -> n_subsamples > n_samples
+      replace         = FALSE
+    ),
+    "reduce.*sample_fraction|replace = TRUE",
+    ignore.case = TRUE
+  )
+})

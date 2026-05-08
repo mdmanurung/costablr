@@ -66,13 +66,25 @@ scores are tied" added to `test-stabl-fit.R`.
 `remaining` pool introduced; `replace=FALSE` now correctly removes each drawn group from the
 pool. Test "group_bootstrap_indices replace=FALSE never re-draws the same group" added.
 
-**Fix 3 — DONE** (running suite, expected PASS 351+): `stabl_fit.R` `.build_corr_groups` —
+**Fix 3 — DONE** (`PASS 353`): `stabl_fit.R` `.build_corr_groups` —
 appended `- 0.1` to the `quantile()` cutoff to match Python parity. Test added.
 
-**Fix 4 (correctness, p>3000 only — do next):**  
-File: `r-pkg/stablr/R/stabl_accessors.R`, function `get_support.stabl_fit`, explore fallback block.  
-Replace the `cutoff - 0.01` pattern with `order(...)[seq_len(n_exp)]` direct indexing.  
-Add test: `sum(get_support(fit_explore))` equals exactly `n_explore` when all scores are 0.  
+**Fix 4 — DONE** (`PASS 353`, code validated with Fix 3 run): `artificial_features.R`
+kockoff chunked path — `orig_map` tracks original-feature indices through chunk/trim pipeline;
+`noise_col_indices` now returns original-feature indices.
+
+**Fix 5 — DONE** (`PASS 356`): `stabl_fit.R` sequential bootstrap loop — replaced
+`lapply` + post-hoc accumulation with in-loop streaming; furrr path unchanged.
+
+**Fix 6 — DONE** (`PASS 356`): `bootstrap_helpers.R` degenerate retry — tail recursion
+replaced with bounded iterative loop (1 000 retries) in both `classic_bootstrap_indices`
+and `group_bootstrap_indices`. Two new tests.
+
+**Fix 7 — DONE** (`PASS 356`): `stabl_fit.R` early validator — explicit `stop()` when
+`!replace && n_subsamples > n_samples`. New test in `test-input-validation.R`.
+
+All 7 bug-fix audit items closed. PASS 356 | FAIL 0 | SKIP 3 (sparsegl absent, expected).
+Next milestone: decide Phase 3 priorities (multiview integration, CRAN prep, or additional parity tests).
 Full spec: `PLAN.md` → Fix 1.
 
 **Fix 2 (correctness — do second):**  
