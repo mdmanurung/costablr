@@ -51,8 +51,9 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
     )
   }
 
-  if (!is.null(random_state)) set.seed(random_state)
-
+  # NOTE: Seeding is the dispatcher's responsibility (see
+  # `make_artificial_features`).  Re-seeding here would mask any RNG
+  # consumed by the caller and is intentionally omitted (audit M-5).
   n_features <- ncol(x)
   chunk_size <- 3000L
 
@@ -138,6 +139,8 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
 #' @param type Character string; `"random_permutation"` or `"knockoff"`.
 #' @param random_state Optional integer; passed to [set.seed()] before any
 #'   random operations for reproducibility.  `NULL` leaves the RNG unchanged.
+#'   Seeding happens exactly once in this dispatcher; downstream generators
+#'   inherit the seeded RNG state and do not re-seed (audit M-5).
 #'
 #' @return Named list with two elements:
 #'   \describe{
@@ -145,9 +148,11 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
 #'       (nrow(x)) \eqn{\times} (ncol(x) + n_injected) with the artificial
 #'       columns appended after the original features.}
 #'     \item{`noise_col_indices`}{Integer vector of length `n_injected`
-#'       containing the 1-based indices (into the artificial block itself)
-#'       that identify which artificial features were injected.  Used by
-#'       [stabl_fit()] to extract the artificial-feature stability scores.}
+#'       containing the 1-based indices into the **original** `x` columns
+#'       (not into the artificial block) that identify which source features
+#'       were used to build each artificial column.  Used by [stabl_fit()]
+#'       to look up sparse-group-lasso group memberships for the artificial
+#'       block via `.append_noise_groups`.}
 #'   }
 #'
 #' @seealso [compute_fdp_plus()] which consumes the artificial-feature scores,

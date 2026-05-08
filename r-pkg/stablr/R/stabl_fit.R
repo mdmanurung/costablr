@@ -186,8 +186,9 @@ stabl_fit <- function(
   if (!is.null(groups)) groups <- groups[rownames(x)]
 
   # ---- Validate scalar params -----------------------------------------------
-  .validate_stabl_params(n_bootstraps, sample_fraction, hard_threshold,
-                         artificial_type, artificial_proportion)
+  .validate_stabl_params(n_bootstraps, sample_fraction, replace,
+                         hard_threshold, artificial_type,
+                         artificial_proportion)
 
   n_samples   <- nrow(x)
   n_features  <- ncol(x)
@@ -207,6 +208,25 @@ stabl_fit <- function(
   }
   n_lambdas <- nrow(lambda_grid)
 
+  # ---- Derived RNG streams (audit M-5, V-7) ---------------------------------
+  # When `random_state` is set we draw three independent integer seeds from a
+  # single seeded RNG: one for artificial-feature generation, one for the
+  # bootstrap-index draws, and one used as the base of per-iteration seeds
+  # passed into the bootstrap loop.  This keeps the three RNG streams
+  # independent (artificial features cannot consume RNG that boot indices
+  # need) and makes the parallel and sequential loops bit-identical because
+  # each iteration seeds its own RNG before calling the learner adapter.
+  art_seed  <- NULL
+  boot_seed <- NULL
+  iter_seed_base <- NULL
+  if (!is.null(random_state)) {
+    set.seed(random_state)
+    rng_seeds      <- sample.int(.Machine$integer.max, size = 3L)
+    art_seed       <- rng_seeds[[1L]]
+    boot_seed      <- rng_seeds[[2L]]
+    iter_seed_base <- rng_seeds[[3L]]
+  }
+
   # ---- Artificial features --------------------------------------------------
   n_injected        <- as.integer(round(n_features * artificial_proportion))
   x_fit             <- x
@@ -216,7 +236,7 @@ stabl_fit <- function(
     if (verbose) message("Generating artificial features (type=",
                          artificial_type, ")...")
     art_result        <- make_artificial_features(x, n_injected,
-                                                  artificial_type, random_state)
+                                                  artificial_type, art_seed)
     x_fit             <- art_result$x_augmented
     noise_col_indices <- art_result$noise_col_indices
   }
@@ -279,7 +299,7 @@ stabl_fit <- function(
   }
 
   # ---- Bootstrap index lists ------------------------------------------------
-  if (!is.null(random_state)) set.seed(random_state)
+  if (!is.null(boot_seed)) set.seed(boot_seed)
 
   boot_sampler <- if (is.null(groups)) {
     function(.) classic_bootstrap_indices(y = y, n_subsamples = n_subsamples,
@@ -290,6 +310,15 @@ stabl_fit <- function(
                                         replace = replace)
   }
   boot_indices <- lapply(seq_len(n_bootstraps), boot_sampler)
+
+  # ---- Per-iteration seeds for adapter calls (audit V-7) -------------------
+  # Pre-generate one integer seed per bootstrap iteration so that the learner
+  # adapter is reproducible and bit-identical across sequential and parallel
+  # execution paths.
+  iter_seeds <- if (!is.null(iter_seed_base)) {
+    set.seed(iter_seed_base)
+    sample.int(.Machine$integer.max, size = n_bootstraps)
+  } else NULL
 
   # ---- Stability accumulation -----------------------------------------------
   stabl_scores_    <- matrix(0.0, nrow = n_features, ncol = n_lambdas,
@@ -314,14 +343,23 @@ stabl_fit <- function(
   # Bootstrap-outer loop: each iteration fits the full lambda path once.
   # With n_bootstraps iterations and n_lambdas lambdas, this replaces the
   # previous n_bootstraps × n_lambdas individual model calls.
-  process_one_bootstrap <- function(idx) {
-    batch_adapter(x_fit[idx, , drop = FALSE], y[idx], lambda_grid)
+  process_one_bootstrap <- function(i) {
+    idx <- boot_indices[[i]]
+    if (!is.null(iter_seeds)) {
+      .with_local_seed(iter_seeds[[i]],
+                       batch_adapter(x_fit[idx, , drop = FALSE], y[idx], lambda_grid))
+    } else {
+      batch_adapter(x_fit[idx, , drop = FALSE], y[idx], lambda_grid)
+    }
   }
 
   if (use_furrr) {
     # Parallel path: must collect all results before accumulating.
+    # `seed = TRUE` is preserved as a furrr safety guard for any RNG that
+    # leaks outside our explicit `.with_local_seed`; the explicit per-iter
+    # seed inside `process_one_bootstrap` is what actually pins the result.
     result_list <- furrr::future_map(
-      boot_indices, process_one_bootstrap,
+      seq_along(boot_indices), process_one_bootstrap,
       .options = furrr::furrr_options(seed = TRUE)
     )
     for (r in result_list) {
@@ -333,8 +371,8 @@ stabl_fit <- function(
   } else {
     # Sequential path: stream-accumulate one bootstrap at a time so we never
     # hold more than a single result matrix in memory (Fix 5).
-    for (idx in boot_indices) {
-      r <- process_one_bootstrap(idx)
+    for (i in seq_along(boot_indices)) {
+      r <- process_one_bootstrap(i)
       stabl_scores_ <- stabl_scores_ + r[seq_len(n_features), , drop = FALSE]
       if (!is.null(artificial_type)) {
         stabl_scores_art <- stabl_scores_art + r[art_rows, , drop = FALSE]
@@ -381,7 +419,7 @@ stabl_fit <- function(
 }
 
 # ---- Internal param validator ------------------------------------------------
-.validate_stabl_params <- function(n_bootstraps, sample_fraction,
+.validate_stabl_params <- function(n_bootstraps, sample_fraction, replace,
                                    hard_threshold, artificial_type,
                                    artificial_proportion) {
   if (!is.numeric(n_bootstraps) || length(n_bootstraps) != 1L ||
@@ -391,6 +429,15 @@ stabl_fit <- function(
   if (!is.numeric(sample_fraction) || length(sample_fraction) != 1L ||
       sample_fraction <= 0) {
     stop("`sample_fraction` must be a positive numeric.", call. = FALSE)
+  }
+  if (!is.logical(replace) || length(replace) != 1L || is.na(replace)) {
+    stop("`replace` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!replace && sample_fraction > 1) {
+    stop(
+      "`sample_fraction` cannot exceed 1 when `replace = FALSE`.",
+      call. = FALSE
+    )
   }
   if (!is.null(hard_threshold)) {
     if (!is.numeric(hard_threshold) || hard_threshold <= 0 ||
@@ -518,4 +565,25 @@ stabl_fit <- function(
   }
 
   out
+}
+
+# Internal: scoped seed helper.  Saves & restores `.Random.seed` so that the
+# wrapped expression has its own deterministic RNG state without polluting the
+# caller's RNG.  Used by `stabl_fit()` to make per-bootstrap learner calls
+# reproducible regardless of sequential vs parallel execution (audit V-7).
+.with_local_seed <- function(seed, expr) {
+  has_old <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+  if (has_old) {
+    old <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
+    on.exit(assign(".Random.seed", old, envir = globalenv()), add = TRUE)
+  } else {
+    on.exit(
+      if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+        rm(".Random.seed", envir = globalenv())
+      },
+      add = TRUE
+    )
+  }
+  set.seed(seed)
+  expr
 }

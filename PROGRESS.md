@@ -39,11 +39,86 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Remediation Audit Continuation (2026-05-08, batch 2)
+
+- WI-11/WI-12 implementation landed in [r-pkg/stablr/R/stabl_fit.R](r-pkg/stablr/R/stabl_fit.R):
+  - split `random_state` into derived RNG streams (`art_seed`, `boot_seed`, `iter_seed_base`),
+  - seeded artificial-feature generation and bootstrap-index generation independently,
+  - added per-bootstrap deterministic seeding (`iter_seeds`) to make sequential/parallel adapter calls reproducible,
+  - added internal `.with_local_seed()` helper.
+- WI-12 companion change landed in [r-pkg/stablr/R/artificial_features.R](r-pkg/stablr/R/artificial_features.R):
+  - removed redundant inner `set.seed()` from `make_knockoff_features`,
+  - clarified dispatcher-level seeding contract,
+  - corrected `noise_col_indices` doc semantics to original-feature indices.
+- WI-02 parity harness update landed:
+  - added [r-pkg/stablr/tests/testthat/helper-parity.R](r-pkg/stablr/tests/testthat/helper-parity.R) loader with `python_max_score` support,
+  - rewrote [r-pkg/stablr/tests/testthat/test-python-parity-fixtures.R](r-pkg/stablr/tests/testthat/test-python-parity-fixtures.R) parity assertions to use `get_importances()` (max-over-lambda) and support-set overlap; no longer relies on mean-score parity for core assertions.
+- WI-03 TEST-ONLY landed: [r-pkg/stablr/tests/testthat/test-artificial-features-parity.R](r-pkg/stablr/tests/testthat/test-artificial-features-parity.R) pins random-permutation no-replacement source sampling (Python parity confirmation).
+- WI-04/WI-08/WI-10/WI-13/WI-14/WI-15 tests added:
+  - [r-pkg/stablr/tests/testthat/test-fdp-plus-invariants.R](r-pkg/stablr/tests/testthat/test-fdp-plus-invariants.R)
+  - [r-pkg/stablr/tests/testthat/test-fdp-calibration.R](r-pkg/stablr/tests/testthat/test-fdp-calibration.R)
+  - [r-pkg/stablr/tests/testthat/test-signal-recovery.R](r-pkg/stablr/tests/testthat/test-signal-recovery.R)
+  - [r-pkg/stablr/tests/testthat/test-multiomic-guards.R](r-pkg/stablr/tests/testthat/test-multiomic-guards.R)
+  - [r-pkg/stablr/tests/testthat/test-accessor-roundtrip.R](r-pkg/stablr/tests/testthat/test-accessor-roundtrip.R)
+  - [r-pkg/stablr/tests/testthat/test-validation-edges.R](r-pkg/stablr/tests/testthat/test-validation-edges.R)
+- WI-15 source tightening landed in [r-pkg/stablr/R/stabl_fit.R](r-pkg/stablr/R/stabl_fit.R):
+  - `.validate_stabl_params()` now validates `replace` scalar-boolean and rejects `sample_fraction > 1` when `replace = FALSE` early.
+- WI-09 DOC-ONLY landed in [STABL.md](STABL.md):
+  - recorded parity facts for `bootstrap_threshold = 1e-5` (Python line anchor), random-permutation source sampling (`replace = FALSE`), and requested-`π` FDP+ scaling.
+
+Validation status update (2026-05-08, executed in `R4_51`):
+
+- Environment/runtime blocker is resolved for test execution in `R4_51`.
+- Full suite command executed:
+  - `source /share/software/tools/miniconda/3.10/23.3.1/bin/activate R4_51 && Rscript -e "testthat::test_local('r-pkg/stablr')"`
+- Result:
+  - `[ FAIL 7 | WARN 0 | SKIP 4 | PASS 1336 ]` (duration 103.3s)
+- Failing contexts observed:
+  - `test-bootstrap-helpers.R` (expected error not thrown)
+  - `test-fdp-calibration.R` (null-selection bound exceeded)
+  - `test-fdp-plus-invariants.R` (`min_fdr` cap expectation mismatch)
+  - `test-input-validation.R` (error expectation mismatch)
+  - `test-multiomic-guards.R` (unexpected `unused argument` path)
+  - `test-python-parity-fixtures.R` (correlation threshold miss)
+  - `test-signal-recovery.R` (over-selection vs upper bound)
+- Next gate: remediate these seven failing tests/findings under strict one-item-at-a-time TDD.
+
 ## Completed Work (Mapped To Plan)
+
+### Additional Parity Tests: Multiclass + Cox (2026-05-08)
+
+7 new test cases added to `r-pkg/stablr/tests/testthat/test-python-parity-fixtures.R`.
+
+**Frozen cross-language fixture (Python ↔ R parity):**
+1. `frozen Python parity fixture agrees for multinomial elastic-net signal ranking` —
+   `skip_if_not(dir.exists(...))` guard; activates once `multinomial_elastic_net/` fixture is
+   generated. Parameters: `alpha=0.6`, 6-pt lambda grid, 50 bootstraps, `random_state=106`.
+
+**Cox self-consistency parity (R-only; Python STABL has no CoxNet estimator):**
+2. `Cox lasso recovers planted survival signals` — n=100, p=10, f1/f2 planted via Weibull DGP, 80 bootstraps.
+3. `Cox elastic-net recovers planted survival signals` — `alpha=0.7`, 80 bootstraps.
+4. `Cox adaptive-lasso recovers planted survival signals` — 80 bootstraps.
+5. `Cox lasso stability scores are consistent across two runs with same seed` — determinism check, tolerance=0.
+
+**Multinomial signal-recovery self-consistency:**
+6. `multinomial lasso planted signals rank above noise features` — n=120, p=10, 3-class DGP, 60 bootstraps.
+7. `multinomial elastic-net planted signals rank above noise features` — `alpha=0.6`, 60 bootstraps.
+
+Helper functions: `.make_cox_data()` (Weibull PH DGP, ~30% censored) and `.expect_signal_recovery()`.
+
+Python fixture generator updated: `_build_multinomial_elastic_net()` added to
+`generate_python_parity_refs.py`; background generator started (PID 3207983).
+
+**Validation:**
+```bash
+/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/R4_51/bin/Rscript \
+  -e "testthat::test_local('r-pkg/stablr', filter = 'python-parity-fixtures')"
+# -> PASS 34, FAIL 0, WARN 0, SKIP 1 (multinomial_elastic_net fixture pending Python generator)
+```
 
 ### M12: Cooperative Fusion Hardening — Behavior Tests + Print Ergonomics + Optional-Dep Test (2026-05-08)
 
-- Added 6 behavior/ergonomics tests to `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R`
+
   closing the genuinely missing items in `MultiViewPlan.md` after a two-pass source audit:
   1. `cooperative_fusion: rho > 0 alters selection vs rho = 0 (gaussian, cv)` — validates
      cooperation strength affects output (selected features OR lambda OR train predictions).

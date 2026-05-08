@@ -103,6 +103,12 @@ must remain explicit in code and tests:
    - R default is `seq(0, 1, by = 0.01)`.
 - Core output contract:
    - Both core fit paths stop at stability scores + thresholding + feature support; final predictive refit is handled downstream.
+- Bootstrap selection threshold (`bootstrap_threshold`):
+   - Both Python (`stabl/stabl.py:973`) and R use `1e-5` as the absolute-coefficient cutoff that decides whether a feature is "selected" in a single bootstrap fit.  This is intentionally identical; do not change one without the other.
+- Artificial-feature column-source sampling (random permutation):
+   - Both Python (`stabl/stabl.py:1428`) and R draw the source column for each artificial feature with `replace = FALSE`.
+- Artificial-feature realised count:
+   - Both Python (`stabl/stabl.py:1474`) and R pass the requested `artificial_proportion` directly to the FDP+ scaling factor `1/π` (no realised-vs-requested correction).
 
 ### Reviewer Checklist
 

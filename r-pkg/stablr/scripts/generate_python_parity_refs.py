@@ -315,6 +315,51 @@ def _build_binomial_elastic_net(
     return x, y, feature_names, sample_names, stabl
 
 
+def _build_multinomial_elastic_net(
+    seed: int,
+) -> tuple[np.ndarray, np.ndarray, list[str], list[str], Stabl]:
+    """Three-class multinomial with elastic-net penalty (l1_ratio=0.6).
+
+    Uses the same DGP as ``_build_multinomial`` but with an elastic-net
+    LogisticRegression, mirroring the binomial_elastic_net pattern.
+    """
+    rng = np.random.default_rng(seed)
+    n, p = 150, 10
+    feature_names = [f"f{i + 1}" for i in range(p)]
+    sample_names = [f"s{i + 1}" for i in range(n)]
+
+    x = rng.normal(size=(n, p))
+    logits = np.column_stack(
+        [
+            1.1 * x[:, 0] - 0.5 * x[:, 1],
+            -1.0 * x[:, 0] + 1.2 * x[:, 1],
+            -0.3 * x[:, 0] - 0.7 * x[:, 1],
+        ]
+    )
+    probs = _softmax(logits)
+    classes = np.array(["A", "B", "C"])
+    y = classes[[rng.choice(3, p=probs[i, :]) for i in range(n)]]
+
+    stabl = Stabl(
+        base_estimator=LogisticRegression(
+            penalty="elasticnet",
+            solver="saga",
+            l1_ratio=0.6,
+            multi_class="multinomial",
+            class_weight="balanced",
+            max_iter=5000,
+            random_state=seed,
+        ),
+        lambda_grid={"C": np.geomspace(0.05, 3.0, 6)},
+        n_bootstraps=50,
+        artificial_type="random_permutation",
+        random_state=seed,
+        n_jobs=1,
+    )
+    stabl.fit(x, y)
+    return x, y, feature_names, sample_names, stabl
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -331,6 +376,7 @@ def main() -> None:
         "multinomial": _build_multinomial,
         "gaussian_elastic_net": _build_gaussian_elastic_net,
         "binomial_elastic_net": _build_binomial_elastic_net,
+        "multinomial_elastic_net": _build_multinomial_elastic_net,
     }
 
     for idx, (name, builder) in enumerate(builders.items(), start=1):

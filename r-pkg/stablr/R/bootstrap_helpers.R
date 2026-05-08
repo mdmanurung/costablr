@@ -111,10 +111,12 @@ classic_bootstrap_indices <- function(
 #'
 #' **How groups are sampled:** Groups are drawn one at a time (without
 #' replacement by default) until the running tally of included rows reaches
-#' `n_subsamples`.  If the last added group causes the count to exceed
-#' `n_subsamples`, the excess rows are trimmed.  When `replace = TRUE` the
-#' same group may be drawn multiple times (useful when there are very few
-#' groups).
+#' or exceeds `n_subsamples`.  Whole groups are always kept intact: if the
+#' last added group causes the count to exceed `n_subsamples`, the surplus
+#' rows are *not* trimmed.  This guarantees the strongest leakage prevention
+#' (the subsample and its complement are always group-disjoint), at the cost
+#' of a slightly variable subsample size.  When `replace = TRUE` the same
+#' group may be drawn multiple times (useful when there are very few groups).
 #'
 #' **Degenerate bootstrap guard:** As with [classic_bootstrap_indices()], if
 #' the final subsample contains only one unique class the function retries
@@ -125,7 +127,8 @@ classic_bootstrap_indices <- function(
 #'   be any type that supports `unique()` and equality comparison.
 #' @param n_subsamples Positive integer; target number of rows in the
 #'   subsample.  The actual count may differ slightly due to whole-group
-#'   granularity.
+#'   granularity (whole groups are always preserved; the realised count is
+#'   the smallest group-aligned value `>= n_subsamples`).
 #' @param replace Logical; may the same group be sampled more than once?
 #'   Default `FALSE`.
 #' @param seed Optional integer; passed to [set.seed()] before sampling.
@@ -158,12 +161,16 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE, se
   sampled_idx <- integer(0)
 
   while (length(sampled_idx) < n_subsamples && length(remaining) > 0L) {
-    g         <- sample(remaining, size = 1L)
-    remaining <- if (replace) remaining else remaining[remaining != g]
+    # Use index-then-subset to avoid R's `sample(x, 1)` length-1 pitfall:
+    # when length(remaining) == 1 and remaining is numeric, sample(remaining, 1L)
+    # silently behaves as sample.int(remaining, 1L) and fabricates a label.
+    pick_pos    <- sample.int(length(remaining), size = 1L)
+    g           <- remaining[[pick_pos]]
+    remaining   <- if (replace) remaining else remaining[-pick_pos]
     sampled_idx <- unique(c(sampled_idx, which(groups == g)))
   }
-
-  sampled_idx <- sampled_idx[seq_len(min(length(sampled_idx), n_subsamples))]
+  # Whole-group invariant (D3): never trim partial groups, even if the
+  # final tally exceeds n_subsamples.
 
   # Avoid degenerate resamples.  Use an iterative loop (not tail recursion) so
   # severe class imbalance cannot exhaust the call stack (Fix 6).
@@ -183,11 +190,11 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE, se
       remaining   <- group_levels
       sampled_idx <- integer(0)
       while (length(sampled_idx) < n_subsamples && length(remaining) > 0L) {
-        g         <- sample(remaining, size = 1L)
-        remaining <- if (replace) remaining else remaining[remaining != g]
+        pick_pos    <- sample.int(length(remaining), size = 1L)
+        g           <- remaining[[pick_pos]]
+        remaining   <- if (replace) remaining else remaining[-pick_pos]
         sampled_idx <- unique(c(sampled_idx, which(groups == g)))
       }
-      sampled_idx <- sampled_idx[seq_len(min(length(sampled_idx), n_subsamples))]
     }
   }
 
