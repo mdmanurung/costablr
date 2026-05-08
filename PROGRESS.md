@@ -41,6 +41,44 @@ Logging rule:
 
 ## Completed Work (Mapped To Plan)
 
+### M12: Cooperative Fusion Hardening — Behavior Tests + Print Ergonomics + Optional-Dep Test (2026-05-08)
+
+- Added 6 behavior/ergonomics tests to `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R`
+  closing the genuinely missing items in `MultiViewPlan.md` after a two-pass source audit:
+  1. `cooperative_fusion: rho > 0 alters selection vs rho = 0 (gaussian, cv)` — validates
+     cooperation strength affects output (selected features OR lambda OR train predictions).
+  2. `cooperative_fusion: cooperative selections differ from per-omic and early fusion` —
+     confirms cooperative is not a trivial relabel of early/per-omic selection.
+  3. `cooperative_fusion rejects cox + validation selection` — explicit guard regression.
+  4. `cooperative_fusion fails cleanly when multiview is unavailable` — exercises the new
+     `.has_multiview()` indirection via `testthat::local_mocked_bindings` with `multiview`
+     installed in the env.
+  5. `print.stabl_multiomic_fit reports cooperative fusion when present` — ergonomics regression.
+  6. `print.stabl_multiomic_fit omits cooperative line when branch absent` — preserves default
+     return-shape contract on the print surface.
+- Refactor: extracted `.has_multiview()` in `r-pkg/stablr/R/input_validation.R` so the optional
+  dependency check is mockable; behavior is unchanged when `multiview` is present.
+- `print.stabl_multiomic_fit()` in `r-pkg/stablr/R/stabl_accessors.R` now emits a
+  `Cooperative fusion:` block when the branch is populated, exposing `selection`, chosen `rho`,
+  `selector`, `type.measure`, score, and total selected features across views. Default print
+  shape preserved when cooperative branch is absent.
+- Test runtimes kept tight (n ≤ 30, n_bootstraps = 3, rho grid ≤ 2 points) to align with
+  existing cooperative test budget.
+
+Commands and signals:
+
+```bash
+conda run -n R4_51 R CMD INSTALL multiview
+conda run -n R4_51 Rscript -e 'devtools::test_active_file("r-pkg/stablr/tests/testthat/test-multiomic-workflows.R")'
+# -> PASS 100, FAIL 0, WARN 0, SKIP 0
+conda run -n R4_51 Rscript -e 'devtools::test("r-pkg/stablr")'
+# -> PASS 326, FAIL 0, WARN 0, SKIP 3 (sparsegl absent in env; unrelated)
+```
+
+Closure: M12 closes work packages 1, 2, and 3 of the active milestone described in `PLAN.md`
+("Cooperative Fusion Hardening (Experimental Track)"). Cooperative fusion has met its exit
+criteria from experimental status pending downstream operator-facing docs.
+
 ### Phase 1-2: Foundation
 
 - Created R package scaffold under `r-pkg/stablr`.

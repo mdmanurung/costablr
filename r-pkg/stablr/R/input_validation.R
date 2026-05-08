@@ -180,6 +180,12 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
   )
 }
 
+# Internal indirection so tests can mock the optional-dep check via
+# `testthat::local_mocked_bindings(.has_multiview = function() FALSE)`.
+.has_multiview <- function() {
+  requireNamespace("multiview", quietly = TRUE)
+}
+
 .resolve_cooperation_type_measure <- function(family, type_measure) {
   allowed <- .supported_cooperation_type_measures(family)
 
@@ -219,7 +225,7 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
   cooperative_selection <- match.arg(cooperative_selection)
   cooperation_selector <- match.arg(cooperation_selector)
 
-  if (!requireNamespace("multiview", quietly = TRUE)) {
+  if (!.has_multiview()) {
     stop(
       "`cooperative_fusion = TRUE` requires the optional 'multiview' package to be installed.",
       call. = FALSE

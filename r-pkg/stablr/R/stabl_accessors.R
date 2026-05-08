@@ -209,6 +209,17 @@ print.stabl_multiomic_fit <- function(x, ...) {
   cat("  Late fusion:     ", if (!is.null(x$late_fusion)) {
     paste0("yes (score = ", round(x$late_fusion$score, 4L), ")")
   } else "no", "\n")
+  if (!is.null(x$cooperative_fusion)) {
+    cf <- x$cooperative_fusion
+    n_cf_sel <- sum(vapply(cf$selected_features, length, integer(1L)))
+    cat("  Cooperative fusion:\n")
+    cat("    selection:     ", cf$selection, "\n", sep = "")
+    cat("    rho (chosen):  ", cf$rho, "\n", sep = "")
+    cat("    selector:      ", cf$selector, "\n", sep = "")
+    cat("    type.measure:  ", cf$type_measure, "\n", sep = "")
+    cat("    score:         ", round(cf$score, 4L), "\n", sep = "")
+    cat("    selected feats: ", n_cf_sel, " (across views)\n", sep = "")
+  }
   invisible(x)
 }
 

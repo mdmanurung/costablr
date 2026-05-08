@@ -141,7 +141,9 @@ All 4 stablr vignettes are built and in `doc/`:
 
 Goal: keep cooperative fusion non-blocking to core parity while making it behavior-hardened and operator-safe.
 
-Work packages:
+**Status (2026-05-08): CLOSED.** All three work packages validated by M12 in `PROGRESS.md`. See exit criteria below.
+
+Work packages (delivered):
 
 1. Behavior-level comparative tests
 - Add deterministic fixtures comparing early, cooperative, and late fusion ranking behavior.
@@ -155,12 +157,12 @@ Work packages:
 - Add explicit tests for clean failure paths when `multiview` is unavailable and cooperative mode is requested.
 - Preserve normal execution when cooperative mode is disabled.
 
-Acceptance criteria:
+Acceptance criteria (met):
 
-- `test-multiomic-workflows.R` includes behavior-level (not only structural) cooperative assertions.
+- `test-multiomic-workflows.R` includes behavior-level (not only structural) cooperative assertions. (rho-effect, fusion-mode-difference, cox+validation guard, dep-missing.)
 - Cooperative ergonomics are covered by tests and do not regress default object shape.
-- Missing-`multiview` failure messages are deterministic and actionable.
-- Full local package suite remains green after each hardening increment.
+- Missing-`multiview` failure messages are deterministic and actionable, validated via `.has_multiview()` mocking.
+- Full local package suite remains green: `PASS 326, FAIL 0, WARN 0, SKIP 3` (sparsegl absent).
 
 ## Experimental Track: Cooperative Fusion (Non-Blocking)
 

@@ -44,15 +44,15 @@ For details that must not be duplicated here:
 
 - Workspace mode: post-M9 hardening and polish.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
-- Cooperative fusion: implemented and experimental (non-parity-blocking) in workflow layer.
-- Latest verified full-suite signal: `PASS 309`, `FAIL 0`, `WARN 0`, `SKIP 0` (see `PROGRESS.md` Latest Validation Snapshot for command trail).
+- Cooperative fusion: implemented and experimental (non-parity-blocking) in workflow layer. Hardening milestone CLOSED on 2026-05-08 (M12 in `PROGRESS.md`).
+- Latest verified full-suite signal: `PASS 326`, `FAIL 0`, `WARN 0`, `SKIP 3` (sparsegl absent in env; see `PROGRESS.md` for command trail).
 - Latest verified vignette signal: all active vignettes build cleanly in `R4_51` (see `PROGRESS.md` vignette entries for exact commands/results).
 
 ### Immediate next 3 tasks
 
-1. Add behavior-level comparative tests for early/cooperative/late fusion ranking on deterministic synthetic fixtures.
-2. Add cooperative branch print/summary ergonomics coverage in accessors-facing surfaces.
-3. Add explicit optional-dependency failure test path when `cooperative_fusion = TRUE` and `multiview` is unavailable.
+1. Promote cooperative fusion out of experimental status by drafting an operator-facing vignette section covering print output, `cooperation_selection`/`selector` policy, and the `rho` grid pattern.
+2. Re-validate `PASS 326` baseline after any subsequent edits (target: zero new skips beyond `sparsegl`).
+3. Decide whether to lift the `sparsegl` skip by installing it in `R4_51`, or leave skip as documented optional-dep behavior.
 
 ### Cooperative touchpoints (implementation surfaces)
 
