@@ -7,7 +7,7 @@
 pearson_similarity_measure(list_of_lists, d, stat = "median")
 }
 \arguments{
-\item{list_of_lists}{A list of character/integer vectors.}
+\item{list_of_lists}{A list of character/integer vectors, one per run.}
 
 \item{d}{Integer; total number of candidate features.}
 
@@ -15,8 +15,11 @@ pearson_similarity_measure(list_of_lists, d, stat = "median")
 }
 \value{
 A named list with \code{statistic} and \code{err} (see
-\code{\link[=adjusted_similarity_measure]{adjusted_similarity_measure()}}).
+\code{\link[=adjusted_similarity_measure]{adjusted_similarity_measure()}} for the exact definitions).
 }
 \description{
-Summary Statistic of Pearson Similarity Values
+Convenience wrapper analogous to \code{\link[=adjusted_similarity_measure]{adjusted_similarity_measure()}} but
+using the Pearson-corrected similarity.  See \code{\link[=pearson_similarity]{pearson_similarity()}} for a
+description of the underlying metric and when to prefer it over the
+adjusted similarity.
 }

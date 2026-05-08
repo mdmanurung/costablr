@@ -144,3 +144,7 @@ Sample Data/Synthetic/*
 # claude
 CLAUDE.md
 AGENTS.md
+*.rdx
+*.gz
+*.RData
+*.rd*

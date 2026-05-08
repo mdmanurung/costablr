@@ -2,17 +2,32 @@
 % Please edit documentation in R/stabl_accessors.R
 \name{get_importances}
 \alias{get_importances}
-\title{Get Feature Importances (Max Stability Scores)}
+\title{Get Per-Feature Importance Scores (Maximum Stability Score)}
 \usage{
 get_importances(object)
 }
 \arguments{
-\item{object}{A fitted \code{"stabl_fit"} object.}
+\item{object}{A fitted \code{"stabl_fit"} object returned by \code{\link[=stabl_fit]{stabl_fit()}}.}
 }
 \value{
-Named numeric vector of length \code{object$n_features_in_}.
+Named numeric vector of length \code{object$n_features_in_}, with
+values in \eqn{[0, 1]}.  Higher values indicate more stable features.
+Names are the original feature names from the training matrix.
 }
 \description{
-Returns the per-feature importance score, defined as the maximum stability
-score across all lambda values.  Mirrors \code{Stabl.get_importances()}.
+Returns a scalar summary of how stably each feature is selected across the
+entire regularisation path.  The importance of feature \eqn{j} is defined
+as \eqn{\max_{k} q_{jk}}, i.e. the highest selection frequency it achieved
+at any lambda.  This is the score compared against the stability threshold
+in \code{\link[=get_support]{get_support()}}.
+}
+\details{
+Because the maximum is taken across lambdas, the importance measure is
+lenient: a feature qualifies even if it is stable only at one particular
+penalty strength.  For a more conservative view, use \code{\link[=get_stabl_scores]{get_stabl_scores()}}
+and inspect the full path.
+}
+\seealso{
+\code{\link[=get_support]{get_support()}} to convert importances to a binary selection mask,
+\code{\link[=get_stabl_scores]{get_stabl_scores()}} for the full path matrix.
 }

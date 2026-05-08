@@ -8,22 +8,29 @@ boxplot_features(features, x, y, title = "Selected Features", ncol = 3L)
 }
 \arguments{
 \item{features}{Character vector of feature names to plot.  Features not
-present in \code{x} are silently skipped.}
+present as columns in \code{x} are silently skipped.}
 
-\item{x}{Numeric matrix or data frame of predictors.  Row names must align
-with the names/values of \code{y}.}
+\item{x}{Numeric matrix or data frame of predictors.  Column names must
+include all elements of \code{features}.}
 
-\item{y}{Factor, character, or integer vector of outcome labels.}
+\item{y}{Factor, character, or integer vector of class labels.  Must have
+the same number of elements as \code{nrow(x)}.}
 
-\item{title}{Character; plot title.}
+\item{title}{Character scalar; plot title.  Default \code{"Selected Features"}.}
 
-\item{ncol}{Integer; number of columns in the facet grid.  Default 3.}
+\item{ncol}{Positive integer; number of facet columns in the grid.
+Default 3.}
 }
 \value{
-A \code{ggplot} object.
+A \code{ggplot} object with one facet panel per feature.
 }
 \description{
-Produces a ggplot2 figure with one facet per selected feature, showing
-distributions stratified by the outcome variable.  Intended for binary and
-multiclass tasks.
+Produces a ggplot2 figure with one facet per selected feature, showing the
+distribution of each feature's values stratified by the outcome class.
+Intended for binary and multiclass classification tasks after STABL feature
+selection; complements \code{\link[=scatterplot_features]{scatterplot_features()}} for regression tasks.
+}
+\seealso{
+\code{\link[=scatterplot_features]{scatterplot_features()}} for regression tasks,
+\code{\link[=save_stabl_results]{save_stabl_results()}} which calls this automatically.
 }

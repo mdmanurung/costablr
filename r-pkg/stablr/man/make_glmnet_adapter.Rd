@@ -14,25 +14,33 @@ make_glmnet_adapter(
 \item{family}{Character; the \code{glmnet} response family, for example
 \code{"gaussian"}, \code{"binomial"}, \code{"multinomial"}, or \code{"cox"}.}
 
-\item{alpha_fixed}{Numeric scalar or \code{NULL}. When not \code{NULL}, this value
+\item{alpha_fixed}{Numeric scalar or \code{NULL}.  When not \code{NULL}, this value
 overrides any \code{alpha} column in \code{lambda_val}.}
 
 \item{bootstrap_threshold}{Positive numeric; absolute-coefficient cutoff
-used to decide that a feature is selected in a given bootstrap.}
+used to decide that a feature is selected in a given bootstrap.  Features
+with \verb{|coef| > bootstrap_threshold} are counted as selected.}
 }
 \value{
 A function with signature
 \verb{function(x, y, lambda_val) -> logical vector of length ncol(x)}
-for use inside \code{stabl_fit()}.
+for use inside \code{\link[=stabl_fit]{stabl_fit()}}.
 }
 \description{
-Returns a closure that fits a \code{glmnet} model on a single bootstrap subsample
-and returns a logical selection mask over the features. The closure mirrors
-the role of \code{fit_bootstrapped_sample()} in the Python STABL library.
+Returns a closure that fits a \code{glmnet} model on a single bootstrap
+subsample and returns a logical selection mask over the features.  The
+closure mirrors the role of \code{fit_bootstrapped_sample()} in the Python STABL
+library.
 }
 \details{
+Learner adapters decouple the modelling back-end from the STABL bootstrap
+loop, making it easy to substitute different penalised-regression solvers
+without changing the stability-accumulation logic.  This factory produces
+the standard lasso / elastic-net adapter that is the default back-end for
+\code{\link[=stabl_fit]{stabl_fit()}}.
+
 The returned function accepts a pre-expanded lambda-grid row (a 1-row
-\code{data.frame}) and applies \code{glmnet} at that exact penalty value. The
+\code{data.frame}) and applies \code{glmnet} at that exact penalty value.  The
 \code{alpha} elastic-net mixing parameter is resolved in priority order:
 \code{alpha_fixed} argument > \code{alpha} column in \code{lambda_val} > default of 1
 (pure lasso).
@@ -40,4 +48,8 @@ The returned function accepts a pre-expanded lambda-grid row (a 1-row
 This adapter factory is primarily an internal backend used by \code{\link[=stabl_fit]{stabl_fit()}}.
 Most users should configure \code{base_learner}, \code{family}, and \code{lambda_grid}
 directly in \code{\link[=stabl_fit]{stabl_fit()}} rather than calling this factory manually.
+}
+\seealso{
+\code{\link[=make_adaptive_lasso_adapter]{make_adaptive_lasso_adapter()}}, \code{\link[=make_sgl_adapter]{make_sgl_adapter()}},
+\code{\link[=stabl_fit]{stabl_fit()}}
 }

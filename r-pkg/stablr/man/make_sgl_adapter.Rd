@@ -12,14 +12,17 @@ make_sgl_adapter(
 )
 }
 \arguments{
-\item{family}{Character; response family (\code{"gaussian"}, \code{"binomial"},
-or \code{"multinomial"}). Cox is not supported for sparse-group lasso.}
+\item{family}{Character; response family (\code{"gaussian"}, \code{"binomial"}, or
+\code{"multinomial"}).  Cox regression is not supported by \code{sparsegl}.}
 
-\item{feature_groups}{Integer/factor vector of length \code{p} assigning each
-feature to a group.}
+\item{feature_groups}{Integer or factor vector of length \code{p} (number of
+features) assigning each feature to a group.  Values are coerced via
+\code{as.integer(as.factor(...))}, so any type that has a natural ordering is
+accepted.}
 
-\item{alpha_fixed}{Numeric scalar in \verb{[0, 1]} or \code{NULL}. When not \code{NULL},
-overrides any \code{alpha} column in \code{lambda_val}.}
+\item{alpha_fixed}{Numeric scalar in \verb{[0, 1]} or \code{NULL}.  When not \code{NULL},
+overrides any \code{alpha} column in \code{lambda_val}.  Controls the lasso /
+group-lasso mixing weight (\code{asparse} in \code{sparsegl}).}
 
 \item{bootstrap_threshold}{Positive numeric; absolute-coefficient cutoff
 used to decide that a feature is selected in a given bootstrap.}
@@ -30,15 +33,28 @@ A function with signature
 }
 \description{
 Returns a closure that fits \code{sparsegl::sparsegl()} on a single bootstrap
-subsample and returns a logical selection mask over features.
+subsample and returns a logical selection mask over the features.
 }
 \details{
-The adapter expects a lambda-grid row with a \code{lambda} column and optionally
-an \code{alpha} column. The \code{alpha} value is mapped to \code{sparsegl}'s \code{asparse}
-argument (the weight on the l1 component of the sparse-group penalty).
+Sparse-group lasso is useful when features have a known (or inferred) block
+structure, for example gene pathways, omic layers, or correlated feature
+clusters.  It imposes simultaneous sparsity within and between groups: the
+group-level penalty encourages whole groups to be zeroed out, while the
+within-group lasso penalty allows groups to have only a sparse subset of
+active features.  This can substantially improve stability in structured
+high-dimensional settings.
+
+The \code{alpha} value (\code{asparse} in \code{sparsegl}) controls the balance between
+the within-group lasso penalty and the group-level penalty: 0 = pure group
+lasso; 1 = pure lasso (no group penalty).  The default of \code{0.05} used when
+no \code{alpha} column is present matches the Python STABL reference.
 
 This adapter factory is primarily an internal backend used by \code{\link[=stabl_fit]{stabl_fit()}}.
 For end-to-end feature selection workflows, prefer
 \code{base_learner = "sparse_group_lasso"} in \code{\link[=stabl_fit]{stabl_fit()}} and provide
 \code{feature_groups} (or \code{corr_group_threshold}) there.
+}
+\seealso{
+\code{\link[=make_glmnet_adapter]{make_glmnet_adapter()}}, \code{\link[=make_adaptive_lasso_adapter]{make_adaptive_lasso_adapter()}},
+\code{\link[=stabl_fit]{stabl_fit()}}
 }

@@ -9,12 +9,15 @@ fdr_similarity(list1, list2)
 \arguments{
 \item{list1}{Predicted feature set (character or integer vector).}
 
-\item{list2}{True feature set.}
+\item{list2}{True feature set (ground truth).}
 }
 \value{
-Numeric scalar in \eqn{[0, 1]}.
+Numeric scalar in \eqn{[0, 1]}.  Returns 0 when the predicted set
+is empty (no false discoveries possible).
 }
 \description{
-Treats \code{list2} as the ground-truth set.  Returns 0 when the predicted
-set is empty.
+Computes the False Discovery Rate when \code{list1} is treated as the predicted
+selection and \code{list2} as the known ground-truth.  This metric is only
+meaningful in simulation benchmarks where the true signal features are
+known in advance.
 }

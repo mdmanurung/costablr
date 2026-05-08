@@ -7,16 +7,37 @@
 validate_sample_alignment(x, y, groups = NULL)
 }
 \arguments{
-\item{x}{A \code{data.frame} or matrix with row names representing sample ids.}
+\item{x}{A \code{data.frame} or numeric matrix with non-empty, non-\code{NA} row
+names used as sample IDs.}
 
-\item{y}{A named vector with sample ids as names.}
+\item{y}{A named vector (or matrix-like object such as \code{survival::Surv}
+with row names) whose names identify the samples.  The set of names in
+\code{y} must be identical to the set of row names in \code{x}; order does not
+need to match.}
 
-\item{groups}{Optional named vector of group ids aligned on sample ids.}
+\item{groups}{Optional named vector where names are sample IDs and values
+are group memberships.  When supplied, its name set must also match
+\code{rownames(x)}.  Pass \code{NULL} to skip group validation.}
 }
 \value{
-Invisibly returns \code{TRUE} when validation succeeds.
+Invisibly returns \code{TRUE} when all checks pass.  Raises an
+informative error as soon as the first violation is found.
 }
 \description{
-Enforces strict sample alignment between predictor table, outcome vector,
-and optional group vector.
+Checks that the predictor matrix, outcome vector, and optional group vector
+all refer to exactly the same set of samples (by name), and that they can
+be safely aligned before modelling.
+}
+\details{
+STABL enforces strict name-based alignment (rather than positional
+alignment) to mirror the pandas index-alignment semantics of the Python
+reference implementation and to prevent silent sample-order bugs that could
+corrupt stability scores or introduce outcome leakage.
+
+This function is called automatically by \code{\link[=stabl_fit]{stabl_fit()}} and
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}; you only need to call it directly when
+building a custom pre-processing step that receives \code{x} and \code{y} separately.
+}
+\seealso{
+\code{\link[=validate_multiomic_inputs]{validate_multiomic_inputs()}} for multi-omic list inputs.
 }

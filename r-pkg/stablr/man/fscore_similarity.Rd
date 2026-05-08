@@ -9,14 +9,23 @@ fscore_similarity(list1, list2, beta = 1)
 \arguments{
 \item{list1}{Predicted feature set (character or integer vector).}
 
-\item{list2}{True feature set.}
+\item{list2}{True feature set (ground truth).}
 
-\item{beta}{Numeric; controls trade-off between precision and recall
-(default 1 gives the F1 score).}
+\item{beta}{Positive numeric; controls trade-off between precision and
+recall.  Default 1 gives the F1 score.}
 }
 \value{
-Numeric scalar in \eqn{[0, 1]}.
+Numeric scalar in \eqn{[0, 1]}.  Returns 0 when both the predicted
+and true sets are empty.
 }
 \description{
-F-Score Between Two Feature Sets
+Computes the F\eqn{_\beta} score between a predicted and a ground-truth
+feature set.  The default \code{beta = 1} gives the standard F1 score (harmonic
+mean of precision and recall).  Larger \code{beta} values weight recall more
+heavily; smaller values emphasise precision.
+}
+\details{
+Use \code{\link[=fdr_similarity]{fdr_similarity()}} and \code{\link[=tpr_similarity]{tpr_similarity()}} when you want to report
+precision and recall separately; use \code{fscore_similarity()} when you need
+a single number that balances both.
 }

@@ -99,21 +99,52 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
 #' Dispatcher for Artificial Feature Generation
 #'
 #' Selects and calls the appropriate artificial-feature generator based on
-#' `type`, then returns the augmented matrix together with the column
+#' `type`, returning the augmented predictor matrix together with the column
 #' indices of the injected noise block.
 #'
-#' @param x Numeric matrix of predictors (samples \eqn{\times} features).
-#' @param n_injected Integer; number of artificial columns to inject.
-#' @param type Character string; `"random_permutation"` or `"knockoff"`.
-#' @param random_state Optional integer seed for reproducibility.
+#' Injecting artificial features is central to STABL's automatic FDP+ control:
+#' by mixing known-noise columns into the predictor matrix alongside real
+#' features, STABL can empirically estimate how often a variable of pure noise
+#' is selected at a given stability threshold.  This observed noise-selection
+#' rate drives the FDP+ bound computed in [compute_fdp_plus()], eliminating
+#' the need to choose a stability threshold by hand.
 #'
-#' @return Named list:
+#' Two noise strategies are supported:
+#' \describe{
+#'   \item{`"random_permutation"`}{Copies `n_injected` randomly chosen real
+#'     columns and shuffles each copy independently, breaking all signal while
+#'     preserving marginal distributions.  Fast and broadly applicable.}
+#'   \item{`"knockoff"`}{Generates model-X knockoffs via
+#'     [knockoff::create.fixed()], which preserve the covariance structure of
+#'     the original features.  More powerful when features are correlated, at
+#'     the cost of requiring the optional `knockoff` package and higher
+#'     compute.}
+#' }
+#'
+#' @param x Numeric matrix of predictors (samples \eqn{\times} features).
+#'   Must have more columns than `n_injected` for random permutation; for
+#'   knockoffs, must not be rank-deficient (a fallback to random permutation
+#'   is attempted otherwise).
+#' @param n_injected Positive integer; number of artificial columns to append.
+#'   Typically `round(ncol(x) * artificial_proportion)` as computed in
+#'   [stabl_fit()].
+#' @param type Character string; `"random_permutation"` or `"knockoff"`.
+#' @param random_state Optional integer; passed to [set.seed()] before any
+#'   random operations for reproducibility.  `NULL` leaves the RNG unchanged.
+#'
+#' @return Named list with two elements:
 #'   \describe{
-#'     \item{x_augmented}{Matrix with artificial columns appended after the
-#'       original features.}
-#'     \item{noise_col_indices}{Integer vector of source-column indices used
-#'       when generating the artificial block.}
+#'     \item{`x_augmented`}{Numeric matrix of size
+#'       (nrow(x)) \eqn{\times} (ncol(x) + n_injected) with the artificial
+#'       columns appended after the original features.}
+#'     \item{`noise_col_indices`}{Integer vector of length `n_injected`
+#'       containing the 1-based indices (into the artificial block itself)
+#'       that identify which artificial features were injected.  Used by
+#'       [stabl_fit()] to extract the artificial-feature stability scores.}
 #'   }
+#'
+#' @seealso [compute_fdp_plus()] which consumes the artificial-feature scores,
+#'   [stabl_fit()] which calls this function automatically.
 #' @export
 make_artificial_features <- function(x, n_injected, type, random_state = NULL) {
   if (!is.null(random_state)) set.seed(random_state)

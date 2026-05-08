@@ -1,5 +1,21 @@
 # PROGRESS: stablr Full R Port
 
+**Purpose:** Factual execution log recording completed work, validation results, and explicit gaps.
+
+**This document owns:**
+- Completed implementation work (what changed).
+- Validation evidence (command + output summaries).
+- Observed gaps and known constraints.
+- Phase completion status and scope decisions.
+
+**This document does NOT own:**
+- Future scope and priorities (→ PLAN.md)
+- Operator snapshot and immediate task queue (→ HANDOFF.md)
+- Algorithm semantics and parity rules (→ STABL.md)
+- Workflow policy and governance (→ AGENTS.md)
+
+**Cross-reference pattern:** For planning context, check PLAN.md. For current session queue, check HANDOFF.md.
+
 ## Document Role
 
 This file is the execution log and validation record.
@@ -11,6 +27,7 @@ Logging rule:
 
 - Record only completed work, observed results, and explicit gaps.
 - Keep future intent and sequencing in `PLAN.md`.
+- Keep immediate operator queue in `HANDOFF.md`.
 
 ## Status
 1. Phase 1 (Spec + scaffolding): Complete
@@ -259,6 +276,25 @@ Validation notes for this implementation step:
 - All parity tests now pass: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'python-parity-fixtures')"` → `[ FAIL 0 | WARN 0 | SKIP 0 | PASS 20 ]`.
 - Updated PLAN.md, PROGRESS.md, HANDOFF.md to reflect parity coverage closure for these adapters.
 
+### M9: Vignettes (2026-05-07) — Complete
+
+Scope: two fully buildable vignettes with zero user path setup required.
+
+All steps completed:
+
+- A. Generated `inst/extdata/` OOL subset CSVs: 6 files (train/valid × cytof/proteomics/dos), 150 rows × 100 features, gzipped. Total bundle: 904 KB.
+- B. Added `load_ool_data()` in `R/data_helpers.R`; `export(load_ool_data)` added to `NAMESPACE`; `knitr`, `rmarkdown` added to `Suggests` + `VignetteBuilder: knitr` added to `DESCRIPTION`.
+- C. Wrote `stablr-intro.Rmd`: synthetic data, binary classification + regression, adaptive lasso, elastic net with `l1_ratio`, `n_bootstraps = 100`. Builds cleanly.
+- D. Wrote `stablr-multiomic.Rmd`: real OOL data via `load_ool_data()`, 2 omics, per-omic STABL + `stabl_multiomic_train_validate()` early+late fusion, `n_bootstraps = 150`. Builds cleanly.
+- E. Fixed two build errors: (1) `alpha =` renamed to `l1_ratio =` in intro vignette; (2) empty `sel_features` case in `exports.R` `data.frame(row.names = ...)` now guarded.
+- F. Validated: `devtools::build_vignettes('r-pkg/stablr')` → both vignettes build to HTML without errors. Tests: `PASS 290`, `FAIL 0`, `SKIP 8` (sparsegl only).
+
+Build command:
+
+```bash
+conda run -n R4_51 Rscript -e "devtools::build_vignettes('r-pkg/stablr')"
+```
+
 ## Latest Validation Snapshot
 
 - Command: `conda run -n R4_51 R CMD INSTALL multiview`
@@ -428,12 +464,6 @@ Validation notes for this refinement:
 - Scope: documentation-only handoff refinement (`PLAN.md`, `PROGRESS.md`, `HANDOFF.md`, `MultiView.md`).
 - Test command execution: not rerun in this pass; latest validated state remains `PASS 309`, `FAIL 0`, `WARN 0`, `SKIP 0` from the full local suite.
 
-## Traceability To Active Plan Deliverables
-- R smoke benchmark script added and documented: complete (`r-pkg/stablr/scripts/run_smoke_stablr.R`).
-- Adapter usage documentation examples added: complete (`r-pkg/stablr/R/stabl_fit.R`, `r-pkg/stablr/R/learner_adapters.R`).
-- Sparsegl-enabled CI job added: deferred in this workspace (local validation scope).
-- Fresh-session bootstrap artifact added: complete (`HANDOFF.md`).
-
 ## Previously Completed Discovery
 - Reviewed architecture and behavior of:
   - `stabl/stabl.py`
@@ -454,14 +484,98 @@ Validation notes for this refinement:
 - Fixed latent sparsegl bug: `make_sgl_adapter` and `.make_sgl_batch_adapter` now sort features by group index before calling `sparsegl::sparsegl()` (which requires monotone non-decreasing groups) and remap coefficients back to original column order. This unmasked 6 previously-skipped SGL tests which now pass.
 - Phase 4 hardening: close adapter docs, grouped longitudinal leakage tests, and sparsegl-enabled CI execution.
 
+### M15: TCGA Breast Cancer Vignette — mixOmics Chapter 6 Translation (2026-05-07)
+
+Scope: new stablr-idiomatic vignette translating the mixOmics N-Integration Chapter 6 case study into stablr.
+
+All steps completed:
+
+- Confirmed `mixOmics` is installed in the `R4_51` conda environment (Bioconductor package, includes `breast.TCGA` dataset).
+- Ran binomial multi-omic smoke check (`n_bootstraps = 20`, mRNA + miRNA, Basal vs non-Basal): completed without errors; `stabl_multiomic_fit` class confirmed, late fusion AUROC = 0.643.
+- Added `mixOmics` to `Suggests` in `r-pkg/stablr/DESCRIPTION`.
+- Wrote `r-pkg/stablr/vignettes/stablr-tcga.Rmd`:
+  - Dataset: `breast.TCGA` (mRNA 150x520 + miRNA 150x184 train; 70-sample test; protein excluded).
+  - Outcome: Basal vs non-Basal binary (`family = "binomial"`), `n_bootstraps = 50` with chunk caching.
+  - Sections: prerequisites, load data + binary encoding, per-omic STABL, integrated pipeline (early + late fusion), results exploration, validation performance (confusion matrix + BER), export, next steps.
+- Rendered `stablr-tcga.html` successfully; all 31 code chunks executed without errors.
+
+Validation notes:
+
+- Smoke check: `conda run -n R4_51 Rscript /tmp/smoke_binomial.R` → `SMOKE CHECK PASSED`.
+- Render: `conda run -n R4_51 Rscript /tmp/render_tcga.R` → `Output created: vignettes/stablr-tcga.html` (exit 0).
+
 ## In Progress
 
 - CI implementation is intentionally deferred in this workspace by user request.
 - Local test-suite validation remains green and is the active hardening path.
 
-## Next Actions
-1. Add Cox-path frozen-reference hardening policy (Python anchor unavailable) and implement the agreed surrogate parity fixture/test path.
-2. Stress-test `save_stabl_results()` and `export_stabl_to_csv()` on real `Sample Data/` inputs for end-to-end output layout validation.
+### Full roxygen2 Documentation Coverage Pass (2026-05-05)
+
+Performed a systematic documentation pass over all 12 R source files in `r-pkg/stablr/R/`. Every exported function now has:
+- A title sentence.
+- A 1-2 sentence purpose description explaining *why* the function exists.
+- `@param` entries covering every parameter with type, valid range/values, and defaults.
+- `@return` describing the type and structure of the output.
+- `@details` for complex/key functions adding technical depth (algorithm, formula, or design rationale).
+- `@seealso` cross-links to related functions.
+
+Files edited in this pass (documentation-only changes):
+
+| File | Functions updated |
+|------|------------------|
+| `R/visualization.R` | `plot_fdr_graph`, `plot_roc`, `plot_prc`, `boxplot_features`, `scatterplot_features` |
+| `R/bootstrap_helpers.R` | `classic_bootstrap_indices`, `group_bootstrap_indices` |
+| `R/stabl_accessors.R` | `get_support`, `get_stabl_scores`, `get_feature_names_out`, `get_importances` |
+| `R/metrics.R` | All 11 exported functions |
+| `R/input_validation.R` | `validate_sample_alignment`, `validate_multiomic_inputs` |
+| `R/artificial_features.R` | `make_artificial_features` |
+| `R/learner_adapters.R` | `make_glmnet_adapter`, `make_adaptive_lasso_adapter`, `make_sgl_adapter`, `auto_lambda_grid` |
+| `R/exports.R` | `save_stabl_results` (title + description + `@details` + `@seealso` expanded) |
+
+Files confirmed already well-documented (no changes): `stabl_fit.R`, `fdp_control.R`, `multiomic_workflows.R`, `data_helpers.R`.
+
+Validation notes:
+
+- `devtools::document('r-pkg/stablr')` completed with no new errors introduced by this pass (pre-existing NAMESPACE note about `multiview` package is unchanged).
+- Command: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"`
+- Result: `PASS 290`, `FAIL 0`, `WARN 0`, `SKIP 8` (skips are for optional `multiview`/`sparsegl` dependencies, unchanged from before).
+
+### Python–R Parity Vignette (2026-05-07)
+
+- Added `r-pkg/stablr/vignettes/stablr-python-parity.Rmd`: a publication-quality vignette reproducing the Python STABL Tutorial Notebook in R.
+- Covers two analyses mirroring the Tutorial Notebook exactly:
+  1. OOL regression (Proteomics): `family = "gaussian"`, knockoff, `n_bootstraps = 500`, `n_lambda = 10`, `random_state = 42`.
+  2. COVID-19 binary classification (Proteomics): `family = "binomial"`, knockoff, `n_bootstraps = 1000`, `n_lambda = 10`, `fdr_threshold_range = seq(0.1, 1, by = 0.01)`, `random_state = 42`.
+  3. Full pipeline section: preprocessing + STABL + unpenalised GLM final model; training and validation ROC/PRC curves; prediction distribution boxplots.
+- Includes `preprocess_fit()` / `preprocess_apply()` helpers that replicate the Python `VarianceThreshold + LowInfoFilter + SimpleImputer + StandardScaler` pipeline without data leakage.
+- All diagnostic plots present: FDP+ curves, stability paths, feature distribution plots (scatter/boxplot for regression/classification respectively), ROC/PRC.
+- `cache = TRUE` on heavy fit chunks; COVID-19 data read from `Sample Data/COVID-19/` at runtime with a clear data-requirement notice.
+- Parameter comparison tables and algorithmic note explain LASSO implementation differences between glmnet and scikit-learn.
+
+Validation notes:
+
+- Scope: documentation/vignette addition only; no R source or test code modified.
+- Test suite not re-run in this pass (no functional code changed).
+
+### All 4 Vignettes Built (2026-05-08)
+
+**Problem:** `stablr-python-parity.Rmd` was corrupted to 31 lines (only YAML header) by a prior Python write script bug. `stablr-tcga.Rmd` had a stale `stablr-tcga-cache/` from a previous render.
+
+**Fixes applied:**
+- Rewrote `stablr-python-parity.Rmd` from scratch (298 lines) using Python `open(..., 'w').write(...)`.
+  - Key fix: `scatterplot_features(features = names(which(sel_prot)), ...)` — `get_support()` returns a named logical vector; plot functions require a character vector. Using `names(which(...))` extracts the selected feature names.
+  - `boxplot_features` equivalently uses `names(which(sel_covid))`.
+  - Inline `preprocess_fit()` / `preprocess_apply()` helpers replicate the Python pipeline.
+  - COVID-19 data check via `file.exists()` guard; `eval = eval_covid` on COVID chunks.
+- Deleted stale `stablr-tcga-cache/` directory, then re-rendered successfully.
+
+**Render results (2026-05-08):**
+- `stablr-intro.html` — 335K, in `doc/` ✅
+- `stablr-multiomic.html` — 1.4M, in `doc/` ✅
+- `stablr-python-parity.html` — 561K, in `doc/` ✅ (all 42 chunks ran incl. COVID-19 section)
+- `stablr-tcga.html` — 787K, in `doc/` ✅ (all 42 chunks ran)
+
+All 4 vignettes build without errors.
 
 ### Scope Decision (2026-05-03)
 - Tidymodels integration (Phase 6 original plan) is **dropped**. No `parsnip`, `recipes`, `tune`, `workflows`, or `yardstick` dependencies will be introduced.

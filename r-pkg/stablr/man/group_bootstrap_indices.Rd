@@ -7,20 +7,52 @@
 group_bootstrap_indices(y, groups, n_subsamples, replace = FALSE, seed = NULL)
 }
 \arguments{
-\item{y}{Outcome vector.}
+\item{y}{Outcome vector with the same length as \code{groups}.}
 
-\item{groups}{Vector of group identifiers with same length as \code{y}.}
+\item{groups}{Vector of group identifiers (same length as \code{y}).  Values may
+be any type that supports \code{unique()} and equality comparison.}
 
-\item{n_subsamples}{Target number of rows to include.}
+\item{n_subsamples}{Positive integer; target number of rows in the
+subsample.  The actual count may differ slightly due to whole-group
+granularity.}
 
-\item{replace}{Whether groups can be resampled.}
+\item{replace}{Logical; may the same group be sampled more than once?
+Default \code{FALSE}.}
 
-\item{seed}{Optional integer seed.}
+\item{seed}{Optional integer; passed to \code{\link[=set.seed]{set.seed()}} before sampling.
+\code{NULL} leaves the RNG state unchanged.}
 }
 \value{
-Integer vector of sampled indices.
+Integer vector of 1-based row indices into the training set.
 }
 \description{
-Draws sample indices by first sampling groups and then collecting their
-member rows to prevent leakage in repeated-measures settings.
+Draws row indices for a single STABL bootstrap iteration by sampling
+\strong{groups} rather than individual samples.  Use this instead of
+\code{\link[=classic_bootstrap_indices]{classic_bootstrap_indices()}} whenever the training data contains repeated
+measurements or known clusters (e.g. multiple time-points per subject,
+technical replicates, or family members).
+}
+\details{
+\strong{Why group-level sampling prevents leakage:} If individual rows from the
+same subject appear in both the bootstrap subsample and its complement, the
+stability score becomes inflated because the learner can partially memorise
+subject-level patterns.  By sampling complete groups, the subsample and its
+"holdout" are subject-disjoint, preserving the independence assumption
+underlying STABL's FDP+ guarantee.
+
+\strong{How groups are sampled:} Groups are drawn one at a time (without
+replacement by default) until the running tally of included rows reaches
+\code{n_subsamples}.  If the last added group causes the count to exceed
+\code{n_subsamples}, the excess rows are trimmed.  When \code{replace = TRUE} the
+same group may be drawn multiple times (useful when there are very few
+groups).
+
+\strong{Degenerate bootstrap guard:} As with \code{\link[=classic_bootstrap_indices]{classic_bootstrap_indices()}}, if
+the final subsample contains only one unique class the function retries
+until a class-diverse sample is obtained.
+}
+\seealso{
+\code{\link[=classic_bootstrap_indices]{classic_bootstrap_indices()}} for independent-sample data,
+\code{\link[=stabl_fit]{stabl_fit()}} which calls this sampler automatically when \code{groups} is
+supplied.
 }

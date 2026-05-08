@@ -7,14 +7,19 @@
 adjusted_similarity_values(list_of_lists, nb_total_elements)
 }
 \arguments{
-\item{list_of_lists}{A list of character/integer vectors.}
+\item{list_of_lists}{A list of character/integer vectors, one per STABL run.}
 
 \item{nb_total_elements}{Integer; total number of candidate features.}
 }
 \value{
-Numeric vector of length N*(N-1)/2.
+Numeric vector of length N*(N-1)/2 containing the pairwise
+adjusted-similarity values for all unique pairs (row-major upper-triangle
+order, matching the Python convention).
 }
 \description{
-Computes the full adjusted-similarity matrix and returns only the upper
-triangle (excluding the diagonal), matching the Python convention.
+Computes the full pairwise adjusted-similarity matrix for N feature sets and
+returns only the N\eqn{\times}(N-1)/2 off-diagonal upper-triangle values as
+a flat vector.  This format is convenient for computing summary statistics
+(see \code{\link[=adjusted_similarity_measure]{adjusted_similarity_measure()}}) or for Wilcoxon/permutation tests
+comparing reproducibility across methods.
 }

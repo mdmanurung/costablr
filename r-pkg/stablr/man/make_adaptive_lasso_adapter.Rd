@@ -15,27 +15,45 @@ make_adaptive_lasso_adapter(
 \item{family}{Character; the \code{glmnet} response family, for example
 \code{"gaussian"}, \code{"binomial"}, \code{"multinomial"}, or \code{"cox"}.}
 
-\item{gamma}{Positive numeric scalar controlling weight sharpness.}
+\item{gamma}{Positive numeric scalar; controls how sharply the weights
+down-penalise features with large ridge coefficients.  Larger values
+make the penalty more selective.  Default \code{1.0} matches the Python
+reference implementation.}
 
-\item{epsilon}{Positive numeric scalar to avoid division by zero.}
+\item{epsilon}{Positive numeric scalar; added to the denominator of the
+weight to avoid division by zero.  Default \code{1e-6}.}
 
 \item{bootstrap_threshold}{Positive numeric; absolute-coefficient cutoff
-used to decide that a feature is selected in a given bootstrap.}
+used to decide that a feature is selected in a given bootstrap.  Features
+with \verb{|coef| > bootstrap_threshold} are counted as selected.}
 }
 \value{
 A function with signature
 \verb{function(x, y, lambda_val) -> logical vector of length ncol(x)}.
 }
 \description{
-Returns a closure that computes adaptive penalty weights from a ridge
-initialization on each bootstrap subsample, then fits a lasso model with
-\code{penalty.factor} to obtain the selected-feature mask.
+Returns a closure that computes feature-specific penalty weights from a
+ridge initialisation on each bootstrap subsample, then fits a lasso model
+with those \code{penalty.factor} values to obtain the selected-feature mask.
 }
 \details{
-Weights are defined as
-\deqn{w_j = 1 / (|\hat\beta_j^{\mathrm{init}}| + \epsilon)^\gamma.}
+Adaptive lasso improves on standard lasso by assigning stronger penalties
+to features with small initial coefficients (likely noise) and weaker
+penalties to features with large initial coefficients (likely signal).
+This asymmetric penalisation achieves the oracle property under regularity
+conditions, selecting the true support more reliably than plain lasso when
+signal features have moderate to large effect sizes.
+
+Weights are defined as:
+\deqn{w_j = 1 / (|\hat\beta_j^{\mathrm{init}}| + \epsilon)^\gamma}
+where \eqn{\hat\beta_j^{\mathrm{init}}} comes from a ridge regression on
+the same bootstrap subsample.  The \code{epsilon} floor avoids division by zero
+for features with near-zero ridge coefficients.
 
 This adapter factory is primarily an internal backend used by \code{\link[=stabl_fit]{stabl_fit()}}.
 For end-to-end feature selection workflows, prefer
 \code{base_learner = "adaptive_lasso"} in \code{\link[=stabl_fit]{stabl_fit()}}.
+}
+\seealso{
+\code{\link[=make_glmnet_adapter]{make_glmnet_adapter()}}, \code{\link[=make_sgl_adapter]{make_sgl_adapter()}}, \code{\link[=stabl_fit]{stabl_fit()}}
 }

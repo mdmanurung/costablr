@@ -7,21 +7,31 @@
 scatterplot_features(features, x, y, title = "Selected Features", ncol = 3L)
 }
 \arguments{
-\item{features}{Character vector of feature names to plot.}
+\item{features}{Character vector of feature names to plot.  Features not
+present as columns in \code{x} are silently skipped.}
 
-\item{x}{Numeric matrix or data frame of predictors.}
+\item{x}{Numeric matrix or data frame of predictors.  Column names must
+include all elements of \code{features}.}
 
-\item{y}{Numeric vector of continuous outcome values.}
+\item{y}{Numeric vector of continuous outcome values.  Must have the same
+number of elements as \code{nrow(x)}.}
 
-\item{title}{Character; plot title.}
+\item{title}{Character scalar; plot title.  Default \code{"Selected Features"}.}
 
-\item{ncol}{Integer; number of columns in the facet grid.  Default 3.}
+\item{ncol}{Positive integer; number of facet columns in the grid.
+Default 3.}
 }
 \value{
-A \code{ggplot} object.
+A \code{ggplot} object with one facet panel per feature.
 }
 \description{
-Produces a ggplot2 figure with one facet per selected feature, showing
-the predictor value versus a continuous outcome with a LOESS smooth.
-Intended for regression tasks.
+Produces a ggplot2 figure with one facet per selected feature, showing the
+raw data points together with a LOESS smooth and 95\% confidence band.  The
+smooth helps reveal non-linear relationships that might be missed by
+reporting correlation coefficients alone.  Use after STABL feature
+selection for regression tasks.
+}
+\seealso{
+\code{\link[=boxplot_features]{boxplot_features()}} for classification tasks,
+\code{\link[=save_stabl_results]{save_stabl_results()}} which calls this automatically.
 }

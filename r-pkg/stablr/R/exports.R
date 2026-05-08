@@ -81,26 +81,44 @@ export_stabl_to_csv <- function(object, path) {
 
 #' Save All STABL Results to Disk
 #'
-#' Bundles all standard STABL diagnostics — stability scores, selected feature
-#' list, FDR/stability-path plots, and per-feature distribution plots — into a
-#' single output directory.
+#' Writes a complete set of STABL result artefacts — stability scores, the
+#' list of selected features, the FDR diagnostic graph, the stability path
+#' plot, and per-feature distribution plots — into a single output directory.
+#' This is the recommended way to persist and share results from a single
+#' [stabl_fit()] call.
 #'
-#' @param object A fitted `"stabl_fit"` object.
-#' @param path Character string; output directory to create.  Raises an error
-#'   if the directory already exists and `override = FALSE`.
-#' @param x Numeric matrix of predictors used to fit `object` (used for
-#'   per-feature distribution plots).
-#' @param y Outcome vector/factor/`Surv` object used to fit `object`.
-#' @param figure_fmt Character; graphics device extension, e.g. `"pdf"`,
-#'   `"png"`, `"svg"` (default `"pdf"`).
+#' The function orchestrates several lower-level helpers:
+#' [export_stabl_to_csv()] for tabular data, [plot_fdr_graph()] and
+#' [plot_stabl_path()] for diagnostic plots, and [boxplot_features()] or
+#' [scatterplot_features()] for per-feature distribution visualisations.
+#' All graphics are saved using `ggplot2::ggsave()` in the format specified
+#' by `figure_fmt`.
+#'
+#' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
+#' @param path Character string; path to the output directory.  Created
+#'   recursively if it does not already exist.  Raises an error if the
+#'   directory exists and `override = FALSE`.
+#' @param x Numeric matrix of predictors used to fit `object`.  Required
+#'   for per-feature distribution plots; must contain at least the selected
+#'   feature columns.
+#' @param y Outcome vector, factor, or `survival::Surv` object used to fit
+#'   `object`.  Required for per-feature distribution plots.
+#' @param figure_fmt Character; graphics device extension used when saving
+#'   plots.  Common choices: `"pdf"` (default, publication quality),
+#'   `"png"`, `"svg"`.
 #' @param new_hard_threshold Numeric in `(0, 1]` or `NULL`.  When supplied,
-#'   overrides the stored threshold for support extraction and path plotting.
-#' @param task_type Character; one of `"binary"`, `"regression"`, or
-#'   `"multiclass"`.  Determines which per-feature plot is generated.
-#' @param override Logical; if `TRUE`, existing directory contents are
-#'   overwritten.  Default `FALSE`.
+#'   overrides the stored threshold for support extraction and stability-path
+#'   plotting.
+#' @param task_type Character; one of `"binary"` (default), `"multiclass"`,
+#'   or `"regression"`.  Determines which per-feature plot is generated:
+#'   grouped boxplots for classification, LOESS scatter for regression.
+#' @param override Logical; if `TRUE`, an existing directory with the same
+#'   path is accepted and its contents may be overwritten.  Default `FALSE`.
 #'
-#' @return Invisibly returns `path`.
+#' @return Invisibly returns `path` as a normalised absolute string.
+#'
+#' @seealso [export_stabl_to_csv()] for the CSV-only variant,
+#'   [plot_stabl_path()], [plot_fdr_graph()]
 #' @export
 save_stabl_results <- function(
     object,
@@ -155,11 +173,15 @@ save_stabl_results <- function(
   sel_dir <- file.path(path, "Selected Features")
   dir.create(sel_dir, recursive = TRUE, showWarnings = FALSE)
 
-  sel_df <- data.frame(
-    "Feature Name" = sel_features,
-    row.names      = paste0("Feature n\u00b0", seq_along(sel_features)),
-    check.names    = FALSE
-  )
+  if (length(sel_features) > 0L) {
+    sel_df <- data.frame(
+      "Feature Name" = sel_features,
+      row.names      = paste0("Feature n\u00b0", seq_along(sel_features)),
+      check.names    = FALSE
+    )
+  } else {
+    sel_df <- data.frame("Feature Name" = character(0L), check.names = FALSE)
+  }
   utils::write.csv(sel_df, file = file.path(sel_dir, "Selected features.csv"))
 
   # 5. Per-feature distribution plots

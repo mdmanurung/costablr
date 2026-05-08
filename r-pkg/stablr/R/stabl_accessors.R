@@ -1,16 +1,37 @@
 #' Get the Feature Selection Mask from a Fitted STABL Object
 #'
-#' Returns a logical vector indicating which features are selected by STABL.
-#' Selection is determined by the FDP+-optimal threshold (when artificial
-#' features were used during fitting) or by `hard_threshold`, in that priority
-#' order.  When `explore = TRUE` was set during fitting and no feature passes
-#' the threshold, the top `n_explore` features are returned as a fallback.
+#' Returns a named logical vector that is `TRUE` for every feature whose
+#' maximum stability score exceeds the effective threshold.  This is the
+#' primary accessor for downstream use of a fitted STABL model: index your
+#' data matrix with the returned mask, or pass the object to
+#' [get_feature_names_out()] to obtain the names directly.
 #'
-#' @param object A fitted `"stabl_fit"` object from [stabl_fit()].
+#' @details
+#' **Threshold resolution order:**
+#' 1. `new_hard_threshold` (if supplied to this call).
+#' 2. `object$hard_threshold` (if a hard threshold was given to [stabl_fit()]).
+#' 3. `object$fdr_min_threshold_` (the FDP+-optimal threshold computed from
+#'    artificial features during fitting).
+#'
+#' An error is raised when none of these is available — which can only happen
+#' if `stabl_fit()` was called with both `artificial_type = NULL` and no
+#' `hard_threshold`.
+#'
+#' **Explore fallback:** When `explore = TRUE` was set during fitting and no
+#' feature's score exceeds the threshold, the function returns the top
+#' `n_explore` features instead of an all-`FALSE` vector.  This is useful in
+#' exploratory analyses where you want at least some candidates even when the
+#' signal is weak.
+#'
+#' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
 #' @param new_hard_threshold Numeric in `(0, 1]` or `NULL`.  When supplied,
-#'   overrides the threshold stored in `object`.
+#'   overrides the threshold stored in `object` for this call only.
 #'
-#' @return Named logical vector of length `object$n_features_in_`.
+#' @return Named logical vector of length `object$n_features_in_`.  Names are
+#'   the original feature names from the training matrix.
+#'
+#' @seealso [get_feature_names_out()] to get names directly,
+#'   [get_importances()] to inspect raw stability scores.
 #' @export
 get_support <- function(object, new_hard_threshold = NULL) {
   UseMethod("get_support")
@@ -49,12 +70,28 @@ get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
   mask
 }
 
-#' Get Stability Scores from a Fitted STABL Object
+#' Get the Full Stability Score Matrix from a Fitted STABL Object
 #'
-#' @param object A fitted `"stabl_fit"` object.
+#' Returns the raw stability-score matrix accumulated over all bootstrap
+#' iterations.  Inspecting this matrix is useful for diagnostics: you can
+#' check how stable features are across the regularisation path, identify
+#' features that are consistently selected at many lambda values (robustness),
+#' and spot features that peak only at one extreme of the path (fragility).
 #'
-#' @return Numeric matrix (features \eqn{\times} lambdas) of stability scores,
-#'   with feature names as row names.
+#' The stability score for feature \eqn{j} at regularisation strength
+#' \eqn{\lambda_k} is defined as the fraction of bootstrap subsamples in
+#' which feature \eqn{j} received a non-zero coefficient when the model was
+#' fitted at \eqn{\lambda_k}.  Values lie in \eqn{[0, 1]}.
+#'
+#' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
+#'
+#' @return Numeric matrix with one row per original feature and one column per
+#'   lambda in the fitted grid.  Row names are the feature names from the
+#'   training matrix; column names are not set (use
+#'   `object$fitted_lambda_grid` to map column indices to lambda values).
+#'
+#' @seealso [get_importances()] for the per-feature maximum score (scalar
+#'   summary), [get_support()] for the binary selection mask.
 #' @export
 get_stabl_scores <- function(object) {
   UseMethod("get_stabl_scores")
@@ -66,12 +103,24 @@ get_stabl_scores.stabl_fit <- function(object) {
   object$stabl_scores_
 }
 
-#' Get Names of Selected Features
+#' Get the Names of Selected Features from a Fitted STABL Object
 #'
-#' @param object A fitted `"stabl_fit"` object.
-#' @param new_hard_threshold Numeric or `NULL`; see [get_support()].
+#' Convenience wrapper around [get_support()] that returns only the names of
+#' the features that pass the stability threshold, ready for use as column
+#' selectors in downstream modelling (e.g.
+#' `x[, get_feature_names_out(fit)]`).
 #'
-#' @return Character vector of selected feature names.
+#' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
+#' @param new_hard_threshold Numeric in `(0, 1]` or `NULL`.  Forwarded to
+#'   [get_support()]; see that function for the full threshold resolution
+#'   order.
+#'
+#' @return Character vector of selected feature names.  An empty character
+#'   vector is returned when no feature passes the threshold (and
+#'   `explore = FALSE` was used during fitting).
+#'
+#' @seealso [get_support()] for the binary mask, [get_importances()] for
+#'   ranked scores.
 #' @export
 get_feature_names_out <- function(object, new_hard_threshold = NULL) {
   UseMethod("get_feature_names_out")
@@ -83,14 +132,27 @@ get_feature_names_out.stabl_fit <- function(object, new_hard_threshold = NULL) {
   object$feature_names[mask]
 }
 
-#' Get Feature Importances (Max Stability Scores)
+#' Get Per-Feature Importance Scores (Maximum Stability Score)
 #'
-#' Returns the per-feature importance score, defined as the maximum stability
-#' score across all lambda values.  Mirrors `Stabl.get_importances()`.
+#' Returns a scalar summary of how stably each feature is selected across the
+#' entire regularisation path.  The importance of feature \eqn{j} is defined
+#' as \eqn{\max_{k} q_{jk}}, i.e. the highest selection frequency it achieved
+#' at any lambda.  This is the score compared against the stability threshold
+#' in [get_support()].
 #'
-#' @param object A fitted `"stabl_fit"` object.
+#' Because the maximum is taken across lambdas, the importance measure is
+#' lenient: a feature qualifies even if it is stable only at one particular
+#' penalty strength.  For a more conservative view, use [get_stabl_scores()]
+#' and inspect the full path.
 #'
-#' @return Named numeric vector of length `object$n_features_in_`.
+#' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
+#'
+#' @return Named numeric vector of length `object$n_features_in_`, with
+#'   values in \eqn{[0, 1]}.  Higher values indicate more stable features.
+#'   Names are the original feature names from the training matrix.
+#'
+#' @seealso [get_support()] to convert importances to a binary selection mask,
+#'   [get_stabl_scores()] for the full path matrix.
 #' @export
 get_importances <- function(object) {
   UseMethod("get_importances")

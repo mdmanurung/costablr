@@ -7,7 +7,7 @@
 pearson_similarity_values(list_of_lists, d)
 }
 \arguments{
-\item{list_of_lists}{A list of character/integer vectors.}
+\item{list_of_lists}{A list of character/integer vectors, one per run.}
 
 \item{d}{Integer; total number of candidate features.}
 }
@@ -15,5 +15,8 @@ pearson_similarity_values(list_of_lists, d)
 Numeric vector of length N*(N-1)/2.
 }
 \description{
-Upper-Triangle Pearson Similarity Values
+Computes all pairwise Pearson-corrected similarities and returns the
+N\eqn{\times}(N-1)/2 upper-triangle values as a flat vector (same layout
+as \code{\link[=adjusted_similarity_values]{adjusted_similarity_values()}}, enabling direct comparison between the
+two metrics on the same data).
 }

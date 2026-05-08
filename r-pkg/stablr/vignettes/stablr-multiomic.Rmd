@@ -1,0 +1,336 @@
+---
+title: "Multi-Omic Biomarker Discovery with stablr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Multi-Omic Biomarker Discovery with stablr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment  = "#>",
+  fig.width  = 6,
+  fig.height = 4
+)
+set.seed(42)
+```
+
+## Overview
+
+This vignette demonstrates multi-omic biomarker discovery using the `stablr`
+package on a real Onset of Labor (OOL) dataset.  The dataset contains two omic
+layers (CyTOF and Proteomics) measured in 150 pregnant women.  The prediction
+target is days-to-onset-of-labor (DOS), a continuous regression outcome.
+
+**Why multi-omic?**  Single-omic analyses can miss biomarkers that are
+individually weak but collectively informative.  By combining immune-cell
+profiling (CyTOF) with protein abundance (Proteomics), we can ask whether each
+layer contributes independent signal and how to integrate them optimally.
+
+We cover:
+
+1. Loading the bundled example data with `load_ool_data()`.
+2. Running per-omic STABL --- a useful baseline before integration.
+3. Running the integrated multi-omic workflow with **early fusion** and
+   **late fusion**.
+4. Comparing selected features across strategies.
+5. Exporting results.
+
+## Learning objectives
+
+By the end of this vignette you will be able to:
+
+1. Understand the data structure returned by `load_ool_data()`.
+2. Run STABL independently on each omic and interpret the outputs.
+3. Explain the difference between early fusion and late fusion.
+4. Run `stabl_multiomic_train_validate()` and navigate its result list.
+5. Compare which features appear across integration strategies.
+6. Export results for downstream use.
+
+```{r load}
+library(stablr)
+```
+
+---
+
+## 1. Load the data
+
+`load_ool_data()` reads the pre-bundled OOL subset directly from the package.
+No file paths are needed.  It returns a named list with two elements:
+
+- **`$x_list`**: a named list of feature matrices, one per omic layer.  Each
+  matrix has samples in rows and features in columns, with matching row names.
+- **`$y`**: a named numeric vector of outcomes (DOS in days), aligned to the
+  rows of every matrix in `$x_list`.
+
+```{r load-data}
+ool_train <- load_ool_data(split = "train")
+ool_valid <- load_ool_data(split = "valid")
+
+# Training set dimensions
+lapply(ool_train$x_list, dim)
+length(ool_train$y)
+
+# Validation set dimensions
+lapply(ool_valid$x_list, dim)
+```
+
+The `lapply(..., dim)` output confirms that CyTOF and Proteomics share the same
+number of rows (samples) but differ in columns (features).  The names of rows
+must match across omics --- `stablr` checks this alignment automatically and
+stops with an informative error if it detects a mismatch.
+
+```{r data-summary}
+# Outcome distribution (DOS = days before onset of labor)
+summary(ool_train$y)
+```
+
+The `summary()` output shows the range of DOS values.  A wide range is expected
+(e.g. 0-90 days); note whether the distribution is roughly symmetric or skewed,
+as this informs how predictable the outcome may be from molecular data.
+
+---
+
+## 2. Per-omic STABL
+
+Before running the integrated pipeline, it is instructive to see which features
+STABL selects in each omic independently.  This per-omic step serves two
+purposes:
+
+1. **Sanity check** --- does each omic contain any signal at all?  If STABL
+   selects zero features from an omic, that layer may not contribute useful
+   information to the integrated analysis.
+2. **Baseline** --- the per-omic biomarker lists can be compared to the
+   integrated results to see which features survive the joint analysis.
+
+We use `n_bootstraps = 150` throughout this vignette.  Increase to 500-1000 for
+publication-quality results.
+
+**Reading the printed summary:** after printing each fit, look at (1) the number
+of features selected and (2) the FDP estimate.  A small number of selected
+features with a low FDP (< 0.05) is the ideal outcome.
+
+```{r lambda-cytof}
+lambda_cytof <- auto_lambda_grid(
+  ool_train$x_list$cytof, ool_train$y,
+  family = "gaussian", n_lambda = 20
+)
+```
+
+```{r fit-cytof}
+fit_cytof <- stabl_fit(
+  x               = ool_train$x_list$cytof,
+  y               = ool_train$y,
+  lambda_grid     = lambda_cytof,
+  family          = "gaussian",
+  n_bootstraps    = 150L,
+  artificial_type = "random_permutation",
+  random_state    = 42L
+)
+fit_cytof
+```
+
+```{r fit-proteomics}
+lambda_prot <- auto_lambda_grid(
+  ool_train$x_list$proteomics, ool_train$y,
+  family = "gaussian", n_lambda = 20
+)
+
+fit_prot <- stabl_fit(
+  x               = ool_train$x_list$proteomics,
+  y               = ool_train$y,
+  lambda_grid     = lambda_prot,
+  family          = "gaussian",
+  n_bootstraps    = 150L,
+  artificial_type = "random_permutation",
+  random_state    = 42L
+)
+fit_prot
+```
+
+`get_support()` returns the feature names that passed the stability threshold
+in each omic.  Compare the two lists: non-overlapping features suggest
+omic-specific biomarkers, while any overlap (if the same molecule is measured
+in both layers) indicates high-confidence candidates.
+
+```{r per-omic-support}
+cat("CyTOF selected features:
+")
+print(get_support(fit_cytof))
+
+cat("
+Proteomics selected features:
+")
+print(get_support(fit_prot))
+```
+
+**Stability path guidance:** each line in the plot is one feature.  Features
+with high selection frequencies at moderate penalty levels (the plateau region
+of the curve) are the most reliably detected.  Features that spike at very low
+penalty (far left) and drop quickly are likely noise rather than signal.
+
+```{r plot-per-omic, fig.alt = "Stability paths for CyTOF and Proteomics"}
+plot_stabl_path(fit_cytof,     title = "CyTOF - stability path")
+plot_stabl_path(fit_prot,      title = "Proteomics - stability path")
+```
+
+---
+
+## 3. Integrated multi-omic workflow
+
+`stabl_multiomic_train_validate()` orchestrates the full pipeline in a single
+call.  It accepts training and validation splits and evaluates two complementary
+integration strategies:
+
+| Strategy | How it works | Best when |
+|---|---|---|
+| **Early fusion** | Concatenates all omic matrices into one wide matrix, then runs a *single* STABL fit across all features jointly. | Omics are measured on the same samples; you want a unified biomarker list. |
+| **Late fusion** | Fits one STABL + downstream model per omic separately, then learns the optimal weighted combination of predictions on the validation set. | You want to know each omic's independent predictive contribution. |
+
+Key arguments:
+
+| Argument | Purpose |
+|---|---|
+| `x_train_list` / `x_valid_list` | Named lists of feature matrices; names must match between train and valid. |
+| `lambda_grid` | Named list of lambda grids, one per omic (names must match `x_train_list`). |
+| `early_fusion` / `late_fusion` | Toggle each strategy on or off independently. |
+| `n_iter_lf` | Number of optimisation iterations for the late-fusion weight search. |
+
+The printed `multi_fit` object summarises the result of every strategy and
+reports validation metrics (Spearman rho for regression, AUROC for
+classification) so you can compare strategies at a glance.
+
+```{r lambda-grid}
+# Build per-omic lambda grids
+lambda_list <- list(
+  cytof      = auto_lambda_grid(ool_train$x_list$cytof,
+                                ool_train$y, family = "gaussian", n_lambda = 20),
+  proteomics = auto_lambda_grid(ool_train$x_list$proteomics,
+                                ool_train$y, family = "gaussian", n_lambda = 20)
+)
+```
+
+```{r multiomic-fit}
+multi_fit <- stabl_multiomic_train_validate(
+  x_train_list    = ool_train$x_list,
+  y_train         = ool_train$y,
+  lambda_grid     = lambda_list,
+  x_valid_list    = ool_valid$x_list,
+  y_valid         = ool_valid$y,
+  family          = "gaussian",
+  n_bootstraps    = 150L,
+  artificial_type = "random_permutation",
+  early_fusion    = TRUE,
+  late_fusion     = TRUE,
+  n_iter_lf       = 1000L,
+  random_state    = 42L
+)
+
+multi_fit
+```
+
+---
+
+## 4. Exploring results
+
+`multi_fit` is a list with the following elements:
+
+- **`$fits`**: named list of `stabl_fit` objects, one per omic.  These are the
+  per-omic STABL results produced *within* the joint pipeline.
+- **`$early_fusion`**: result of the early-fusion step (if
+  `early_fusion = TRUE`), containing `$fit` (a `stabl_fit` on the concatenated
+  matrix).
+- **`$late_fusion`**: result of the late-fusion step (if `late_fusion = TRUE`),
+  containing `$valid_predictions` (validation predictions) and `$weights`
+  (per-omic importance weights).
+
+```{r per-omic-results}
+# Per-omic selected features from the joint pipeline
+cat("CyTOF (from multi-omic pipeline):
+")
+print(get_support(multi_fit$fits$cytof))
+
+cat("
+Proteomics (from multi-omic pipeline):
+")
+print(get_support(multi_fit$fits$proteomics))
+```
+
+```{r early-fusion-results}
+# Early fusion: joint selection across all omics simultaneously
+if (!is.null(multi_fit$early_fusion)) {
+  cat("Early fusion selected features:\n")
+  print(get_support(multi_fit$early_fusion$fit))
+}
+```
+
+Early fusion features may differ from the per-omic lists because the joint
+model sees features from both omics simultaneously.  A feature from one omic
+that is redundant with a feature from another omic may drop out of the joint
+selection --- this is the expected behaviour and not a bug.
+
+```{r late-fusion-results}
+# Late fusion: optimal linear combination of per-omic predictions
+if (!is.null(multi_fit$late_fusion)) {
+  cat("Late fusion validation predictions (first 6):\n")
+  print(head(multi_fit$late_fusion$valid_predictions))
+}
+```
+
+`$valid_predictions` is a numeric vector of predicted DOS values for the held-out
+validation set --- one prediction per sample.  Compare these to the true values
+(`ool_valid$y`) to assess predictive performance.  The `$weights` element shows
+how much each omic contributed to the combined prediction; a weight near zero
+for an omic means it added little beyond the other omic.
+
+```{r stability-paths, fig.alt = "CyTOF stability path from multi-omic fit"}
+plot_stabl_path(multi_fit$fits$cytof,
+                title = "CyTOF (multi-omic pipeline)")
+plot_stabl_path(multi_fit$fits$proteomics,
+                title = "Proteomics (multi-omic pipeline)")
+```
+
+---
+
+## 5. Export results
+
+`save_stabl_results()` writes four outputs to disk for a single `stabl_fit`
+object:
+
+| File | Content |
+|---|---|
+| `stability_scores.csv` | Feature names and their stability scores. |
+| `selected_features.csv` | Only the features above the threshold. |
+| `stability_path.pdf` | The stability path plot. |
+| `fdr_graph.pdf` | The FDR graph. |
+
+Set `override = TRUE` to overwrite an existing directory; useful in iterative
+analyses where you re-run with more bootstraps.
+
+```{r export}
+out_dir <- file.path(tempdir(), "stablr_ool_cytof")
+
+save_stabl_results(
+  object    = multi_fit$fits$cytof,
+  path      = out_dir,
+  x         = ool_train$x_list$cytof,
+  y         = ool_train$y,
+  task_type = "regression",
+  override  = TRUE
+)
+
+list.files(out_dir, recursive = TRUE)
+```
+
+---
+
+## Next steps
+
+- Use `stabl_multiomic_cv()` for a fully cross-validated evaluation when no
+  pre-defined validation split is available.
+- Pass `groups` to respect subject-level grouping in bootstrap resampling and
+  CV fold construction.
+- See `vignette("stablr-intro")` for a walk-through of single-omic usage and
+  alternative learners (adaptive lasso, elastic net).

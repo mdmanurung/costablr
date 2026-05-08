@@ -7,18 +7,31 @@
 plot_roc(y_true, y_preds, title = "ROC Curve")
 }
 \arguments{
-\item{y_true}{Integer or logical vector of binary outcomes (0/1 or
-\code{FALSE}/\code{TRUE}).}
+\item{y_true}{Integer or logical vector of binary outcomes (1/\code{TRUE} for
+the positive class, 0/\code{FALSE} for the negative class).  Must be the same
+length as \code{y_preds}.}
 
 \item{y_preds}{Numeric vector of predicted probabilities for the positive
-class, of the same length as \code{y_true}.}
+class.  Values must be in \eqn{[0, 1]} for interpretable results.}
 
-\item{title}{Character; plot title.}
+\item{title}{Character scalar; plot title.  Default \code{"ROC Curve"}.}
 }
 \value{
-A \code{ggplot} object.
+A \code{ggplot} object.  The AUC is shown as a caption.
 }
 \description{
-Generates a ggplot2 ROC curve from binary outcome labels and predicted
-probabilities.  A chance-level diagonal is included for reference.
+Generates a ggplot2 ROC (Receiver Operating Characteristic) curve from
+binary outcome labels and predicted probabilities, together with the
+chance-level diagonal for reference.
+}
+\details{
+ROC curves visualise the trade-off between sensitivity (TPR) and
+specificity (1 - FPR) across all possible classification thresholds.  Use
+this plot to assess overall discriminative ability after applying STABL
+feature selection and fitting a downstream classifier on the selected
+features.  The Area Under the Curve (AUC) is shown in the caption.
+}
+\seealso{
+\code{\link[=plot_prc]{plot_prc()}} for precision-recall curves (preferred when classes
+are severely imbalanced).
 }

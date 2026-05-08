@@ -7,25 +7,58 @@
 make_artificial_features(x, n_injected, type, random_state = NULL)
 }
 \arguments{
-\item{x}{Numeric matrix of predictors (samples \eqn{\times} features).}
+\item{x}{Numeric matrix of predictors (samples \eqn{\times} features).
+Must have more columns than \code{n_injected} for random permutation; for
+knockoffs, must not be rank-deficient (a fallback to random permutation
+is attempted otherwise).}
 
-\item{n_injected}{Integer; number of artificial columns to inject.}
+\item{n_injected}{Positive integer; number of artificial columns to append.
+Typically \code{round(ncol(x) * artificial_proportion)} as computed in
+\code{\link[=stabl_fit]{stabl_fit()}}.}
 
 \item{type}{Character string; \code{"random_permutation"} or \code{"knockoff"}.}
 
-\item{random_state}{Optional integer seed for reproducibility.}
+\item{random_state}{Optional integer; passed to \code{\link[=set.seed]{set.seed()}} before any
+random operations for reproducibility.  \code{NULL} leaves the RNG unchanged.}
 }
 \value{
-Named list:
+Named list with two elements:
 \describe{
-\item{x_augmented}{Matrix with artificial columns appended after the
-original features.}
-\item{noise_col_indices}{Integer vector of source-column indices used
-when generating the artificial block.}
+\item{\code{x_augmented}}{Numeric matrix of size
+(nrow(x)) \eqn{\times} (ncol(x) + n_injected) with the artificial
+columns appended after the original features.}
+\item{\code{noise_col_indices}}{Integer vector of length \code{n_injected}
+containing the 1-based indices (into the artificial block itself)
+that identify which artificial features were injected.  Used by
+\code{\link[=stabl_fit]{stabl_fit()}} to extract the artificial-feature stability scores.}
 }
 }
 \description{
 Selects and calls the appropriate artificial-feature generator based on
-\code{type}, then returns the augmented matrix together with the column
+\code{type}, returning the augmented predictor matrix together with the column
 indices of the injected noise block.
+}
+\details{
+Injecting artificial features is central to STABL's automatic FDP+ control:
+by mixing known-noise columns into the predictor matrix alongside real
+features, STABL can empirically estimate how often a variable of pure noise
+is selected at a given stability threshold.  This observed noise-selection
+rate drives the FDP+ bound computed in \code{\link[=compute_fdp_plus]{compute_fdp_plus()}}, eliminating
+the need to choose a stability threshold by hand.
+
+Two noise strategies are supported:
+\describe{
+\item{\code{"random_permutation"}}{Copies \code{n_injected} randomly chosen real
+columns and shuffles each copy independently, breaking all signal while
+preserving marginal distributions.  Fast and broadly applicable.}
+\item{\code{"knockoff"}}{Generates model-X knockoffs via
+\code{\link[knockoff:create.fixed]{knockoff::create.fixed()}}, which preserve the covariance structure of
+the original features.  More powerful when features are correlated, at
+the cost of requiring the optional \code{knockoff} package and higher
+compute.}
+}
+}
+\seealso{
+\code{\link[=compute_fdp_plus]{compute_fdp_plus()}} which consumes the artificial-feature scores,
+\code{\link[=stabl_fit]{stabl_fit()}} which calls this function automatically.
 }

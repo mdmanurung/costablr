@@ -7,21 +7,33 @@
 plot_prc(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall Curve")
 }
 \arguments{
-\item{y_true}{Integer or logical vector of binary outcomes.}
+\item{y_true}{Integer or logical vector of binary outcomes (1/\code{TRUE} for
+the positive class).  Must be the same length as \code{y_preds}.}
 
 \item{y_preds}{Numeric vector of predicted probabilities for the positive
 class.}
 
-\item{show_iso}{Logical; if \code{TRUE} (default) iso-F1 contour lines are
-drawn.}
+\item{show_iso}{Logical; if \code{TRUE} (default), four iso-F1 contour lines
+at F1 = 0.2, 0.4, 0.6, 0.8 are drawn as reference guides.}
 
-\item{title}{Character; plot title.}
+\item{title}{Character scalar; plot title.  Default
+\code{"Precision-Recall Curve"}.}
 }
 \value{
-A \code{ggplot} object.
+A \code{ggplot} object.  The AUPRC is shown as a caption.
 }
 \description{
-Generates a ggplot2 Precision-Recall curve (PRC) from binary outcome labels
-and predicted probabilities.  Iso-F1 reference lines are shown at four
-evenly spaced F1 levels.
+Generates a ggplot2 Precision-Recall Curve (PRC) from binary outcome labels
+and predicted probabilities, optionally with iso-F1 contour lines.
+}
+\details{
+Precision-recall curves are preferred over ROC curves when the positive
+class is rare (class imbalance), because they focus on the model's
+performance on positive predictions without being diluted by the large
+number of true negatives.  Use this plot after applying STABL feature
+selection and fitting a downstream binary classifier.  The Area Under the
+PRC (AUPRC) is shown in the caption.
+}
+\seealso{
+\code{\link[=plot_roc]{plot_roc()}} for the ROC curve alternative.
 }

@@ -7,20 +7,26 @@
 adjusted_similarity_measure(list_of_lists, nb_total_elements, stat = "median")
 }
 \arguments{
-\item{list_of_lists}{A list of character/integer vectors.}
+\item{list_of_lists}{A list of character/integer vectors, one per run.}
 
 \item{nb_total_elements}{Integer; total number of candidate features.}
 
-\item{stat}{Character; \code{"median"} (default) or \code{"mean"}.}
+\item{stat}{Character; \code{"median"} (default, robust to outliers) or
+\code{"mean"}.}
 }
 \value{
 A named list with two elements:
-\itemize{
-\item \code{statistic}: the median (or mean) of adjusted-similarity values,
-\item \code{err}: for \code{"median"} the 25th and 75th percentiles; for \code{"mean"} the
-standard deviation.
+\describe{
+\item{\code{statistic}}{The median (or mean) of adjusted-similarity values.}
+\item{\code{err}}{For \code{"median"}: the 25th and 75th percentile vector
+(IQR bounds).  For \code{"mean"}: the root-mean-squared deviation
+(RMSD / population SD).}
 }
 }
 \description{
-Summary Statistic of Adjusted Similarity Values
+Convenience wrapper that computes all pairwise adjusted similarities
+(via \code{\link[=adjusted_similarity_values]{adjusted_similarity_values()}}) and reduces them to a single
+location statistic with an associated spread measure.  Useful for
+reporting a single reproducibility number per STABL configuration in
+benchmarking tables.
 }

@@ -3,19 +3,35 @@
 #
 # These functions compare lists of selected features across repeat runs of
 # STABL (or any other feature-selection method) to assess reproducibility.
+# Three families of similarity are provided:
+#   - Jaccard: set-overlap fraction, no correction for chance.
+#   - Adjusted: chance-corrected overlap (analogous to Cohen's kappa for sets).
+#   - Pearson: correlation-inspired chance correction, normalized by set size.
+# For simulation benchmarks where a ground-truth feature set is known, the
+# file also provides FDR, TPR, and F-score functions.
 
 # ── Jaccard ──────────────────────────────────────────────────────────────────
 
 #' Jaccard Similarity Between Two Feature Sets
 #'
-#' Computes the Jaccard index between two character (or integer) vectors treated
-#' as sets.  When both sets are empty the function returns 0 (convention
-#' matching the Python implementation).
+#' Measures the overlap between two sets of selected features as a simple
+#' fraction of shared features out of all features that appeared in either
+#' set.  This is the most interpretable pairwise similarity when no prior
+#' expectation of set sizes exists.
+#'
+#' Use Jaccard when you want a quick, easy-to-explain measure.  Prefer
+#' [adjusted_similarity()] or [pearson_similarity()] when comparing across
+#' runs that select very different numbers of features, because Jaccard does
+#' not correct for the chance overlap expected between small or large sets.
+#'
+#' When both sets are empty the function returns 0 (convention matching the
+#' Python implementation).
 #'
 #' @param list1 Character or integer vector of selected feature identifiers.
 #' @param list2 Character or integer vector of selected feature identifiers.
 #'
-#' @return Numeric scalar in \eqn{[0, 1]}.
+#' @return Numeric scalar in \eqn{[0, 1]}.  A value of 1 means the two sets
+#'   are identical; 0 means they share no features.
 #' @export
 jaccard_similarity <- function(list1, list2) {
   s1 <- unique(list1)
@@ -28,16 +44,22 @@ jaccard_similarity <- function(list1, list2) {
 
 #' Pairwise Jaccard Matrix from a List of Feature Sets
 #'
-#' Computes all pairwise Jaccard similarities among the elements of
-#' `list_of_lists`.  By default the (self-similarity) diagonal is removed,
-#' returning an N x (N-1) matrix.
+#' Computes all N\eqn{\times}N pairwise Jaccard similarities in one call.
+#' Useful for visualising the reproducibility of STABL across multiple
+#' cross-validation folds or repeated runs: a boxplot of the off-diagonal
+#' values summarises how consistently the same features are selected.
 #'
-#' @param list_of_lists A list of character/integer vectors, one per STABL run.
-#' @param remove_diag Logical; if `TRUE` (default) the diagonal column is
-#'   removed from the result.
+#' By default the self-similarity diagonal (always 1) is removed, so the
+#' returned matrix has N\eqn{\times}(N\minus 1) columns and each row contains
+#' the N\minus 1 similarities of run \eqn{i} with every other run.
 #'
-#' @return Numeric matrix of dimension N x N (or N x (N-1) when
-#'   `remove_diag = TRUE`).
+#' @param list_of_lists A list of character/integer vectors, one per STABL run
+#'   (e.g. one per cross-validation fold).
+#' @param remove_diag Logical; if `TRUE` (default) the diagonal column
+#'   (self-similarity = 1) is removed from the output.
+#'
+#' @return Numeric matrix of dimension N\eqn{\times}N (or N\eqn{\times}(N-1)
+#'   when `remove_diag = TRUE`).  Row/column order matches `list_of_lists`.
 #' @export
 jaccard_matrix <- function(list_of_lists, remove_diag = TRUE) {
   n <- length(list_of_lists)
@@ -61,18 +83,28 @@ jaccard_matrix <- function(list_of_lists, remove_diag = TRUE) {
 
 #' Adjusted Similarity Between Two Feature Sets
 #'
-#' Computes the chance-adjusted similarity between two feature sets.  The
-#' adjustment accounts for set size relative to the total feature universe so
-#' that random overlap is penalised.
+#' Computes a chance-corrected similarity between two feature sets.  Unlike
+#' [jaccard_similarity()], the adjusted measure accounts for the expected
+#' random overlap given the sizes of both sets and the total feature universe,
+#' so it does not systematically penalise methods that select many features.
+#'
+#' The formula is analogous to Cohen's kappa for sets:
+#' \deqn{S_{\text{adj}}(A, B) =
+#'   \frac{r - \mathbb{E}[r]}{\min(k_1, k_2) - \max(0, k_1 + k_2 - d)}}
+#' where \eqn{r = |A \cap B|}, \eqn{k_i = |A_i|}, \eqn{d =} `nb_total_elements`,
+#' and \eqn{\mathbb{E}[r] = k_1 k_2 / d}.
 #'
 #' Returns 0 when either set is empty or equals the full universe (edge cases
-#' where the correction is undefined in a meaningful way).
+#' where the correction denominator is zero).
 #'
-#' @param list1 Character or integer vector.
-#' @param list2 Character or integer vector.
-#' @param nb_total_elements Integer; total number of candidate features.
+#' @param list1 Character or integer vector of selected feature identifiers.
+#' @param list2 Character or integer vector of selected feature identifiers.
+#' @param nb_total_elements Integer; total number of candidate features in the
+#'   universe (i.e. the number of columns in the original predictor matrix).
 #'
-#' @return Numeric scalar in \eqn{(-1, 1]}.
+#' @return Numeric scalar in \eqn{(-1, 1]}.  Values above 0 indicate more
+#'   overlap than expected by chance; 1 means perfect agreement; negative
+#'   values indicate less overlap than chance.
 #' @export
 adjusted_similarity <- function(list1, list2, nb_total_elements) {
   s1 <- unique(list1)
@@ -98,13 +130,18 @@ adjusted_similarity <- function(list1, list2, nb_total_elements) {
 
 #' Upper-Triangle Adjusted Similarity Values
 #'
-#' Computes the full adjusted-similarity matrix and returns only the upper
-#' triangle (excluding the diagonal), matching the Python convention.
+#' Computes the full pairwise adjusted-similarity matrix for N feature sets and
+#' returns only the N\eqn{\times}(N-1)/2 off-diagonal upper-triangle values as
+#' a flat vector.  This format is convenient for computing summary statistics
+#' (see [adjusted_similarity_measure()]) or for Wilcoxon/permutation tests
+#' comparing reproducibility across methods.
 #'
-#' @param list_of_lists A list of character/integer vectors.
+#' @param list_of_lists A list of character/integer vectors, one per STABL run.
 #' @param nb_total_elements Integer; total number of candidate features.
 #'
-#' @return Numeric vector of length N*(N-1)/2.
+#' @return Numeric vector of length N*(N-1)/2 containing the pairwise
+#'   adjusted-similarity values for all unique pairs (row-major upper-triangle
+#'   order, matching the Python convention).
 #' @export
 adjusted_similarity_values <- function(list_of_lists, nb_total_elements) {
   n <- length(list_of_lists)
@@ -131,14 +168,24 @@ adjusted_similarity_values <- function(list_of_lists, nb_total_elements) {
 
 #' Summary Statistic of Adjusted Similarity Values
 #'
-#' @param list_of_lists A list of character/integer vectors.
+#' Convenience wrapper that computes all pairwise adjusted similarities
+#' (via [adjusted_similarity_values()]) and reduces them to a single
+#' location statistic with an associated spread measure.  Useful for
+#' reporting a single reproducibility number per STABL configuration in
+#' benchmarking tables.
+#'
+#' @param list_of_lists A list of character/integer vectors, one per run.
 #' @param nb_total_elements Integer; total number of candidate features.
-#' @param stat Character; `"median"` (default) or `"mean"`.
+#' @param stat Character; `"median"` (default, robust to outliers) or
+#'   `"mean"`.
 #'
 #' @return A named list with two elements:
-#'   - `statistic`: the median (or mean) of adjusted-similarity values,
-#'   - `err`: for `"median"` the 25th and 75th percentiles; for `"mean"` the
-#'     standard deviation.
+#'   \describe{
+#'     \item{`statistic`}{The median (or mean) of adjusted-similarity values.}
+#'     \item{`err`}{For `"median"`: the 25th and 75th percentile vector
+#'       (IQR bounds).  For `"mean"`: the root-mean-squared deviation
+#'       (RMSD / population SD).}
+#'   }
 #' @export
 adjusted_similarity_measure <- function(list_of_lists, nb_total_elements,
                                         stat = "median") {
@@ -151,14 +198,26 @@ adjusted_similarity_measure <- function(list_of_lists, nb_total_elements,
 #' Pearson-Corrected Similarity Between Two Feature Sets
 #'
 #' Computes a Pearson-correlation-inspired similarity that corrects for
-#' expected random intersection.  Convention: returns 1 when both sets are
-#' either empty or equal the full universe.
+#' expected random intersection.  This is a second chance-correction approach
+#' (alongside [adjusted_similarity()]) that normalises by the geometric mean
+#' of the within-set variances under independent Bernoulli sampling.
 #'
-#' @param list_i Character or integer vector.
-#' @param list_j Character or integer vector.
-#' @param d Integer; total number of candidate features.
+#' The formula is:
+#' \deqn{S_{\text{Pearson}}(A, B) =
+#'   \frac{r - k_i k_j / d}{d \cdot \upsilon_i \upsilon_j}}
+#' where \eqn{r = |A \cap B|}, \eqn{k_i = |A_i|}, \eqn{d} is the universe
+#' size, and \eqn{\upsilon_i = \sqrt{\pi_i (1 - \pi_i)}} with
+#' \eqn{\pi_i = k_i / d}.
 #'
-#' @return Numeric scalar.
+#' Edge cases: returns 1 when both sets are empty or both equal the universe;
+#' returns 0 when one set is empty or equals the universe.
+#'
+#' @param list_i Character or integer vector of selected feature identifiers.
+#' @param list_j Character or integer vector of selected feature identifiers.
+#' @param d Integer; total number of candidate features in the universe.
+#'
+#' @return Numeric scalar.  Positive values indicate more overlap than chance;
+#'   the maximum is typically close to 1 for perfectly matching sets.
 #' @export
 pearson_similarity <- function(list_i, list_j, d) {
   si <- unique(list_i)
@@ -185,7 +244,12 @@ pearson_similarity <- function(list_i, list_j, d) {
 
 #' Upper-Triangle Pearson Similarity Values
 #'
-#' @param list_of_lists A list of character/integer vectors.
+#' Computes all pairwise Pearson-corrected similarities and returns the
+#' N\eqn{\times}(N-1)/2 upper-triangle values as a flat vector (same layout
+#' as [adjusted_similarity_values()], enabling direct comparison between the
+#' two metrics on the same data).
+#'
+#' @param list_of_lists A list of character/integer vectors, one per run.
 #' @param d Integer; total number of candidate features.
 #'
 #' @return Numeric vector of length N*(N-1)/2.
@@ -213,12 +277,17 @@ pearson_similarity_values <- function(list_of_lists, d) {
 
 #' Summary Statistic of Pearson Similarity Values
 #'
-#' @param list_of_lists A list of character/integer vectors.
+#' Convenience wrapper analogous to [adjusted_similarity_measure()] but
+#' using the Pearson-corrected similarity.  See [pearson_similarity()] for a
+#' description of the underlying metric and when to prefer it over the
+#' adjusted similarity.
+#'
+#' @param list_of_lists A list of character/integer vectors, one per run.
 #' @param d Integer; total number of candidate features.
 #' @param stat Character; `"median"` (default) or `"mean"`.
 #'
 #' @return A named list with `statistic` and `err` (see
-#'   [adjusted_similarity_measure()]).
+#'   [adjusted_similarity_measure()] for the exact definitions).
 #' @export
 pearson_similarity_measure <- function(list_of_lists, d, stat = "median") {
   vals <- pearson_similarity_values(list_of_lists, d)
@@ -229,13 +298,16 @@ pearson_similarity_measure <- function(list_of_lists, d, stat = "median") {
 
 #' FDR Between Two Feature Sets
 #'
-#' Treats `list2` as the ground-truth set.  Returns 0 when the predicted
-#' set is empty.
+#' Computes the False Discovery Rate when `list1` is treated as the predicted
+#' selection and `list2` as the known ground-truth.  This metric is only
+#' meaningful in simulation benchmarks where the true signal features are
+#' known in advance.
 #'
 #' @param list1 Predicted feature set (character or integer vector).
-#' @param list2 True feature set.
+#' @param list2 True feature set (ground truth).
 #'
-#' @return Numeric scalar in \eqn{[0, 1]}.
+#' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when the predicted set
+#'   is empty (no false discoveries possible).
 #' @export
 fdr_similarity <- function(list1, list2) {
   tp <- length(intersect(list1, list2))
@@ -246,13 +318,16 @@ fdr_similarity <- function(list1, list2) {
 
 #' TPR Between Two Feature Sets
 #'
-#' Treats `list2` as the ground-truth set.  Returns 0 when the true set is
-#' empty.
+#' Computes the True Positive Rate (sensitivity / recall) when `list1` is the
+#' predicted selection and `list2` is the known ground-truth.  Use together
+#' with [fdr_similarity()] and [fscore_similarity()] to characterise the
+#' precision-recall trade-off in simulation benchmarks.
 #'
 #' @param list1 Predicted feature set (character or integer vector).
-#' @param list2 True feature set.
+#' @param list2 True feature set (ground truth).
 #'
-#' @return Numeric scalar in \eqn{[0, 1]}.
+#' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when the true set is
+#'   empty.
 #' @export
 tpr_similarity <- function(list1, list2) {
   tp <- length(intersect(list1, list2))
@@ -263,12 +338,22 @@ tpr_similarity <- function(list1, list2) {
 
 #' F-Score Between Two Feature Sets
 #'
-#' @param list1 Predicted feature set (character or integer vector).
-#' @param list2 True feature set.
-#' @param beta Numeric; controls trade-off between precision and recall
-#'   (default 1 gives the F1 score).
+#' Computes the F\eqn{_\beta} score between a predicted and a ground-truth
+#' feature set.  The default `beta = 1` gives the standard F1 score (harmonic
+#' mean of precision and recall).  Larger `beta` values weight recall more
+#' heavily; smaller values emphasise precision.
 #'
-#' @return Numeric scalar in \eqn{[0, 1]}.
+#' Use [fdr_similarity()] and [tpr_similarity()] when you want to report
+#' precision and recall separately; use `fscore_similarity()` when you need
+#' a single number that balances both.
+#'
+#' @param list1 Predicted feature set (character or integer vector).
+#' @param list2 True feature set (ground truth).
+#' @param beta Positive numeric; controls trade-off between precision and
+#'   recall.  Default 1 gives the F1 score.
+#'
+#' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when both the predicted
+#'   and true sets are empty.
 #' @export
 fscore_similarity <- function(list1, list2, beta = 1) {
   tp <- length(intersect(list1, list2))

@@ -9,12 +9,15 @@ tpr_similarity(list1, list2)
 \arguments{
 \item{list1}{Predicted feature set (character or integer vector).}
 
-\item{list2}{True feature set.}
+\item{list2}{True feature set (ground truth).}
 }
 \value{
-Numeric scalar in \eqn{[0, 1]}.
+Numeric scalar in \eqn{[0, 1]}.  Returns 0 when the true set is
+empty.
 }
 \description{
-Treats \code{list2} as the ground-truth set.  Returns 0 when the true set is
-empty.
+Computes the True Positive Rate (sensitivity / recall) when \code{list1} is the
+predicted selection and \code{list2} is the known ground-truth.  Use together
+with \code{\link[=fdr_similarity]{fdr_similarity()}} and \code{\link[=fscore_similarity]{fscore_similarity()}} to characterise the
+precision-recall trade-off in simulation benchmarks.
 }

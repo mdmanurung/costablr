@@ -16,33 +16,53 @@ save_stabl_results(
 )
 }
 \arguments{
-\item{object}{A fitted \code{"stabl_fit"} object.}
+\item{object}{A fitted \code{"stabl_fit"} object returned by \code{\link[=stabl_fit]{stabl_fit()}}.}
 
-\item{path}{Character string; output directory to create.  Raises an error
-if the directory already exists and \code{override = FALSE}.}
+\item{path}{Character string; path to the output directory.  Created
+recursively if it does not already exist.  Raises an error if the
+directory exists and \code{override = FALSE}.}
 
-\item{x}{Numeric matrix of predictors used to fit \code{object} (used for
-per-feature distribution plots).}
+\item{x}{Numeric matrix of predictors used to fit \code{object}.  Required
+for per-feature distribution plots; must contain at least the selected
+feature columns.}
 
-\item{y}{Outcome vector/factor/\code{Surv} object used to fit \code{object}.}
+\item{y}{Outcome vector, factor, or \code{survival::Surv} object used to fit
+\code{object}.  Required for per-feature distribution plots.}
 
-\item{figure_fmt}{Character; graphics device extension, e.g. \code{"pdf"},
-\code{"png"}, \code{"svg"} (default \code{"pdf"}).}
+\item{figure_fmt}{Character; graphics device extension used when saving
+plots.  Common choices: \code{"pdf"} (default, publication quality),
+\code{"png"}, \code{"svg"}.}
 
 \item{new_hard_threshold}{Numeric in \verb{(0, 1]} or \code{NULL}.  When supplied,
-overrides the stored threshold for support extraction and path plotting.}
+overrides the stored threshold for support extraction and stability-path
+plotting.}
 
-\item{task_type}{Character; one of \code{"binary"}, \code{"regression"}, or
-\code{"multiclass"}.  Determines which per-feature plot is generated.}
+\item{task_type}{Character; one of \code{"binary"} (default), \code{"multiclass"},
+or \code{"regression"}.  Determines which per-feature plot is generated:
+grouped boxplots for classification, LOESS scatter for regression.}
 
-\item{override}{Logical; if \code{TRUE}, existing directory contents are
-overwritten.  Default \code{FALSE}.}
+\item{override}{Logical; if \code{TRUE}, an existing directory with the same
+path is accepted and its contents may be overwritten.  Default \code{FALSE}.}
 }
 \value{
-Invisibly returns \code{path}.
+Invisibly returns \code{path} as a normalised absolute string.
 }
 \description{
-Bundles all standard STABL diagnostics — stability scores, selected feature
-list, FDR/stability-path plots, and per-feature distribution plots — into a
-single output directory.
+Writes a complete set of STABL result artefacts — stability scores, the
+list of selected features, the FDR diagnostic graph, the stability path
+plot, and per-feature distribution plots — into a single output directory.
+This is the recommended way to persist and share results from a single
+\code{\link[=stabl_fit]{stabl_fit()}} call.
+}
+\details{
+The function orchestrates several lower-level helpers:
+\code{\link[=export_stabl_to_csv]{export_stabl_to_csv()}} for tabular data, \code{\link[=plot_fdr_graph]{plot_fdr_graph()}} and
+\code{\link[=plot_stabl_path]{plot_stabl_path()}} for diagnostic plots, and \code{\link[=boxplot_features]{boxplot_features()}} or
+\code{\link[=scatterplot_features]{scatterplot_features()}} for per-feature distribution visualisations.
+All graphics are saved using \code{ggplot2::ggsave()} in the format specified
+by \code{figure_fmt}.
+}
+\seealso{
+\code{\link[=export_stabl_to_csv]{export_stabl_to_csv()}} for the CSV-only variant,
+\code{\link[=plot_stabl_path]{plot_stabl_path()}}, \code{\link[=plot_fdr_graph]{plot_fdr_graph()}}
 }

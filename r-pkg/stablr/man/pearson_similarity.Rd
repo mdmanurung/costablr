@@ -7,17 +7,30 @@
 pearson_similarity(list_i, list_j, d)
 }
 \arguments{
-\item{list_i}{Character or integer vector.}
+\item{list_i}{Character or integer vector of selected feature identifiers.}
 
-\item{list_j}{Character or integer vector.}
+\item{list_j}{Character or integer vector of selected feature identifiers.}
 
-\item{d}{Integer; total number of candidate features.}
+\item{d}{Integer; total number of candidate features in the universe.}
 }
 \value{
-Numeric scalar.
+Numeric scalar.  Positive values indicate more overlap than chance;
+the maximum is typically close to 1 for perfectly matching sets.
 }
 \description{
 Computes a Pearson-correlation-inspired similarity that corrects for
-expected random intersection.  Convention: returns 1 when both sets are
-either empty or equal the full universe.
+expected random intersection.  This is a second chance-correction approach
+(alongside \code{\link[=adjusted_similarity]{adjusted_similarity()}}) that normalises by the geometric mean
+of the within-set variances under independent Bernoulli sampling.
+}
+\details{
+The formula is:
+\deqn{S_{\text{Pearson}}(A, B) =
+  \frac{r - k_i k_j / d}{d \cdot \upsilon_i \upsilon_j}}
+where \eqn{r = |A \cap B|}, \eqn{k_i = |A_i|}, \eqn{d} is the universe
+size, and \eqn{\upsilon_i = \sqrt{\pi_i (1 - \pi_i)}} with
+\eqn{\pi_i = k_i / d}.
+
+Edge cases: returns 1 when both sets are empty or both equal the universe;
+returns 0 when one set is empty or equals the universe.
 }

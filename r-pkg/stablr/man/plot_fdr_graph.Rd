@@ -7,15 +7,20 @@
 plot_fdr_graph(object, title = "FDR Estimate")
 }
 \arguments{
-\item{object}{A fitted \code{"stabl_fit"} object.}
+\item{object}{A fitted \code{"stabl_fit"} object returned by \code{\link[=stabl_fit]{stabl_fit()}}.}
 
-\item{title}{Character; plot title.}
+\item{title}{Character scalar; plot title.  Default \code{"FDR Estimate"}.}
 }
 \value{
-A \code{ggplot} object.
+A \code{ggplot} object.  The curve shows the FDP+ estimate at each
+candidate threshold; a vertical dashed line marks the optimal threshold
+stored in \code{object$fdr_min_threshold_}.
 }
 \description{
 Plots the estimated FDR at each stability threshold, with a vertical dashed
 line marking the optimal threshold (the one minimising the FDR estimate).
 Requires that \code{object} was fitted with \code{artificial_type} set (not \code{NULL}).
+}
+\seealso{
+\code{\link[=stabl_fit]{stabl_fit()}}, \code{\link[=plot_stabl_path]{plot_stabl_path()}}
 }

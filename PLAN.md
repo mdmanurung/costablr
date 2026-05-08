@@ -1,5 +1,21 @@
 # PLAN: stablr Full R Port
 
+**Purpose:** Forward-looking roadmap, acceptance gates, and active milestones for remaining work.
+
+**This document owns:**
+- Future scope, sequencing, and priorities.
+- Acceptance criteria and phase gates for active work.
+- Active milestone definitions and work packages.
+- Experimental track policy and exit criteria.
+
+**This document does NOT own:**
+- Completed work and validation evidence (→ PROGRESS.md)
+- Current operator state and immediate task queue (→ HANDOFF.md)
+- Algorithm semantics and parity rules (→ STABL.md)
+- Workflow policy and precedence (→ AGENTS.md)
+
+**Cross-reference pattern:** For evidence of completed work, check PROGRESS.md. For immediate execution queue, check HANDOFF.md.
+
 ## Objective
 Build a production-grade pure-R package named `stablr` inside this repository that ports the current Python STABL implementation with full glmnet-ecosystem compatibility and no tidymodels runtime dependency.
 
@@ -52,23 +68,33 @@ Planning rule:
 - `stabl/adaptive.py`
 - `stabl/data.py`
 
-## Phase Status Snapshot
+## Baseline Completion Context
 
-1. Phase 1 (Spec + scaffolding): Completed
-2. Phase 2 (Core contracts): Completed
-3. Phase 3 (Core STABL engine): Completed
-4. Phase 4 (Learner adapters): Complete
-5. Phase 5 (Workflow layer): Complete (train/validate, CV, early fusion, late fusion/stacked generalization all implemented)
-6. Phase 6 (Full glmnet compatibility): Complete
-7. Phase 7 (Reporting + exports): Complete (metrics, exports, visualization fully implemented and tested)
-8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial; see below)
+The core port baseline (Phases 1-8) is complete. This plan now tracks only remaining forward work and acceptance gates.
+
+For command-level evidence and exact validation results, use `PROGRESS.md`.
 
 ## Active Dependencies
 
-- `sparsegl` availability in at least one CI leg is required to unskip sparse-group tests.
 - R environment reproducibility in `R4_51` is required for reliable benchmark smoke checks.
 - Python reference scripts remain the behavior anchor for parity checks where tests are not yet frozen.
 - Current workspace scope (2026-05-03): CI workflow implementation is deferred; validation is performed via local R test suites.
+
+## Vignette Status (as of 2026-05-08) — Complete
+
+All 4 stablr vignettes are built and in `doc/`:
+- `stablr-intro.html` (335K) ✅
+- `stablr-multiomic.html` (1.4M) ✅
+- `stablr-python-parity.html` (561K) ✅ — OOL regression + COVID-19 binary classification
+- `stablr-tcga.html` (787K) ✅ — TCGA Breast Cancer multi-omic (M15 stablr-native version)
+
+## Current Planning Focus (Forward Only)
+
+1. Harden cooperative fusion behavior (comparative behavior tests, not only structure tests).
+2. Improve cooperative branch operator ergonomics (print/summary/reporting surfaces).
+3. Validate optional-dependency failure modes for cooperative paths in clean environments.
+4. Keep local deterministic validation green for every forward change.
+5. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
 
 ## Implementation Phases
 1. Spec + scaffolding
@@ -111,96 +137,49 @@ Planning rule:
 - CI matrix across OS and R versions
 - GitHub release, then CRAN/Bioconductor hardening
 
-## Near-Term Milestones
+## Active Milestone: Cooperative Fusion Hardening (Experimental Track)
 
-### M1: Phase 4 Closure (Adapters Hardening)
+Goal: keep cooperative fusion non-blocking to core parity while making it behavior-hardened and operator-safe.
 
-- Add grouped longitudinal leakage tests.
-- Add adapter-focused documentation for adaptive lasso, sparse-group, and multinomial usage.
-- Add sparsegl-enabled CI leg to run non-skipped sparse-group tests.
+Work packages:
 
-Acceptance criteria:
+1. Behavior-level comparative tests
+- Add deterministic fixtures comparing early, cooperative, and late fusion ranking behavior.
+- Confirm additive diagnostics do not alter non-cooperative return contracts.
 
-- All current tests pass in default environment.
-- Sparse-group tests run (not skipped) in at least one CI job.
-- Adapter docs include at least one executable example per adapter family.
-- Grouped longitudinal leakage tests cover both grouped and ungrouped sampling behavior.
+2. Operator ergonomics for cooperative outputs
+- Extend print/summary surfaces to clearly expose cooperative tuning choices (`rho`, lambda selector, mode).
+- Ensure object-facing accessor behavior is stable when cooperative branch is absent.
 
-### M2: Minimal R End-to-End Benchmark Path
-
-- Add one end-to-end smoke benchmark in R that exercises core fit and support extraction.
-- Keep runtime modest and deterministic enough for repeated validation.
+3. Optional dependency hardening
+- Add explicit tests for clean failure paths when `multiview` is unavailable and cooperative mode is requested.
+- Preserve normal execution when cooperative mode is disabled.
 
 Acceptance criteria:
 
-- Script runs successfully in `R4_51` environment.
-- Produces expected object outputs without requiring full heavy benchmark settings.
-- Runtime is short enough for routine local smoke validation.
-
-### M3: Workflow Layer Completion (Phase 5)
-
-- Implemented multi-omic train/validation orchestration path.
-- Implemented multi-omic CV orchestration with deterministic grouped fold handling.
-- Implemented early fusion path.
-- Implemented late fusion with stacked generalization parity semantics.
-
-Acceptance criteria:
-
-- Tested workflow paths exist for per-omic, early-fusion, and late-fusion modes.
-- Failure modes for sample misalignment are explicit and documented.
-- Full local package test suite remains green after workflow additions.
-
-## Current Planning Focus
-
-1. Maintain local hardening through deterministic local test-suite validation.
-2. Keep Phase 8 Cox hardening under R-native validation gates (determinism, structural invariants, synthetic-signal behavior) as a maintained regression target.
-3. Keep `HANDOFF.md` synchronized after each implementation step so fresh sessions can execute without extra context.
-4. Harden the implemented cooperative fusion workflow branch as an experimental, non-parity-blocking `stablr` extension sourced only from `multiview/`.
-5. Keep cooperative CV selection available for gaussian/binomial/poisson/cox, and keep validation-mode cooperative tuning restricted to gaussian/binomial/poisson until a source-backed Cox holdout criterion is defined.
-6. Keep Python-path compatibility under current scikit-learn APIs by maintaining source-level validation shims in `stabl/` and minimizing notebook-local monkeypatching.
+- `test-multiomic-workflows.R` includes behavior-level (not only structural) cooperative assertions.
+- Cooperative ergonomics are covered by tests and do not regress default object shape.
+- Missing-`multiview` failure messages are deterministic and actionable.
+- Full local package suite remains green after each hardening increment.
 
 ## Experimental Track: Cooperative Fusion (Non-Blocking)
 
 - Track type: experimental workflow-layer extension, not blocking Phase 6 closure.
 - Source restriction: `multiview/` is the only in-repo cooperative reference.
 - Naming policy: use `rho` for cooperation strength (avoid collision with elastic-net `alpha`).
-- Current implementation status:
-	1. Additive `cooperative_fusion` branch is implemented in `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()`.
-	2. Optional dependency path is active via local/installed `multiview`.
-	3. `rho` grid tuning and `lambda.min` / `lambda.1se` selector handling are implemented for CV mode.
-	4. Validation-mode cooperative tuning is implemented for gaussian/binomial/poisson; Cox remains intentionally restricted to CV mode.
-- Remaining hardening sequence:
-	1. Add behavior-level comparative tests for early/cooperative/late ranking effects on synthetic fixtures.
-	2. Add cooperative ergonomics and diagnostics polish (print/reporting/accessor coverage) without perturbing default paths.
-	3. Validate optional-dependency behavior in clean environments where `multiview` is absent.
-- Current cooperative touchpoints:
-	1. `r-pkg/stablr/R/multiomic_workflows.R` owns the cooperative branch, tuning helpers, and additive diagnostics.
-	2. `r-pkg/stablr/R/input_validation.R` owns cooperative argument normalization and family/selector guards.
-	3. `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R` is the current regression surface and should absorb the next behavior-level assertions.
-	4. `r-pkg/stablr/R/stabl_accessors.R` is the next surface for cooperative print/report ergonomics.
-	5. `MultiView.md` is the evidence bridge and should stay synchronized with any contract changes.
-- Exit criteria from experimental status:
-	- behavior tests pass for agreed synthetic and deterministic fixtures,
-	- docs and handoff artifacts fully reflect execution commands and failure signals.
+- Implementation status and command evidence are maintained in `PROGRESS.md`.
+- Immediate operational queue is maintained in `HANDOFF.md`.
 
+Current cooperative touchpoints:
 
-## Deliverable Checklist
+1. `r-pkg/stablr/R/multiomic_workflows.R` owns cooperative workflow orchestration and additive diagnostics.
+2. `r-pkg/stablr/R/input_validation.R` owns cooperative argument normalization and family/selector guards.
+3. `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R` is the behavior-regression surface for cooperative hardening.
+4. `r-pkg/stablr/R/stabl_accessors.R` is the next surface for cooperative print/report ergonomics.
+5. `MultiView.md` remains the cooperative design/evidence bridge.
 
-- [x] Grouped longitudinal leakage tests added. (`r-pkg/stablr/tests/testthat/test-bootstrap-helpers.R`)
-- [x] R smoke benchmark script added and documented. (`r-pkg/stablr/scripts/run_smoke_stablr.R`)
-- [x] Adapter usage documentation examples added. (`r-pkg/stablr/R/stabl_fit.R`, `r-pkg/stablr/R/learner_adapters.R`)
-- [ ] Sparsegl-enabled CI job added. (Deferred in this workspace; local suite coverage is the active validation path.)
-- [x] Bootstrap loop optimized: bootstrap-outer, single path call per bootstrap, vectorized FDP+. (`r-pkg/stablr/R/stabl_fit.R`, `learner_adapters.R`, `fdp_control.R`)
-- [x] Minimal multi-omic train/validation orchestration path added with alignment and grouped-handling tests. (`r-pkg/stablr/R/multiomic_workflows.R`, `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R`)
-- [x] Minimal multi-omic CV orchestration path added with deterministic fold generation, grouped fold isolation, and fold diagnostics. (`r-pkg/stablr/R/multiomic_workflows.R`, `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R`)
-- [x] Early fusion and late fusion/stacked generalization implemented and covered by tests. (`r-pkg/stablr/R/multiomic_workflows.R`, `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R`, `r-pkg/stablr/man/stacked_multi_omic.Rd`)
-- [x] Phase 6 focused coverage added for Cox auto-lambda mixed-alpha grids and elastic-net Cox mixed-alpha path consumption. (`r-pkg/stablr/tests/testthat/test-stabl-fit.R`)
-- [x] Phase 6 Tranche C structural parity coverage added for multinomial/binomial mixed-alpha auto-lambda grids and deterministic adapter behavior across elastic-net, adaptive lasso, and lasso. (`r-pkg/stablr/tests/testthat/test-stabl-fit.R`)
-- [x] Phase 6 edge-regime parity coverage added for high collinearity, near-zero lambda tails, and class-imbalance binomial stress. (`r-pkg/stablr/tests/testthat/test-stabl-fit.R`)
-- [x] Fresh-session bootstrap artifact added with operator runbook + parity ledger. (`HANDOFF.md`)
-- [x] Cooperative-fusion RFC checklist drafted from `MultiView.md` Proposal-tagged claims with explicit strict-parity test gates. (`MultiView.md`)
-- [x] Experimental cooperative-fusion workflow branch added to `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()` with optional `multiview` dependency, family-aware guards, and deterministic workflow tests. (`r-pkg/stablr/R/multiomic_workflows.R`, `r-pkg/stablr/R/input_validation.R`, `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R`)
-- [x] Frozen Python parity fixtures + regression tests added for gaussian/binomial/multinomial/elastic-net signal ranking parity. (`r-pkg/stablr/scripts/generate_python_parity_refs.py`, `r-pkg/stablr/tests/testthat/fixtures/python_parity/*`, `r-pkg/stablr/tests/testthat/test-python-parity-fixtures.R`)
-- [x] Cox parity policy resolved as non-applicable for frozen Python anchors; Phase 8 closure uses R-native Cox hardening gates (determinism, structural invariants, synthetic-signal behavior). (Python `stabl/` reference does not implement Cox.)
-- [x] Real-data export hardening added for `export_stabl_to_csv()` and `save_stabl_results()` using Biobank SSI files from `Sample Data/data.zip`, including schema/layout assertions. (`r-pkg/stablr/tests/testthat/test-phase7.R`)
-- [x] Phase 8 metrics parity fixtures + assertions added against frozen Python `stabl.metrics` outputs, including upper-triangle ordering and mean-error semantics parity. (`r-pkg/stablr/R/metrics.R`, `r-pkg/stablr/scripts/generate_python_parity_refs.py`, `r-pkg/stablr/tests/testthat/fixtures/python_parity/metrics_*.csv`, `r-pkg/stablr/tests/testthat/test-phase7.R`)
+Exit criteria from experimental status:
+
+- Deterministic behavior-level cooperative tests pass.
+- Optional-dependency failure paths are validated and stable.
+- Operator-facing docs (`HANDOFF.md`) and factual logs (`PROGRESS.md`) remain synchronized.

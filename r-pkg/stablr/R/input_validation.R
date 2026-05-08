@@ -7,14 +7,33 @@
 
 #' Validate Sample Alignment Across Inputs
 #'
-#' Enforces strict sample alignment between predictor table, outcome vector,
-#' and optional group vector.
+#' Checks that the predictor matrix, outcome vector, and optional group vector
+#' all refer to exactly the same set of samples (by name), and that they can
+#' be safely aligned before modelling.
 #'
-#' @param x A `data.frame` or matrix with row names representing sample ids.
-#' @param y A named vector with sample ids as names.
-#' @param groups Optional named vector of group ids aligned on sample ids.
+#' STABL enforces strict name-based alignment (rather than positional
+#' alignment) to mirror the pandas index-alignment semantics of the Python
+#' reference implementation and to prevent silent sample-order bugs that could
+#' corrupt stability scores or introduce outcome leakage.
 #'
-#' @return Invisibly returns `TRUE` when validation succeeds.
+#' This function is called automatically by [stabl_fit()] and
+#' [stabl_multiomic_train_validate()]; you only need to call it directly when
+#' building a custom pre-processing step that receives `x` and `y` separately.
+#'
+#' @param x A `data.frame` or numeric matrix with non-empty, non-`NA` row
+#'   names used as sample IDs.
+#' @param y A named vector (or matrix-like object such as `survival::Surv`
+#'   with row names) whose names identify the samples.  The set of names in
+#'   `y` must be identical to the set of row names in `x`; order does not
+#'   need to match.
+#' @param groups Optional named vector where names are sample IDs and values
+#'   are group memberships.  When supplied, its name set must also match
+#'   `rownames(x)`.  Pass `NULL` to skip group validation.
+#'
+#' @return Invisibly returns `TRUE` when all checks pass.  Raises an
+#'   informative error as soon as the first violation is found.
+#'
+#' @seealso [validate_multiomic_inputs()] for multi-omic list inputs.
 #' @export
 validate_sample_alignment <- function(x, y, groups = NULL) {
   if (!(is.data.frame(x) || is.matrix(x))) {
@@ -94,15 +113,31 @@ validate_sample_alignment <- function(x, y, groups = NULL) {
 
 #' Validate Multi-Omic Input Contract
 #'
-#' Enforces the canonical `stablr` input contract: a named list of omic tables
-#' with identical sample ids and strict alignment with outcome and optional
-#' groups vectors.
+#' Enforces the canonical `stablr` input contract for multi-omic analyses: a
+#' named list of omic tables with identical sample IDs and row order across
+#' all views, plus strict alignment with the outcome and optional group
+#' vectors.
 #'
-#' @param x_list Named list of `data.frame`/matrix omic tables.
-#' @param y Named outcome vector.
-#' @param groups Optional named group vector.
+#' Multi-omic analyses require that all omic matrices have exactly the same
+#' rows in exactly the same order so that row-wise operations (bootstrap
+#' sampling, cooperative learning) are coherent.  This function catches
+#' mismatches early and provides informative error messages naming the
+#' offending omic layer, which is much easier to diagnose than silent
+#' misalignment detected later in the modelling pipeline.
 #'
-#' @return Invisibly returns `TRUE` when validation succeeds.
+#' @param x_list Named list of `data.frame` or numeric matrix omic tables.
+#'   Each table must have non-empty row names identifying samples.  All tables
+#'   must have the same set of row names **in the same order**.
+#' @param y Named outcome vector aligned to the samples in `x_list`.  The
+#'   name set must match the row names of every omic table.
+#' @param groups Optional named group vector.  When supplied its names must
+#'   match the sample IDs in `x_list`.  Pass `NULL` to skip group validation.
+#'
+#' @return Invisibly returns `TRUE` when all checks pass.  Raises an
+#'   informative error as soon as the first violation is found.
+#'
+#' @seealso [validate_sample_alignment()] for single-omic inputs,
+#'   [stabl_multiomic_train_validate()] which calls this automatically.
 #' @export
 validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
   if (!is.list(x_list) || length(x_list) == 0L) {

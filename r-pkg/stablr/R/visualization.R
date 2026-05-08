@@ -196,7 +196,29 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 #' @param object A fitted `"stabl_fit"` object.
 #' @param title Character; plot title.
 #'
-#' @return A `ggplot` object.
+#' Plot the FDP+ FDR Estimate Curve
+#'
+#' Displays how the estimated False Discovery Proportion (FDP+) changes across
+#' the full range of candidate stability thresholds, and marks the threshold
+#' that achieves the minimum FDR estimate.
+#'
+#' This diagnostic is essential for understanding why a particular stability
+#' threshold was chosen during fitting.  A well-calibrated run will show a
+#' clear "valley" — a region where the FDP+ is minimised — confirming that
+#' the artificial-feature injection produced a meaningful separation between
+#' real signal and noise.  Flat or monotone curves indicate that the
+#' regularisation grid may need adjustment or that the signal is very weak.
+#'
+#' Requires that `object` was fitted with `artificial_type` set (not `NULL`).
+#'
+#' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
+#' @param title Character scalar; plot title.  Default `"FDR Estimate"`.
+#'
+#' @return A `ggplot` object.  The curve shows the FDP+ estimate at each
+#'   candidate threshold; a vertical dashed line marks the optimal threshold
+#'   stored in `object$fdr_min_threshold_`.
+#'
+#' @seealso [stabl_fit()], [plot_stabl_path()]
 #' @export
 plot_fdr_graph <- function(object, title = "FDR Estimate") {
   .check_fitted_stabl(object)
@@ -257,16 +279,27 @@ plot_fdr_graph <- function(object, title = "FDR Estimate") {
 
 #' Plot a ROC Curve
 #'
-#' Generates a ggplot2 ROC curve from binary outcome labels and predicted
-#' probabilities.  A chance-level diagonal is included for reference.
+#' Generates a ggplot2 ROC (Receiver Operating Characteristic) curve from
+#' binary outcome labels and predicted probabilities, together with the
+#' chance-level diagonal for reference.
 #'
-#' @param y_true Integer or logical vector of binary outcomes (0/1 or
-#'   `FALSE`/`TRUE`).
+#' ROC curves visualise the trade-off between sensitivity (TPR) and
+#' specificity (1 - FPR) across all possible classification thresholds.  Use
+#' this plot to assess overall discriminative ability after applying STABL
+#' feature selection and fitting a downstream classifier on the selected
+#' features.  The Area Under the Curve (AUC) is shown in the caption.
+#'
+#' @param y_true Integer or logical vector of binary outcomes (1/`TRUE` for
+#'   the positive class, 0/`FALSE` for the negative class).  Must be the same
+#'   length as `y_preds`.
 #' @param y_preds Numeric vector of predicted probabilities for the positive
-#'   class, of the same length as `y_true`.
-#' @param title Character; plot title.
+#'   class.  Values must be in \eqn{[0, 1]} for interpretable results.
+#' @param title Character scalar; plot title.  Default `"ROC Curve"`.
 #'
-#' @return A `ggplot` object.
+#' @return A `ggplot` object.  The AUC is shown as a caption.
+#'
+#' @seealso [plot_prc()] for precision-recall curves (preferred when classes
+#'   are severely imbalanced).
 #' @export
 plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -307,18 +340,28 @@ plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
 
 #' Plot a Precision-Recall Curve
 #'
-#' Generates a ggplot2 Precision-Recall curve (PRC) from binary outcome labels
-#' and predicted probabilities.  Iso-F1 reference lines are shown at four
-#' evenly spaced F1 levels.
+#' Generates a ggplot2 Precision-Recall Curve (PRC) from binary outcome labels
+#' and predicted probabilities, optionally with iso-F1 contour lines.
 #'
-#' @param y_true Integer or logical vector of binary outcomes.
+#' Precision-recall curves are preferred over ROC curves when the positive
+#' class is rare (class imbalance), because they focus on the model's
+#' performance on positive predictions without being diluted by the large
+#' number of true negatives.  Use this plot after applying STABL feature
+#' selection and fitting a downstream binary classifier.  The Area Under the
+#' PRC (AUPRC) is shown in the caption.
+#'
+#' @param y_true Integer or logical vector of binary outcomes (1/`TRUE` for
+#'   the positive class).  Must be the same length as `y_preds`.
 #' @param y_preds Numeric vector of predicted probabilities for the positive
 #'   class.
-#' @param show_iso Logical; if `TRUE` (default) iso-F1 contour lines are
-#'   drawn.
-#' @param title Character; plot title.
+#' @param show_iso Logical; if `TRUE` (default), four iso-F1 contour lines
+#'   at F1 = 0.2, 0.4, 0.6, 0.8 are drawn as reference guides.
+#' @param title Character scalar; plot title.  Default
+#'   `"Precision-Recall Curve"`.
 #'
-#' @return A `ggplot` object.
+#' @return A `ggplot` object.  The AUPRC is shown as a caption.
+#'
+#' @seealso [plot_roc()] for the ROC curve alternative.
 #' @export
 plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall Curve") {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -379,19 +422,25 @@ plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall
 
 #' Boxplots of Selected Features Grouped by Outcome
 #'
-#' Produces a ggplot2 figure with one facet per selected feature, showing
-#' distributions stratified by the outcome variable.  Intended for binary and
-#' multiclass tasks.
+#' Produces a ggplot2 figure with one facet per selected feature, showing the
+#' distribution of each feature's values stratified by the outcome class.
+#' Intended for binary and multiclass classification tasks after STABL feature
+#' selection; complements [scatterplot_features()] for regression tasks.
 #'
 #' @param features Character vector of feature names to plot.  Features not
-#'   present in `x` are silently skipped.
-#' @param x Numeric matrix or data frame of predictors.  Row names must align
-#'   with the names/values of `y`.
-#' @param y Factor, character, or integer vector of outcome labels.
-#' @param title Character; plot title.
-#' @param ncol Integer; number of columns in the facet grid.  Default 3.
+#'   present as columns in `x` are silently skipped.
+#' @param x Numeric matrix or data frame of predictors.  Column names must
+#'   include all elements of `features`.
+#' @param y Factor, character, or integer vector of class labels.  Must have
+#'   the same number of elements as `nrow(x)`.
+#' @param title Character scalar; plot title.  Default `"Selected Features"`.
+#' @param ncol Positive integer; number of facet columns in the grid.
+#'   Default 3.
 #'
-#' @return A `ggplot` object.
+#' @return A `ggplot` object with one facet panel per feature.
+#'
+#' @seealso [scatterplot_features()] for regression tasks,
+#'   [save_stabl_results()] which calls this automatically.
 #' @export
 boxplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -423,17 +472,26 @@ boxplot_features <- function(features, x, y, title = "Selected Features", ncol =
 
 #' Scatterplots of Selected Features Against a Continuous Outcome
 #'
-#' Produces a ggplot2 figure with one facet per selected feature, showing
-#' the predictor value versus a continuous outcome with a LOESS smooth.
-#' Intended for regression tasks.
+#' Produces a ggplot2 figure with one facet per selected feature, showing the
+#' raw data points together with a LOESS smooth and 95% confidence band.  The
+#' smooth helps reveal non-linear relationships that might be missed by
+#' reporting correlation coefficients alone.  Use after STABL feature
+#' selection for regression tasks.
 #'
-#' @param features Character vector of feature names to plot.
-#' @param x Numeric matrix or data frame of predictors.
-#' @param y Numeric vector of continuous outcome values.
-#' @param title Character; plot title.
-#' @param ncol Integer; number of columns in the facet grid.  Default 3.
+#' @param features Character vector of feature names to plot.  Features not
+#'   present as columns in `x` are silently skipped.
+#' @param x Numeric matrix or data frame of predictors.  Column names must
+#'   include all elements of `features`.
+#' @param y Numeric vector of continuous outcome values.  Must have the same
+#'   number of elements as `nrow(x)`.
+#' @param title Character scalar; plot title.  Default `"Selected Features"`.
+#' @param ncol Positive integer; number of facet columns in the grid.
+#'   Default 3.
 #'
-#' @return A `ggplot` object.
+#' @return A `ggplot` object with one facet panel per feature.
+#'
+#' @seealso [boxplot_features()] for classification tasks,
+#'   [save_stabl_results()] which calls this automatically.
 #' @export
 scatterplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {

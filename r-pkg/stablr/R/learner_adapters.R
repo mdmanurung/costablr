@@ -1,30 +1,41 @@
 #' Build a glmnet Learner Adapter
 #'
-#' Returns a closure that fits a `glmnet` model on a single bootstrap subsample
-#' and returns a logical selection mask over the features. The closure mirrors
-#' the role of `fit_bootstrapped_sample()` in the Python STABL library.
+#' Returns a closure that fits a `glmnet` model on a single bootstrap
+#' subsample and returns a logical selection mask over the features.  The
+#' closure mirrors the role of `fit_bootstrapped_sample()` in the Python STABL
+#' library.
+#'
+#' Learner adapters decouple the modelling back-end from the STABL bootstrap
+#' loop, making it easy to substitute different penalised-regression solvers
+#' without changing the stability-accumulation logic.  This factory produces
+#' the standard lasso / elastic-net adapter that is the default back-end for
+#' [stabl_fit()].
 #'
 #' The returned function accepts a pre-expanded lambda-grid row (a 1-row
-#' `data.frame`) and applies `glmnet` at that exact penalty value. The
+#' `data.frame`) and applies `glmnet` at that exact penalty value.  The
 #' `alpha` elastic-net mixing parameter is resolved in priority order:
 #' `alpha_fixed` argument > `alpha` column in `lambda_val` > default of 1
 #' (pure lasso).
-#'
-#' @param family Character; the `glmnet` response family, for example
-#'   `"gaussian"`, `"binomial"`, `"multinomial"`, or `"cox"`.
-#' @param alpha_fixed Numeric scalar or `NULL`. When not `NULL`, this value
-#'   overrides any `alpha` column in `lambda_val`.
-#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
-#'   used to decide that a feature is selected in a given bootstrap.
 #'
 #' @details
 #' This adapter factory is primarily an internal backend used by [stabl_fit()].
 #' Most users should configure `base_learner`, `family`, and `lambda_grid`
 #' directly in [stabl_fit()] rather than calling this factory manually.
 #'
+#' @param family Character; the `glmnet` response family, for example
+#'   `"gaussian"`, `"binomial"`, `"multinomial"`, or `"cox"`.
+#' @param alpha_fixed Numeric scalar or `NULL`.  When not `NULL`, this value
+#'   overrides any `alpha` column in `lambda_val`.
+#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
+#'   used to decide that a feature is selected in a given bootstrap.  Features
+#'   with `|coef| > bootstrap_threshold` are counted as selected.
+#'
 #' @return A function with signature
 #'   `function(x, y, lambda_val) -> logical vector of length ncol(x)`
-#'   for use inside `stabl_fit()`.
+#'   for use inside [stabl_fit()].
+#'
+#' @seealso [make_adaptive_lasso_adapter()], [make_sgl_adapter()],
+#'   [stabl_fit()]
 #' @export
 make_glmnet_adapter <- function(
     family              = "gaussian",
@@ -63,27 +74,44 @@ make_glmnet_adapter <- function(
 
 #' Build an Adaptive Lasso Learner Adapter
 #'
-#' Returns a closure that computes adaptive penalty weights from a ridge
-#' initialization on each bootstrap subsample, then fits a lasso model with
-#' `penalty.factor` to obtain the selected-feature mask.
+#' Returns a closure that computes feature-specific penalty weights from a
+#' ridge initialisation on each bootstrap subsample, then fits a lasso model
+#' with those `penalty.factor` values to obtain the selected-feature mask.
 #'
-#' Weights are defined as
-#' \deqn{w_j = 1 / (|\hat\beta_j^{\mathrm{init}}| + \epsilon)^\gamma.}
+#' Adaptive lasso improves on standard lasso by assigning stronger penalties
+#' to features with small initial coefficients (likely noise) and weaker
+#' penalties to features with large initial coefficients (likely signal).
+#' This asymmetric penalisation achieves the oracle property under regularity
+#' conditions, selecting the true support more reliably than plain lasso when
+#' signal features have moderate to large effect sizes.
 #'
-#' @param family Character; the `glmnet` response family, for example
-#'   `"gaussian"`, `"binomial"`, `"multinomial"`, or `"cox"`.
-#' @param gamma Positive numeric scalar controlling weight sharpness.
-#' @param epsilon Positive numeric scalar to avoid division by zero.
-#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
-#'   used to decide that a feature is selected in a given bootstrap.
+#' Weights are defined as:
+#' \deqn{w_j = 1 / (|\hat\beta_j^{\mathrm{init}}| + \epsilon)^\gamma}
+#' where \eqn{\hat\beta_j^{\mathrm{init}}} comes from a ridge regression on
+#' the same bootstrap subsample.  The `epsilon` floor avoids division by zero
+#' for features with near-zero ridge coefficients.
 #'
 #' @details
 #' This adapter factory is primarily an internal backend used by [stabl_fit()].
 #' For end-to-end feature selection workflows, prefer
 #' `base_learner = "adaptive_lasso"` in [stabl_fit()].
 #'
+#' @param family Character; the `glmnet` response family, for example
+#'   `"gaussian"`, `"binomial"`, `"multinomial"`, or `"cox"`.
+#' @param gamma Positive numeric scalar; controls how sharply the weights
+#'   down-penalise features with large ridge coefficients.  Larger values
+#'   make the penalty more selective.  Default `1.0` matches the Python
+#'   reference implementation.
+#' @param epsilon Positive numeric scalar; added to the denominator of the
+#'   weight to avoid division by zero.  Default `1e-6`.
+#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
+#'   used to decide that a feature is selected in a given bootstrap.  Features
+#'   with `|coef| > bootstrap_threshold` are counted as selected.
+#'
 #' @return A function with signature
 #'   `function(x, y, lambda_val) -> logical vector of length ncol(x)`.
+#'
+#' @seealso [make_glmnet_adapter()], [make_sgl_adapter()], [stabl_fit()]
 #' @export
 make_adaptive_lasso_adapter <- function(
     family              = "gaussian",
@@ -136,20 +164,20 @@ make_adaptive_lasso_adapter <- function(
 #' Build a Sparse Group Lasso Learner Adapter
 #'
 #' Returns a closure that fits `sparsegl::sparsegl()` on a single bootstrap
-#' subsample and returns a logical selection mask over features.
+#' subsample and returns a logical selection mask over the features.
 #'
-#' The adapter expects a lambda-grid row with a `lambda` column and optionally
-#' an `alpha` column. The `alpha` value is mapped to `sparsegl`'s `asparse`
-#' argument (the weight on the l1 component of the sparse-group penalty).
+#' Sparse-group lasso is useful when features have a known (or inferred) block
+#' structure, for example gene pathways, omic layers, or correlated feature
+#' clusters.  It imposes simultaneous sparsity within and between groups: the
+#' group-level penalty encourages whole groups to be zeroed out, while the
+#' within-group lasso penalty allows groups to have only a sparse subset of
+#' active features.  This can substantially improve stability in structured
+#' high-dimensional settings.
 #'
-#' @param family Character; response family (`"gaussian"`, `"binomial"`,
-#'   or `"multinomial"`). Cox is not supported for sparse-group lasso.
-#' @param feature_groups Integer/factor vector of length `p` assigning each
-#'   feature to a group.
-#' @param alpha_fixed Numeric scalar in `[0, 1]` or `NULL`. When not `NULL`,
-#'   overrides any `alpha` column in `lambda_val`.
-#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
-#'   used to decide that a feature is selected in a given bootstrap.
+#' The `alpha` value (`asparse` in `sparsegl`) controls the balance between
+#' the within-group lasso penalty and the group-level penalty: 0 = pure group
+#' lasso; 1 = pure lasso (no group penalty).  The default of `0.05` used when
+#' no `alpha` column is present matches the Python STABL reference.
 #'
 #' @details
 #' This adapter factory is primarily an internal backend used by [stabl_fit()].
@@ -157,8 +185,23 @@ make_adaptive_lasso_adapter <- function(
 #' `base_learner = "sparse_group_lasso"` in [stabl_fit()] and provide
 #' `feature_groups` (or `corr_group_threshold`) there.
 #'
+#' @param family Character; response family (`"gaussian"`, `"binomial"`, or
+#'   `"multinomial"`).  Cox regression is not supported by `sparsegl`.
+#' @param feature_groups Integer or factor vector of length `p` (number of
+#'   features) assigning each feature to a group.  Values are coerced via
+#'   `as.integer(as.factor(...))`, so any type that has a natural ordering is
+#'   accepted.
+#' @param alpha_fixed Numeric scalar in `[0, 1]` or `NULL`.  When not `NULL`,
+#'   overrides any `alpha` column in `lambda_val`.  Controls the lasso /
+#'   group-lasso mixing weight (`asparse` in `sparsegl`).
+#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
+#'   used to decide that a feature is selected in a given bootstrap.
+#'
 #' @return A function with signature
 #'   `function(x, y, lambda_val) -> logical vector of length ncol(x)`.
+#'
+#' @seealso [make_glmnet_adapter()], [make_adaptive_lasso_adapter()],
+#'   [stabl_fit()]
 #' @export
 make_sgl_adapter <- function(
     family              = "gaussian",
@@ -265,28 +308,41 @@ make_sgl_adapter <- function(
 
 #' Build a Data-Driven Lambda Grid
 #'
-#' Runs `glmnet` on the full data to obtain a calibrated penalty sequence,
-#' returning the result as a pre-expanded `data.frame` suitable for use as
-#' the `lambda_grid` argument of [stabl_fit()].
+#' Runs `glmnet` on the full training data to obtain a calibrated penalty
+#' sequence, returning the result as a pre-expanded `data.frame` suitable for
+#' use as the `lambda_grid` argument of [stabl_fit()].
 #'
-#' This mirrors `auto_mode_lambda_grid()` in `stabl/utils.py`, but delegates
-#' sequence computation to `glmnet`'s own path algorithm.
+#' Choosing lambda values manually is error-prone: too large a lambda selects
+#' nothing; too small a lambda selects everything.  This function delegates
+#' the sequence computation to `glmnet`'s own warm-start path algorithm,
+#' which guarantees the grid spans from near-zero sparsity to near-full
+#' sparsity for the given data, family, and alpha.
 #'
-#' For elastic-net models, a vector of `l1_ratio` values may be supplied; the
-#' function fits a separate path for each `alpha` value and row-binds the
-#' results, adding an `alpha` column so that [make_glmnet_adapter()] can read
-#' it.
+#' For elastic-net models, supplying a vector of `l1_ratio` values causes the
+#' function to fit a separate path per alpha, row-bind the resulting grids,
+#' and add an `alpha` column so that [make_glmnet_adapter()] can dispatch
+#' correctly.  This mirrors `auto_mode_lambda_grid()` in the Python reference
+#' implementation.
 #'
 #' @param x Numeric matrix of predictors (samples by features).
-#' @param y Outcome vector (numeric for `"gaussian"`, factor or 0/1 integer
-#'   for `"binomial"`/`"multinomial"`, or a `survival::Surv` response for
-#'   `"cox"`).
-#' @param family Character; `glmnet` response family.
-#' @param n_lambda Integer; desired number of lambda values.
-#' @param l1_ratio Numeric scalar, numeric vector, or `NULL`.
+#' @param y Outcome vector.  For `"gaussian"` provide a numeric vector; for
+#'   `"binomial"`/`"multinomial"` provide a factor or 0/1 integer vector;
+#'   for `"cox"` provide a `survival::Surv` object.
+#' @param family Character; `glmnet` response family (`"gaussian"`,
+#'   `"binomial"`, `"multinomial"`, or `"cox"`).  Default `"gaussian"`.
+#' @param n_lambda Positive integer; desired number of lambda values per alpha
+#'   level.  Actual length may be slightly shorter if `glmnet` detects
+#'   saturation early.  Default `30L`.
+#' @param l1_ratio Numeric scalar, numeric vector, or `NULL`.  When `NULL`
+#'   (default), a pure lasso path (alpha = 1) is used.  When a vector is
+#'   supplied (e.g. `c(0.5, 0.75, 1.0)`), one path is fitted per value and
+#'   the results are combined; an `alpha` column is added to the output.
 #'
-#' @return A `data.frame` with at least a `lambda` column; an `alpha` column
+#' @return A `data.frame` with at least a `lambda` column.  An `alpha` column
 #'   is included whenever `l1_ratio` is not `NULL`.
+#'
+#' @seealso [stabl_fit()] which calls this automatically when
+#'   `lambda_grid = "auto"`.
 #' @export
 auto_lambda_grid <- function(
     x,

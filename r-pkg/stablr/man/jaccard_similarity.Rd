@@ -12,10 +12,21 @@ jaccard_similarity(list1, list2)
 \item{list2}{Character or integer vector of selected feature identifiers.}
 }
 \value{
-Numeric scalar in \eqn{[0, 1]}.
+Numeric scalar in \eqn{[0, 1]}.  A value of 1 means the two sets
+are identical; 0 means they share no features.
 }
 \description{
-Computes the Jaccard index between two character (or integer) vectors treated
-as sets.  When both sets are empty the function returns 0 (convention
-matching the Python implementation).
+Measures the overlap between two sets of selected features as a simple
+fraction of shared features out of all features that appeared in either
+set.  This is the most interpretable pairwise similarity when no prior
+expectation of set sizes exists.
+}
+\details{
+Use Jaccard when you want a quick, easy-to-explain measure.  Prefer
+\code{\link[=adjusted_similarity]{adjusted_similarity()}} or \code{\link[=pearson_similarity]{pearson_similarity()}} when comparing across
+runs that select very different numbers of features, because Jaccard does
+not correct for the chance overlap expected between small or large sets.
+
+When both sets are empty the function returns 0 (convention matching the
+Python implementation).
 }

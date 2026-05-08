@@ -7,21 +7,31 @@
 adjusted_similarity(list1, list2, nb_total_elements)
 }
 \arguments{
-\item{list1}{Character or integer vector.}
+\item{list1}{Character or integer vector of selected feature identifiers.}
 
-\item{list2}{Character or integer vector.}
+\item{list2}{Character or integer vector of selected feature identifiers.}
 
-\item{nb_total_elements}{Integer; total number of candidate features.}
+\item{nb_total_elements}{Integer; total number of candidate features in the
+universe (i.e. the number of columns in the original predictor matrix).}
 }
 \value{
-Numeric scalar in \eqn{(-1, 1]}.
+Numeric scalar in \eqn{(-1, 1]}.  Values above 0 indicate more
+overlap than expected by chance; 1 means perfect agreement; negative
+values indicate less overlap than chance.
 }
 \description{
-Computes the chance-adjusted similarity between two feature sets.  The
-adjustment accounts for set size relative to the total feature universe so
-that random overlap is penalised.
+Computes a chance-corrected similarity between two feature sets.  Unlike
+\code{\link[=jaccard_similarity]{jaccard_similarity()}}, the adjusted measure accounts for the expected
+random overlap given the sizes of both sets and the total feature universe,
+so it does not systematically penalise methods that select many features.
 }
 \details{
+The formula is analogous to Cohen's kappa for sets:
+\deqn{S_{\text{adj}}(A, B) =
+  \frac{r - \mathbb{E}[r]}{\min(k_1, k_2) - \max(0, k_1 + k_2 - d)}}
+where \eqn{r = |A \cap B|}, \eqn{k_i = |A_i|}, \eqn{d =} \code{nb_total_elements},
+and \eqn{\mathbb{E}[r] = k_1 k_2 / d}.
+
 Returns 0 when either set is empty or equals the full universe (edge cases
-where the correction is undefined in a meaningful way).
+where the correction denominator is zero).
 }

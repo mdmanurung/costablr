@@ -2,18 +2,29 @@
 % Please edit documentation in R/stabl_accessors.R
 \name{get_feature_names_out}
 \alias{get_feature_names_out}
-\title{Get Names of Selected Features}
+\title{Get the Names of Selected Features from a Fitted STABL Object}
 \usage{
 get_feature_names_out(object, new_hard_threshold = NULL)
 }
 \arguments{
-\item{object}{A fitted \code{"stabl_fit"} object.}
+\item{object}{A fitted \code{"stabl_fit"} object returned by \code{\link[=stabl_fit]{stabl_fit()}}.}
 
-\item{new_hard_threshold}{Numeric or \code{NULL}; see \code{\link[=get_support]{get_support()}}.}
+\item{new_hard_threshold}{Numeric in \verb{(0, 1]} or \code{NULL}.  Forwarded to
+\code{\link[=get_support]{get_support()}}; see that function for the full threshold resolution
+order.}
 }
 \value{
-Character vector of selected feature names.
+Character vector of selected feature names.  An empty character
+vector is returned when no feature passes the threshold (and
+\code{explore = FALSE} was used during fitting).
 }
 \description{
-Get Names of Selected Features
+Convenience wrapper around \code{\link[=get_support]{get_support()}} that returns only the names of
+the features that pass the stability threshold, ready for use as column
+selectors in downstream modelling (e.g.
+\code{x[, get_feature_names_out(fit)]}).
+}
+\seealso{
+\code{\link[=get_support]{get_support()}} for the binary mask, \code{\link[=get_importances]{get_importances()}} for
+ranked scores.
 }
