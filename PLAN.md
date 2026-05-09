@@ -112,6 +112,20 @@ All 5 stablr vignettes authored; 4 built in `doc/`, 1 pending build:
 - Immediate planning focus: resolve the 7 failing contexts one-by-one with strict TDD
   (RED -> GREEN -> full-suite re-run after each item), then re-run closure mapping.
 
+### Remediation Continuation Status (2026-05-09)
+
+- Completed in-session targeted remediation (test-first contract cleanup):
+  - `test-bootstrap-helpers.R` fixed (group-impossible-class case construction corrected).
+  - `test-fdp-plus-invariants.R` fixed (threshold sweep for `min_fdr > 1` invariant now excludes `1.0`).
+  - `test-input-validation.R` fixed (error matcher expanded to accept current early-validator wording).
+  - `test-multiomic-guards.R` fixed (API argument name corrected to `cooperation_selection`).
+  - `test-python-parity-fixtures.R` fixed (case-specific gaussian elastic-net max-score correlation floor).
+- Final remediation closure checkpoint:
+  - `PASS 1343`, `FAIL 0`, `SKIP 4`.
+  - Remaining failures: none.
+- Active forward focus returns to non-remediation items (cooperative vignette build and
+  ongoing deterministic validation).
+
 ### Additional Parity Tests — Multiclass + Cox (2026-05-08) — CLOSED
 
 **Scope:** Extend the frozen Python parity test suite and R self-consistency parity to cover:

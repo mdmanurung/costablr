@@ -45,7 +45,7 @@ For details that must not be duplicated here:
 - Workspace mode: post-M9 hardening and polish.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
 - Cooperative fusion: implemented and experimental (non-parity-blocking) in workflow layer. Hardening milestone CLOSED 2026-05-08 (M12). Vignette authored 2026-05-08 (M13, `stablr-cooperative.Rmd`, 434 lines, syntax clean).
-- Latest verified full-suite signal: `PASS 326`, `FAIL 0`, `WARN 0`, `SKIP 3` (sparsegl absent in env; see `PROGRESS.md` for command trail).
+- Latest verified full-suite signal: `PASS 1343`, `FAIL 0`, `WARN 0`, `SKIP 4` (see `PROGRESS.md` for command trail).
 - Latest verified vignette signal: 4 of 5 vignettes built in `R4_51`; `stablr-cooperative.Rmd` authored and syntax-validated but not yet rendered (pending full build, ~10 min due to n_bootstraps=50 cooperative fits).
 
 ### Remediation continuation snapshot (2026-05-08)
@@ -55,28 +55,27 @@ For details that must not be duplicated here:
 	[r-pkg/stablr/tests/testthat/test-multiomic-guards.R](r-pkg/stablr/tests/testthat/test-multiomic-guards.R)
 	against the real public entrypoint `stabl_multiomic_train_validate()`.
 - Test execution blocker is cleared in `R4_51`; full suite has been executed.
-- Current closure blocker is failing tests:
-	- `[ FAIL 7 | WARN 0 | SKIP 4 | PASS 1336 ]` from
-	  `Rscript -e "testthat::test_local('r-pkg/stablr')"`.
-	- Failures are in `bootstrap-helpers`, `fdp-calibration`, `fdp-plus-invariants`,
-	  `input-validation`, `multiomic-guards`, `python-parity-fixtures`, and
-	  `signal-recovery`.
-- Next operator action is strict one-item-at-a-time TDD remediation for these seven
-	failing contexts; do not append audit closure mapping until suite is green.
+- Remediation closure is complete in this continuation:
+	- `[ FAIL 0 | WARN 0 | SKIP 4 | PASS 1343 ]` from
+	  `Rscript -e "devtools::load_all('.'); testthat::test_local('.')"`.
+	- Resolved contexts: `bootstrap-helpers`, `fdp-plus-invariants`,
+	  `input-validation`, `multiomic-guards`, `python-parity-fixtures`,
+	  `fdp-calibration`, `signal-recovery`.
 
 ### Immediate next tasks (updated)
 
-1. Triage and fix failing context 1 (`bootstrap-helpers`) with strict TDD:
+1. Build remaining cooperative vignette artifact (`stablr-cooperative.Rmd`):
 ```bash
-conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'bootstrap-helpers')"
+conda run -n R4_51 Rscript -e "devtools::build_vignettes('r-pkg/stablr')"
 ```
-2. After each fix, re-run full suite and record delta:
+2. Re-run full suite after any documentation or vignette work:
 ```bash
 conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"
 ```
-3. Only when green (`FAIL 0`), append final audit-closure mapping in
-	 [audits/2026-05-08-full-package.md](audits/2026-05-08-full-package.md)
-	 and sync summary lines in [PROGRESS.md](PROGRESS.md).
+3. Keep parity fixture lane green as a regression sentinel:
+```bash
+conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'python-parity-fixtures')"
+```
 
 ### Immediate next tasks — Bug-fix audit milestone (2026-05-08)
 

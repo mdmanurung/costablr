@@ -36,7 +36,7 @@ test_that("cooperative_fusion + family = 'cox' + selection = 'validation' is rej
       lambda_grid            = data.frame(lambda = c(0.2, 0.1)),
       family                 = "cox",
       cooperative_fusion     = TRUE,
-      cooperative_selection  = "validation",
+      cooperation_selection  = "validation",
       n_bootstraps           = 5L,
       artificial_type        = "random_permutation",
       random_state           = 1L
