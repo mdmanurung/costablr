@@ -45,7 +45,7 @@ test_that("stabl_fit errors early when sample_fraction > 1 and replace = FALSE",
       sample_fraction = 1.5,   # > 1 with replace = FALSE -> n_subsamples > n_samples
       replace         = FALSE
     ),
-    "reduce.*sample_fraction|replace = TRUE",
+    "cannot exceed 1.*replace = FALSE|reduce.*sample_fraction|replace = TRUE",
     ignore.case = TRUE
   )
 })

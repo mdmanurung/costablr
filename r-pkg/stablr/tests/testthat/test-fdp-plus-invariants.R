@@ -55,7 +55,9 @@ test_that("compute_fdp_plus caps fdr_min_threshold at 1 when min FDP+ > 1", {
   res <- compute_fdp_plus(stabl_scores            = real,
                           stabl_scores_artificial = art,
                           artificial_proportion   = 1.0,
-                          fdr_threshold_range     = seq(0, 1, by = 0.1))
+                          # Exclude 1.0 so strict ">" cannot force a zero-count
+                          # numerator/denominator corner where FDP+ becomes 1.
+                          fdr_threshold_range     = seq(0, 0.9, by = 0.1))
 
   expect_gt(res$min_fdr, 1)
   expect_equal(res$fdr_min_threshold, 1)
