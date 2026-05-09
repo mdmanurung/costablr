@@ -126,6 +126,18 @@ All 5 stablr vignettes authored; 4 built in `doc/`, 1 pending build:
 - Active forward focus returns to non-remediation items (cooperative vignette build and
   ongoing deterministic validation).
 
+### Post-Remediation Execution Update (2026-05-09)
+
+- Cooperative vignette render closure progressed:
+  - `stablr-cooperative.Rmd` now renders to `stablr-cooperative.html`.
+- Full-suite validation after dependency alignment:
+  - `PASS 1351`, `FAIL 0`, `WARN 2`, `SKIP 0`.
+- Optional dependency status:
+  - `furrr` load path restored after upgrading `purrr` to `1.2.2`.
+  - `sparsegl` installed from source fallback (conda-forge binary unavailable).
+- Remaining forward blocker is now limited to unified vignette build completion:
+  - cleared: all five vignettes now build successfully in one pass.
+
 ### Additional Parity Tests — Multiclass + Cox (2026-05-08) — CLOSED
 
 **Scope:** Extend the frozen Python parity test suite and R self-consistency parity to cover:

@@ -86,6 +86,45 @@ Logging rule:
   - Result: `PASS 1343`, `FAIL 0`, `WARN 0`, `SKIP 4`.
   - Skips are environment-related optional dependencies (`furrr`, `sparsegl`).
 
+### Post-Closure Execution Batch (2026-05-09)
+
+- Executed requested remaining tasks end-to-end.
+
+1. Vignette build execution
+- Command: `devtools::build_vignettes('r-pkg/stablr')`
+- Outcome:
+  - Built successfully: `stablr-cooperative.html`, `stablr-intro.html`,
+    `stablr-multiomic.html`, `stablr-python-parity.html`.
+  - Build halted on `stablr-tcga.Rmd` at pandoc conversion due to missing file:
+    `stablr-tcga_files/figure-html/unnamed-chunk-10-1.png`.
+
+2. Optional dependency enablement
+- `micromamba` confirmed available (`2.1.0`).
+- `r-furrr` available but initially unloadable due to `purrr` version constraint.
+- Upgraded `purrr` to `1.2.2` (source fallback), restoring `furrr` loadability.
+- `r-sparsegl` unavailable on conda-forge; installed `sparsegl` via source fallback.
+- Installed `stablr` into user library to support worker-side package attachment in
+  multisession tests (`R CMD INSTALL r-pkg/stablr`).
+
+3. Validation after dependency/workflow updates
+- `test-rng-determinism.R`: `FAIL 0`, `SKIP 0`, `PASS 6` (warnings only).
+- Final full suite:
+  - Command: `devtools::load_all('.') ; testthat::test_local('.')`
+  - Result: `PASS 1351`, `FAIL 0`, `WARN 2`, `SKIP 0`.
+
+### Final Vignette Build Closure (2026-05-09)
+
+- Resolved `stablr-tcga.Rmd` vignette build halt:
+  - updated `r-pkg/stablr/vignettes/stablr-tcga.Rmd` setup chunk to `cache = FALSE`
+    for deterministic figure generation in CI/build contexts,
+  - wrapped `plot_stabl_path(...)` calls in `print(...)` to force plot emission in knitted output.
+
+- Validation:
+  - `devtools::build_vignettes('r-pkg/stablr')` now completes all 5 vignettes in one pass,
+    including `stablr-tcga.html`.
+  - Post-fix full suite remains green:
+    - `PASS 1351`, `FAIL 0`, `WARN 2`, `SKIP 0`.
+
 ### Remediation Audit Continuation (2026-05-08, batch 2)
 
 - WI-11/WI-12 implementation landed in [r-pkg/stablr/R/stabl_fit.R](r-pkg/stablr/R/stabl_fit.R):
