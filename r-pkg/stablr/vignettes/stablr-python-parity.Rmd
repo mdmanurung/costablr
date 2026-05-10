@@ -1,8 +1,8 @@
 ---
-title: "Python-R Parity: Replicating the STABL Tutorial in R"
+title: "Python-R Workflow Mapping for STABL"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Python-R Parity: Replicating the STABL Tutorial in R}
+  %\VignetteIndexEntry{Python-R Workflow Mapping for STABL}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -20,28 +20,41 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-This vignette reproduces the two analyses from the STABL Tutorial Notebook in R,
-demonstrating that `stablr` and the original Python `stabl` library produce
-comparable results on the same datasets.
+This vignette maps the analyses from the STABL Tutorial Notebook onto the R
+`stablr` API.  It uses the same preprocessing shape and real OOL validation
+workflow, but the rendered run uses bounded settings so package builds remain
+practical.  Use the larger settings noted below for a high-fidelity parity
+experiment.
 
 | Aspect | Python (`stabl`) | R (`stablr`) |
 |---|---|---|
 | Base learner | `sklearn.linear_model.Lasso` | `glmnet::glmnet` (LASSO) |
 | Bootstrapping | `n_bootstraps` | `n_bootstraps` |
 | FDP control | `fdr_threshold_range = np.arange(0, 1, 0.01)` | `seq(0, 1, by = 0.01)` |
-| Artificial features | `"knockoff"` | `artificial_type = "knockoff"` |
+| Artificial features | `"knockoff"` in the tutorial | `random_permutation` here for render speed; `knockoff` for extended parity |
 | Random state | `42` | `random_state = 42L` |
 
 **Two analyses:**
 
 1. **OOL Regression** -- Onset of Labor proteomics, `family = "gaussian"`,
-   `n_bootstraps = 500`, knockoff artificial features.
+   real train/validation split, bounded STABL settings.
 2. **COVID-19 Binary Classification** -- Proteomics, `family = "binomial"`,
-   `n_bootstraps = 1000`, knockoff artificial features.
+   shown as an extended optional run because the data are not bundled with the
+   package build.
 
 ```{r libraries}
 library(stablr)
+
+render_n_bootstraps <- 120L
+render_n_lambda <- 8L
+render_artificial_type <- "random_permutation"
+run_extended <- identical(Sys.getenv("STABLR_RUN_EXTENDED_VIGNETTES"), "true")
 ```
+
+The rendered configuration uses `r render_n_bootstraps` bootstraps and
+`r render_n_lambda` lambda values.  For a parity report intended to match the
+Python tutorial more closely, use 500-1000 bootstraps with
+`artificial_type = "knockoff"` and run outside package-build time.
 
 ---
 
@@ -99,7 +112,7 @@ cat("Validation set: ", nrow(x_prot_valid), "samples x", ncol(x_prot_valid), "fe
 lambda_prot <- auto_lambda_grid(
   x_prot, y_prot,
   family   = "gaussian",
-  n_lambda = 10
+  n_lambda = render_n_lambda
 )
 ```
 
@@ -111,8 +124,8 @@ fit_prot <- stabl_fit(
   lambda_grid         = lambda_prot,
   base_learner        = "lasso",
   family              = "gaussian",
-  n_bootstraps        = 500L,
-  artificial_type     = "knockoff",
+  n_bootstraps        = render_n_bootstraps,
+  artificial_type     = render_artificial_type,
   fdr_threshold_range = seq(0, 1, by = 0.01),
   random_state        = 42L
 )
@@ -158,8 +171,13 @@ covid_train_dir <- normalizePath(
   mustWork = FALSE
 )
 eval_covid <- dir.exists(covid_train_dir) &&
-              file.exists(file.path(covid_train_dir, "Proteomics.csv"))
-if (!eval_covid) message("COVID-19 data not found -- skipping COVID-19 section.")
+              file.exists(file.path(covid_train_dir, "Proteomics.csv")) &&
+              isTRUE(run_extended)
+if (!dir.exists(covid_train_dir)) {
+  message("COVID-19 data not found -- skipping COVID-19 section.")
+} else if (!isTRUE(run_extended)) {
+  message("COVID-19 data found, but the section is skipped by default. Set STABLR_RUN_EXTENDED_VIGNETTES=true to evaluate it.")
+}
 ```
 
 ```{r covid-load, eval = eval_covid}
@@ -193,7 +211,7 @@ print(table(y_covid_train))
 lambda_covid <- auto_lambda_grid(
   x_covid_train, y_covid_train,
   family   = "binomial",
-  n_lambda = 10
+  n_lambda = render_n_lambda
 )
 ```
 
@@ -205,8 +223,8 @@ fit_covid <- stabl_fit(
   lambda_grid         = lambda_covid,
   base_learner        = "lasso",
   family              = "binomial",
-  n_bootstraps        = 1000L,
-  artificial_type     = "knockoff",
+  n_bootstraps        = 200L,
+  artificial_type     = render_artificial_type,
   fdr_threshold_range = seq(0.1, 1, by = 0.01),
   random_state        = 42L
 )
@@ -289,9 +307,11 @@ if (length(sel_names_covid) > 0) {
 
 - `glmnet` LASSO and scikit-learn LASSO differ in coordinate descent
   implementation. Feature selections should be concordant but not identical.
-- Knockoff matrices use the `knockoff` R package (equi-correlated), matching
-  the Python `knockoff` approach in `stabl`.
-- Stability scores should agree within +/-0.05 at identical `n_bootstraps`.
+- The rendered vignette uses random-permutation decoys for speed.  For
+  high-fidelity parity work, switch to `artificial_type = "knockoff"` and use
+  the Python tutorial bootstrap counts.
+- Stability scores should be compared at matched bootstrap counts, artificial
+  feature strategy, lambda grid, and preprocessing choices.
 
 ```{r session-info}
 sessionInfo()

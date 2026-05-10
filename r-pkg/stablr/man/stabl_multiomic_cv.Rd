@@ -2,7 +2,7 @@
 % Please edit documentation in R/multiomic_workflows.R
 \name{stabl_multiomic_cv}
 \alias{stabl_multiomic_cv}
-\title{Minimal Multi-Omic STABL Cross-Validation Workflow}
+\title{Multi-Omic STABL Cross-Validation Workflow}
 \usage{
 stabl_multiomic_cv(
   x_list,

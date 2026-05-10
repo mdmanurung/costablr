@@ -80,14 +80,31 @@ For command-level evidence and exact validation results, use `PROGRESS.md`.
 - Python reference scripts remain the behavior anchor for parity checks where tests are not yet frozen.
 - Current workspace scope (2026-05-03): CI workflow implementation is deferred; validation is performed via local R test suites.
 
-## Vignette Status (as of 2026-05-09) — Complete
+## Vignette Status (as of 2026-05-10) — Complete
 
-All 5 stablr vignettes authored and built in `doc/`:
-- `stablr-intro.html` (335K) ✅
-- `stablr-multiomic.html` (1.4M) ✅
-- `stablr-python-parity.html` (561K) ✅ — OOL regression + COVID-19 binary classification
-- `stablr-tcga.html` (787K) ✅ — TCGA Breast Cancer multi-omic (M15 stablr-native version)
-- `stablr-cooperative.html` ✅
+All 5 stablr vignettes have canonical source under `r-pkg/stablr/vignettes/`
+and rebuild successfully via `devtools::build_vignettes('r-pkg/stablr')`.
+Generated `doc/` output is build output, not the edit source.
+
+- `stablr-intro.Rmd` ✅ — quick simulated-data start.
+- `stablr-multiomic.Rmd` ✅ — bounded real OOL multi-omic workflow.
+- `stablr-python-parity.Rmd` ✅ — bounded Python-to-R workflow mapping with
+  high-fidelity parity settings documented as an extended run.
+- `stablr-tcga.Rmd` ✅ — TCGA Breast Cancer multi-omic workflow.
+- `stablr-cooperative.Rmd` ✅ — bounded cooperative fusion workflow; outer CV
+  shown but not evaluated during vignette builds.
+
+## Documentation Website Status (as of 2026-05-10) — Complete
+
+- Root README now distinguishes the current R package from the original Python
+  reference code.
+- Package README now documents current workflows, optional dependencies, API
+  groups, vignettes, and pkgdown build commands.
+- Package-level Rd/API reference has been regenerated from roxygen and reflects
+  the current exported API.
+- `r-pkg/stablr/_pkgdown.yml` defines grouped reference sections and vignette
+  navigation.
+- pkgdown site builds to `docs/stablr` with clean metadata checks.
 
 ## Current Planning Focus (Forward Only)
 

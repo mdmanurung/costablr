@@ -73,7 +73,9 @@ By the end of this vignette you will be able to:
 
 We use the same Onset of Labor (OOL) dataset as `vignette("stablr-multiomic")`:
 two omic layers (CyTOF immune profiling + Proteomics) in 150 pregnant women,
-with days-to-onset-of-labor (DOS) as the continuous regression target.
+with days-to-onset-of-labor (DOS) as the continuous regression target.  The
+examples use compact grids so the vignette remains buildable; enlarge the
+bootstrap count and `rho` grid for a final analysis.
 
 ```{r load}
 library(stablr)
@@ -93,17 +95,19 @@ lapply(ool_train$x_list, dim)
 
 Cooperative fusion requires a lambda grid for each omic, exactly as in
 `vignette("stablr-multiomic")`.  We build one grid per omic with
-`auto_lambda_grid()` and pass them as a named list.
+`auto_lambda_grid()` and pass them as a named list.  Twelve lambda values are
+enough to demonstrate the workflow without making each cooperative fit too
+expensive.
 
 ```{r lambda-grids}
 lambda_list <- list(
   cytof      = auto_lambda_grid(
     ool_train$x_list$cytof, ool_train$y,
-    family = "gaussian", n_lambda = 20
+    family = "gaussian", n_lambda = 12
   ),
   proteomics = auto_lambda_grid(
     ool_train$x_list$proteomics, ool_train$y,
-    family = "gaussian", n_lambda = 20
+    family = "gaussian", n_lambda = 12
   )
 )
 
@@ -138,14 +142,14 @@ cf_fit <- stabl_multiomic_train_validate(
   x_valid_list          = ool_valid$x_list,
   y_valid               = ool_valid$y,
   family                = "gaussian",
-  n_bootstraps          = 50L,
+  n_bootstraps          = 30L,
   artificial_type       = "random_permutation",
   random_state          = 42L,
   cooperative_fusion    = TRUE,
-  rho                   = c(0, 0.1, 0.3, 0.5),
+  rho                   = c(0, 0.25, 0.5),
   cooperation_selection = "cv",
   cooperation_selector  = "lambda.min",
-  cooperation_nfolds    = 5L
+  cooperation_nfolds    = 3L
 )
 ```
 
@@ -326,17 +330,17 @@ all_fit <- stabl_multiomic_train_validate(
   x_valid_list          = ool_valid$x_list,
   y_valid               = ool_valid$y,
   family                = "gaussian",
-  n_bootstraps          = 50L,
+  n_bootstraps          = 30L,
   artificial_type       = "random_permutation",
   random_state          = 42L,
   early_fusion          = TRUE,
   late_fusion           = TRUE,
-  n_iter_lf             = 500L,
+  n_iter_lf             = 250L,
   cooperative_fusion    = TRUE,
-  rho                   = c(0, 0.1, 0.3, 0.5),
+  rho                   = c(0, 0.25, 0.5),
   cooperation_selection = "cv",
   cooperation_selector  = "lambda.min",
-  cooperation_nfolds    = 5L
+  cooperation_nfolds    = 3L
 )
 ```
 
@@ -375,9 +379,11 @@ signal that is diluted in the concatenated early-fusion space.
 ## 8. Cross-validation with cooperative fusion
 
 Use `stabl_multiomic_cv()` when no pre-defined validation split is available.
-Cooperative fusion parameters propagate to every outer fold automatically:
+Cooperative fusion parameters propagate to every outer fold automatically.
+This is a realistic analysis pattern, but it multiplies the cost by the number
+of outer folds, so the code is shown but not evaluated during vignette builds:
 
-```{r cv-fit}
+```{r cv-fit, eval = FALSE}
 cv_fit <- stabl_multiomic_cv(
   x_list                = ool_train$x_list,
   y                     = ool_train$y,
@@ -401,7 +407,7 @@ The `$diagnostics` data frame includes cooperative-specific columns
 (`cooperative_rho`, `cooperative_lambda`, `cooperative_score`, etc.) so you can
 inspect how `rho` was selected in each outer fold:
 
-```{r cv-diagnostics}
+```{r cv-diagnostics, eval = FALSE}
 print(cv_fit$diagnostics[, c("fold", "omic", "n_selected",
                               "cooperative_rho", "cooperative_score")])
 ```

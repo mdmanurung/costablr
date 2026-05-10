@@ -1,8 +1,8 @@
 ---
-title: "Getting Started with stablr"
+title: "Quick Start with stablr"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Getting Started with stablr}
+  %\VignetteIndexEntry{Quick Start with stablr}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -27,7 +27,9 @@ controls the false-discovery proportion (FDP) by comparing real features against
 artificial decoys.
 
 The `stablr` package provides a pure-R implementation with full
-`glmnet`-ecosystem compatibility.
+`glmnet`-ecosystem compatibility.  This vignette is deliberately the fast
+path: small simulated data, random-permutation decoys, and enough bootstraps to
+show the workflow without making package builds slow.
 
 **Core idea in one sentence:** a feature is considered a reliable biomarker if
 it is selected by the sparse learner *consistently* across many bootstrap
@@ -49,8 +51,8 @@ library(stablr)
 
 By the end of this vignette you will be able to:
 
-1. Build a penalty grid with `auto_lambda_grid()` and understand why it matters.
-2. Fit a STABL model with `stabl_fit()` and read the printed summary.
+1. Build a compact penalty grid with `auto_lambda_grid()`.
+2. Fit a quick STABL model with `stabl_fit()` and read the printed summary.
 3. Extract selected features (`get_support()`) and ranked stability scores
    (`get_importances()`).
 4. Interpret a stability-path plot and an FDR graph.
@@ -62,13 +64,13 @@ By the end of this vignette you will be able to:
 
 ### Simulated data
 
-We generate a 150-sample x 30-feature dataset.  Five features (F1-F5) carry a
-true signal; the remaining 25 are pure noise.  Because we know the ground truth,
-we can verify that STABL recovers exactly those five features --- making this a
-useful sanity check before applying the method to real data.
+We generate a 120-sample x 24-feature dataset.  Five features (F1-F5) carry a
+true signal; the remaining 19 are pure noise.  Because we know the ground truth,
+we can verify that the highest-ranked features are the planted signals before
+moving to real data.
 
 ```{r sim-binary}
-n <- 150; p <- 30; n_signal <- 5
+n <- 120; p <- 24; n_signal <- 5
 X_bin <- matrix(rnorm(n * p), nrow = n,
                 dimnames = list(paste0("s", seq_len(n)),
                                 paste0("F", seq_len(p))))
@@ -87,8 +89,7 @@ split is ideal; large imbalances can affect how the lasso selects features.
 ### Fitting STABL
 
 **Step 1 --- build a penalty grid.**  `auto_lambda_grid()` uses `glmnet` to
-find the data-dependent range of lambda values and returns a two-column data
-frame with columns `lambda` and `alpha`.  Every row becomes one (lambda, alpha)
+find the data-dependent range of lambda values.  Every row becomes one lambda
 configuration evaluated during bootstrapping.
 
 **Step 2 --- run the bootstrap loop.**  `stabl_fit()` resamples the data
@@ -98,21 +99,23 @@ and records which features are selected.  Key arguments:
 | Argument | What it does |
 |---|---|
 | `family` | Passed to `glmnet`; `"binomial"` for 0/1 outcome, `"gaussian"` for continuous. |
-| `n_bootstraps` | Number of bootstrap resamples.  100 is fine for exploration; use 500+ for final results. |
+| `n_bootstraps` | Number of bootstrap resamples.  50 is fine for this quick start; use 500+ for final results. |
 | `artificial_type` | `"random_permutation"` adds column-permuted decoys; `"knockoff"` uses model-X knockoffs for stronger FDP control. |
 | `random_state` | Integer seed for full reproducibility. |
 
-We use `n_bootstraps = 100` here for a vignette-friendly runtime.
+We use `n_bootstraps = 50` and `n_lambda = 12` here for a vignette-friendly
+runtime.  The downstream vignettes use real datasets and slightly larger
+settings.
 
 ```{r fit-binary}
-lambda_bin <- auto_lambda_grid(X_bin, y_bin, family = "binomial", n_lambda = 20)
+lambda_bin <- auto_lambda_grid(X_bin, y_bin, family = "binomial", n_lambda = 12)
 
 fit_bin <- stabl_fit(
   x               = X_bin,
   y               = y_bin,
   lambda_grid     = lambda_bin,
   family          = "binomial",
-  n_bootstraps    = 100L,
+  n_bootstraps    = 50L,
   artificial_type = "random_permutation",
   random_state    = 42L
 )
@@ -133,8 +136,9 @@ fit_bin
 ### Inspecting results
 
 `get_support()` returns the *names* of features that exceed the stability
-threshold --- these are your candidate biomarkers.  On our simulated data you
-should see F1-F5 (and ideally nothing else).
+threshold --- these are your candidate biomarkers.  On this deliberately small
+example, F1-F5 should dominate the ranked list even if the exact selected set
+varies slightly with platform and `glmnet` version.
 
 `get_importances()` returns a named numeric vector of stability scores
 (selection frequencies) for *all* features, sorted from highest to lowest.
@@ -179,7 +183,7 @@ plot_fdr_graph(fit_bin, title = "Binary classification - FDR estimate")
 
 ### Simulated data
 
-We reuse the same 150 x 30 dimensions but draw an independent feature matrix
+We reuse the same 120 x 24 dimensions but draw an independent feature matrix
 and generate a *continuous* outcome (linear combination of F1-F5 plus Gaussian
 noise).  The only change to the fitting workflow is `family = "gaussian"`.
 
@@ -195,14 +199,14 @@ names(y_reg) <- rownames(X_reg)
 ### Fitting STABL
 
 ```{r fit-reg}
-lambda_reg <- auto_lambda_grid(X_reg, y_reg, family = "gaussian", n_lambda = 20)
+lambda_reg <- auto_lambda_grid(X_reg, y_reg, family = "gaussian", n_lambda = 12)
 
 fit_reg <- stabl_fit(
   x               = X_reg,
   y               = y_reg,
   lambda_grid     = lambda_reg,
   family          = "gaussian",
-  n_bootstraps    = 100L,
+  n_bootstraps    = 50L,
   artificial_type = "random_permutation",
   random_state    = 42L
 )
@@ -212,7 +216,7 @@ fit_reg
 
 ### Results
 
-`get_support()` should again return F1-F5.  You may notice slightly different
+The strongest scores should again concentrate on F1-F5.  You may notice slightly different
 stability scores compared to the binary fit --- this is expected because the
 Gaussian loss function changes the effective sparsity of each bootstrap model.
 
@@ -250,7 +254,7 @@ and want a tighter biomarker list with fewer borderline features.
 compared to plain lasso.
 
 ```{r adaptive-lasso}
-lambda_ada <- auto_lambda_grid(X_bin, y_bin, family = "binomial", n_lambda = 20)
+lambda_ada <- auto_lambda_grid(X_bin, y_bin, family = "binomial", n_lambda = 10)
 
 fit_ada <- stabl_fit(
   x               = X_bin,
@@ -258,7 +262,7 @@ fit_ada <- stabl_fit(
   lambda_grid     = lambda_ada,
   base_learner    = "adaptive_lasso",
   family          = "binomial",
-  n_bootstraps    = 100L,
+  n_bootstraps    = 40L,
   artificial_type = "random_permutation",
   random_state    = 42L
 )
@@ -283,7 +287,7 @@ correlated group.
 ```{r elastic-net}
 lambda_en <- auto_lambda_grid(
   X_bin, y_bin,
-  family = "binomial", n_lambda = 10,
+  family = "binomial", n_lambda = 8,
   l1_ratio = c(0.5, 0.9)
 )
 
@@ -293,7 +297,7 @@ fit_en <- stabl_fit(
   lambda_grid     = lambda_en,
   base_learner    = "elastic_net",
   family          = "binomial",
-  n_bootstraps    = 100L,
+  n_bootstraps    = 40L,
   artificial_type = "random_permutation",
   random_state    = 42L
 )
@@ -305,8 +309,8 @@ get_support(fit_en)
 
 ## Next steps
 
-- See `vignette("stablr-multiomic")` for multi-omic integration with early and
-  late fusion on a real Onset of Labor dataset.
+- See `vignette("stablr-multiomic")` for a bounded, real-data multi-omic
+  analysis with early and late fusion.
 - See `?stabl_multiomic_cv` for grouped cross-validation workflows.
 - See `?save_stabl_results` for exporting scores, plots, and selected-feature
   tables to disk.

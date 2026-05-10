@@ -1,5 +1,126 @@
 <img width="100%" alt="STABL" src="./front_page.png">
 
+# stablr: STABL in R
+
+This repository contains the original Python STABL reference code and a
+production-oriented R reimplementation in `r-pkg/stablr`.
+
+The R package, `stablr`, implements sparse and reliable biomarker discovery for
+single-omic and multi-omic datasets. It is pure R, uses the `glmnet` ecosystem
+for the main learners, and does not require Python or tidymodels at runtime.
+
+## Current R Package Scope
+
+- Core STABL stability selection via `stabl_fit()`
+- FDP+ thresholding with random-permutation or knockoff artificial features
+- Lasso, elastic net, adaptive lasso, and optional sparse group lasso learners
+- Gaussian, binomial, multinomial, and Cox outcome support where the backend
+  learner supports the family
+- Strict sample-name alignment checks for matrices, outcomes, and groups
+- Classic and group-aware bootstrap sampling
+- Multi-omic train/validation and outer-CV workflows
+- Early fusion, late fusion, and optional cooperative fusion through
+  `multiview`
+- Stable S3 accessors, plotting helpers, export helpers, and selection
+  reproducibility metrics
+
+The algorithm and parity contract for the R port is maintained in
+[STABL.md](STABL.md). Forward work and validation evidence are tracked in
+[PLAN.md](PLAN.md), [PROGRESS.md](PROGRESS.md), and [HANDOFF.md](HANDOFF.md).
+
+## Install the R Package
+
+From the repository root:
+
+```r
+install.packages("devtools")
+devtools::install_local("r-pkg/stablr")
+```
+
+Optional features use optional dependencies:
+
+- `ggplot2` for plotting helpers
+- `knockoff` for knockoff artificial features
+- `future` and `furrr` for parallel bootstrap execution
+- `sparsegl` for sparse group lasso
+- `multiview` for cooperative multi-omic fusion
+- `mixOmics` for the TCGA vignette dataset
+
+## Quick R Example
+
+```r
+library(stablr)
+
+set.seed(42)
+n <- 80
+p <- 20
+x <- matrix(
+  rnorm(n * p),
+  nrow = n,
+  dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(p)))
+)
+y <- setNames(1.2 * x[, 1] - 0.8 * x[, 2] + rnorm(n), rownames(x))
+
+lambda_grid <- auto_lambda_grid(x, y, family = "gaussian", n_lambda = 10)
+
+fit <- stabl_fit(
+  x = x,
+  y = y,
+  lambda_grid = lambda_grid,
+  family = "gaussian",
+  n_bootstraps = 50L,
+  artificial_type = "random_permutation",
+  random_state = 42L
+)
+
+get_feature_names_out(fit)
+head(sort(get_importances(fit), decreasing = TRUE))
+```
+
+Use more bootstraps, broader lambda grids, and a held-out validation strategy
+for final analyses.
+
+## R Documentation
+
+Canonical package documentation lives in `r-pkg/stablr`:
+
+- Package README: [r-pkg/stablr/README.md](r-pkg/stablr/README.md)
+- Vignettes: [r-pkg/stablr/vignettes](r-pkg/stablr/vignettes)
+- API reference source: roxygen comments in [r-pkg/stablr/R](r-pkg/stablr/R)
+- Generated Rd help pages: [r-pkg/stablr/man](r-pkg/stablr/man)
+- Python-to-R mapping notes:
+  [r-pkg/stablr/docs/PYTHON_TO_R_MAPPING.md](r-pkg/stablr/docs/PYTHON_TO_R_MAPPING.md)
+
+Build vignettes:
+
+```bash
+conda run -n R4_51 Rscript -e "devtools::build_vignettes('r-pkg/stablr')"
+```
+
+Build the pkgdown documentation website:
+
+```bash
+conda run -n R4_51 Rscript -e "pkgdown::build_site('r-pkg/stablr', install = FALSE)"
+```
+
+## R Vignettes
+
+- `stablr-intro.Rmd`: quick simulated-data start
+- `stablr-multiomic.Rmd`: real OOL multi-omic train/validation workflow
+- `stablr-python-parity.Rmd`: Python-to-R workflow mapping
+- `stablr-tcga.Rmd`: TCGA Breast Cancer multi-omic workflow
+- `stablr-cooperative.Rmd`: cooperative fusion with optional `multiview`
+
+## Python Reference Code
+
+The original Python implementation remains in `stabl/`, with sample scripts in
+`Notebook examples/`. Use it as the behavior reference for parity checks; use
+`r-pkg/stablr` for the R package.
+
+---
+
+## Original Python STABL README
+
 # Discovery of sparse, reliable omic biomarkers with Stabl
 [![DOI](https://img.shields.io/badge/DOI-doi:10.1038/s41587--023--02033--x-blue.svg)](https://doi.org/10.1038/s41587-023-02033-x)
 [![Python version](https://img.shields.io/badge/Python-3.7%E2%80%933.12-blue.svg)](https://github.com/gregbellan/Stabl)

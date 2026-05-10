@@ -2,7 +2,7 @@
 % Please edit documentation in R/multiomic_workflows.R
 \name{stabl_multiomic_train_validate}
 \alias{stabl_multiomic_train_validate}
-\title{Minimal Multi-Omic STABL Train/Validation Workflow}
+\title{Multi-Omic STABL Train/Validation Workflow}
 \usage{
 stabl_multiomic_train_validate(
   x_train_list,
@@ -74,9 +74,9 @@ the omics.  The \code{task_type} (binary vs. regression) is inferred from
 \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} during late fusion.  Ignored when
 \code{late_fusion = FALSE}.}
 
-\item{cooperative_fusion}{Logical. When \code{TRUE}, fit an experimental
-multiview-based cooperative learning branch in addition to the existing
-per-omic STABL fits. Requires the optional \code{multiview} package.}
+\item{cooperative_fusion}{Logical. When \code{TRUE}, fit a multiview-based
+cooperative learning branch in addition to the existing per-omic STABL
+fits. Requires the optional \code{multiview} package.}
 
 \item{rho}{Numeric scalar or vector of non-negative cooperation strengths.
 When \code{NULL}, defaults to \code{0} following \code{\link[multiview:multiview]{multiview::multiview()}}.}

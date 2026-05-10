@@ -19,7 +19,9 @@ Typically \code{round(ncol(x) * artificial_proportion)} as computed in
 \item{type}{Character string; \code{"random_permutation"} or \code{"knockoff"}.}
 
 \item{random_state}{Optional integer; passed to \code{\link[=set.seed]{set.seed()}} before any
-random operations for reproducibility.  \code{NULL} leaves the RNG unchanged.}
+random operations for reproducibility.  \code{NULL} leaves the RNG unchanged.
+Seeding happens exactly once in this dispatcher; downstream generators
+inherit the seeded RNG state and do not re-seed (audit M-5).}
 }
 \value{
 Named list with two elements:
@@ -28,9 +30,11 @@ Named list with two elements:
 (nrow(x)) \eqn{\times} (ncol(x) + n_injected) with the artificial
 columns appended after the original features.}
 \item{\code{noise_col_indices}}{Integer vector of length \code{n_injected}
-containing the 1-based indices (into the artificial block itself)
-that identify which artificial features were injected.  Used by
-\code{\link[=stabl_fit]{stabl_fit()}} to extract the artificial-feature stability scores.}
+containing the 1-based indices into the \strong{original} \code{x} columns
+(not into the artificial block) that identify which source features
+were used to build each artificial column.  Used by \code{\link[=stabl_fit]{stabl_fit()}}
+to look up sparse-group-lasso group memberships for the artificial
+block via \code{.append_noise_groups}.}
 }
 }
 \description{

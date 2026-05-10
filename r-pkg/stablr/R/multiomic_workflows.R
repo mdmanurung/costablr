@@ -1,4 +1,4 @@
-#' Minimal Multi-Omic STABL Train/Validation Workflow
+#' Multi-Omic STABL Train/Validation Workflow
 #'
 #' Fits [stabl_fit()] independently on each omic block from a named list,
 #' then returns per-omic fitted objects and selected-feature matrices for
@@ -36,9 +36,9 @@
 #' @param n_iter_lf Number of random weight draws passed to
 #'   [stacked_multi_omic()] during late fusion.  Ignored when
 #'   `late_fusion = FALSE`.
-#' @param cooperative_fusion Logical. When `TRUE`, fit an experimental
-#'   multiview-based cooperative learning branch in addition to the existing
-#'   per-omic STABL fits. Requires the optional `multiview` package.
+#' @param cooperative_fusion Logical. When `TRUE`, fit a multiview-based
+#'   cooperative learning branch in addition to the existing per-omic STABL
+#'   fits. Requires the optional `multiview` package.
 #' @param rho Numeric scalar or vector of non-negative cooperation strengths.
 #'   When `NULL`, defaults to `0` following [multiview::multiview()].
 #' @param cooperation_selection Character scalar. Either `"cv"` or
@@ -319,7 +319,7 @@ stabl_multiomic_train_validate <- function(
   )
 }
 
-#' Minimal Multi-Omic STABL Cross-Validation Workflow
+#' Multi-Omic STABL Cross-Validation Workflow
 #'
 #' Builds deterministic fold splits over a named multi-omic input, fits
 #' [stabl_multiomic_train_validate()] on each training fold, and returns

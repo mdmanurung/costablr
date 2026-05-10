@@ -21,8 +21,10 @@ set.seed(42)
 
 This vignette demonstrates multi-omic biomarker discovery using the `stablr`
 package on a real Onset of Labor (OOL) dataset.  The dataset contains two omic
-layers (CyTOF and Proteomics) measured in 150 pregnant women.  The prediction
-target is days-to-onset-of-labor (DOS), a continuous regression outcome.
+layers (CyTOF and Proteomics) measured in pregnant women.  The prediction
+target is days-to-onset-of-labor (DOS), a continuous regression outcome.  The
+settings are intentionally bounded for package builds while preserving the
+shape of a real train/validation analysis.
 
 **Why multi-omic?**  Single-omic analyses can miss biomarkers that are
 individually weak but collectively informative.  By combining immune-cell
@@ -105,7 +107,8 @@ purposes:
 2. **Baseline** --- the per-omic biomarker lists can be compared to the
    integrated results to see which features survive the joint analysis.
 
-We use `n_bootstraps = 150` throughout this vignette.  Increase to 500-1000 for
+We use `n_bootstraps = 80` and compact 15-point lambda grids throughout this
+vignette.  Increase to 500-1000 bootstraps and broader grids for
 publication-quality results.
 
 **Reading the printed summary:** after printing each fit, look at (1) the number
@@ -115,7 +118,7 @@ features with a low FDP (< 0.05) is the ideal outcome.
 ```{r lambda-cytof}
 lambda_cytof <- auto_lambda_grid(
   ool_train$x_list$cytof, ool_train$y,
-  family = "gaussian", n_lambda = 20
+  family = "gaussian", n_lambda = 15
 )
 ```
 
@@ -125,7 +128,7 @@ fit_cytof <- stabl_fit(
   y               = ool_train$y,
   lambda_grid     = lambda_cytof,
   family          = "gaussian",
-  n_bootstraps    = 150L,
+  n_bootstraps    = 80L,
   artificial_type = "random_permutation",
   random_state    = 42L
 )
@@ -135,7 +138,7 @@ fit_cytof
 ```{r fit-proteomics}
 lambda_prot <- auto_lambda_grid(
   ool_train$x_list$proteomics, ool_train$y,
-  family = "gaussian", n_lambda = 20
+  family = "gaussian", n_lambda = 15
 )
 
 fit_prot <- stabl_fit(
@@ -143,7 +146,7 @@ fit_prot <- stabl_fit(
   y               = ool_train$y,
   lambda_grid     = lambda_prot,
   family          = "gaussian",
-  n_bootstraps    = 150L,
+  n_bootstraps    = 80L,
   artificial_type = "random_permutation",
   random_state    = 42L
 )
@@ -206,9 +209,9 @@ classification) so you can compare strategies at a glance.
 # Build per-omic lambda grids
 lambda_list <- list(
   cytof      = auto_lambda_grid(ool_train$x_list$cytof,
-                                ool_train$y, family = "gaussian", n_lambda = 20),
+                                ool_train$y, family = "gaussian", n_lambda = 15),
   proteomics = auto_lambda_grid(ool_train$x_list$proteomics,
-                                ool_train$y, family = "gaussian", n_lambda = 20)
+                                ool_train$y, family = "gaussian", n_lambda = 15)
 )
 ```
 
@@ -220,11 +223,11 @@ multi_fit <- stabl_multiomic_train_validate(
   x_valid_list    = ool_valid$x_list,
   y_valid         = ool_valid$y,
   family          = "gaussian",
-  n_bootstraps    = 150L,
+  n_bootstraps    = 80L,
   artificial_type = "random_permutation",
   early_fusion    = TRUE,
   late_fusion     = TRUE,
-  n_iter_lf       = 1000L,
+  n_iter_lf       = 500L,
   random_state    = 42L
 )
 

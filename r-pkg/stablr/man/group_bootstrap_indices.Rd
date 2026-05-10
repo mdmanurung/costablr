@@ -14,7 +14,8 @@ be any type that supports \code{unique()} and equality comparison.}
 
 \item{n_subsamples}{Positive integer; target number of rows in the
 subsample.  The actual count may differ slightly due to whole-group
-granularity.}
+granularity (whole groups are always preserved; the realised count is
+the smallest group-aligned value \verb{>= n_subsamples}).}
 
 \item{replace}{Logical; may the same group be sampled more than once?
 Default \code{FALSE}.}
@@ -42,10 +43,12 @@ underlying STABL's FDP+ guarantee.
 
 \strong{How groups are sampled:} Groups are drawn one at a time (without
 replacement by default) until the running tally of included rows reaches
-\code{n_subsamples}.  If the last added group causes the count to exceed
-\code{n_subsamples}, the excess rows are trimmed.  When \code{replace = TRUE} the
-same group may be drawn multiple times (useful when there are very few
-groups).
+or exceeds \code{n_subsamples}.  Whole groups are always kept intact: if the
+last added group causes the count to exceed \code{n_subsamples}, the surplus
+rows are \emph{not} trimmed.  This guarantees the strongest leakage prevention
+(the subsample and its complement are always group-disjoint), at the cost
+of a slightly variable subsample size.  When \code{replace = TRUE} the same
+group may be drawn multiple times (useful when there are very few groups).
 
 \strong{Degenerate bootstrap guard:} As with \code{\link[=classic_bootstrap_indices]{classic_bootstrap_indices()}}, if
 the final subsample contains only one unique class the function retries
