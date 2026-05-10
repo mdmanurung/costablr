@@ -364,12 +364,12 @@ stabl_multiomic_train_validate <- function(
 #' @param ... Additional arguments forwarded to [stabl_fit()].
 #'
 #' @return A list with class `"stabl_multiomic_cv"` containing:
-#'   \\describe{
-#'     \\item{`folds`}{List of fold descriptors with `fold`, `train_ids`, and
+#'   \describe{
+#'     \item{`folds`}{List of fold descriptors with `fold`, `train_ids`, and
 #'       `valid_ids`.}
-#'     \\item{`fold_results`}{Named list of per-fold
+#'     \item{`fold_results`}{Named list of per-fold
 #'       `stabl_multiomic_fit` results.}
-#'     \\item{`diagnostics`}{Data frame with one row per fold/omic and columns
+#'     \item{`diagnostics`}{Data frame with one row per fold/omic and columns
 #'       `fold`, `omic`, `n_selected`, `threshold`, and `max_score`.}
 #'   }
 #' @export

@@ -42,10 +42,11 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
-- Workspace mode: cooperative-fusion promotion complete; CRAN-prep hardening is next.
+- Workspace mode: initial CRAN-prep hardening pass complete; local manual-PDF tooling remains the only package-check warning.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
 - Cooperative fusion: promoted workflow-layer extension (non-parity-blocking). Hardening milestone CLOSED 2026-05-08 (M12); promotion accessor milestone CLOSED 2026-05-10. Public inspection surface now includes `get_cooperative_features()` and `get_cooperative_diagnostics()`.
 - Latest verified full-suite signal: `PASS 1359`, `FAIL 0`, `WARN 2`, `SKIP 0` (see `PROGRESS.md` for command trail).
+- Latest verified package-check signal: `R CMD check --no-manual` `Status: OK`; full `R CMD check` has `Status: 1 WARNING` from missing local LaTeX package `inconsolata.sty`.
 - Latest verified vignette signal: all 5 vignettes build successfully in one pass (`stablr-cooperative`, `stablr-intro`, `stablr-multiomic`, `stablr-python-parity`, `stablr-tcga`).
 
 ### Remediation continuation snapshot (2026-05-08)
@@ -64,7 +65,7 @@ For details that must not be duplicated here:
 
 ### Immediate next tasks (updated)
 
-1. Start CRAN-prep hardening with a local `R CMD check`/package-check pass.
+1. Decide whether to install/fix local TeX manual tooling (`inconsolata.sty`) or defer manual PDF validation to CI/CRAN-like builders.
 2. Keep full-suite regression checks green for forward changes.
 3. Keep full vignette build green for forward changes.
 

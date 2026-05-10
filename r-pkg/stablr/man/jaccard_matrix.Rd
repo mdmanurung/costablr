@@ -25,6 +25,6 @@ values summarises how consistently the same features are selected.
 }
 \details{
 By default the self-similarity diagonal (always 1) is removed, so the
-returned matrix has N\eqn{\times}(N\minus 1) columns and each row contains
-the N\minus 1 similarities of run \eqn{i} with every other run.
+returned matrix has \eqn{N \times (N - 1)} columns and each row contains
+the \eqn{N - 1} similarities of run \eqn{i} with every other run.
 }

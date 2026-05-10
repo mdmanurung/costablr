@@ -39,6 +39,43 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Initial CRAN-Prep Hardening (2026-05-10)
+
+- Ran source-package build and `R CMD check` to establish the CRAN-prep baseline.
+- Fixed package-code and Rd issues reported by `R CMD check`:
+  - Excluded generated TCGA vignette result CSVs from source builds via
+    `r-pkg/stablr/.Rbuildignore`, clearing non-portable filename warnings.
+  - Replaced unsupported `\minus` Rd markup in `jaccard_matrix` documentation.
+  - Fixed over-escaped `\describe{}` / `\item{}` markup in
+    `stabl_multiomic_cv` documentation.
+  - Added explicit NAMESPACE imports for `stats::setNames` and
+    `utils::head`, `utils::tail`, `utils::read.csv`.
+  - Added package-level `utils::globalVariables()` declarations for ggplot2
+    aesthetic names used in visualization helpers.
+- Removed generated `stablr.Rcheck/` after validation; the generated source
+  tarball remains ignored by existing `*.gz` ignore policy.
+
+Validation:
+
+```bash
+conda run -n R4_51 R CMD build r-pkg/stablr
+# -> built stablr_0.0.0.9000.tar.gz with no Rd macro warnings
+
+conda run -n R4_51 R CMD check stablr_0.0.0.9000.tar.gz
+# -> Status: 1 WARNING
+# Remaining warning: local LaTeX manual build cannot find inconsolata.sty.
+# All package code, namespace, Rd, examples, tests, and vignettes: OK.
+
+conda run -n R4_51 R CMD check --no-manual stablr_0.0.0.9000.tar.gz
+# -> Status: OK
+```
+
+Residual gap:
+
+- Full manual-PDF validation still needs a TeX environment containing
+  `inconsolata.sty`, or execution on a CI/CRAN-like builder with complete
+  LaTeX tooling.
+
 ### Cooperative Fusion Promotion (2026-05-10)
 
 - Promoted cooperative-fusion inspection from nested-list access to exported public accessors:

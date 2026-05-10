@@ -95,9 +95,10 @@ All 5 stablr vignettes authored and built in `doc/`:
 2. ~~Harden cooperative fusion behavior.~~ **CLOSED 2026-05-08 (M12).**
 3. ~~Promote cooperative fusion before CRAN-prep hardening.~~ **CLOSED 2026-05-10. Public cooperative accessors added and targeted suite green.**
 4. ~~Additional parity tests for multiclass (multinomial) and Cox families.~~ **CLOSED 2026-05-08. 7 new test cases added; see PROGRESS.md.**
-5. Keep local deterministic validation green for every forward change.
-6. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
-7. Next priority after cooperative promotion: CRAN-prep hardening.
+5. ~~Initial CRAN-prep hardening pass.~~ **CLOSED 2026-05-10. Package-code `R CMD check --no-manual` is `Status: OK`; full manual check has only local TeX `inconsolata.sty` warning.**
+6. Keep local deterministic validation green for every forward change.
+7. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
+8. Next CRAN-prep priority: decide whether to install/fix local TeX manual tooling or defer manual PDF validation to CI/CRAN-like builders.
 
 ## Remediation Audit Execution Status (2026-05-08)
 

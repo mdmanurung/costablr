@@ -85,12 +85,12 @@ assignment and forwarded to each per-fold \code{\link[=stabl_fit]{stabl_fit()}} 
 }
 \value{
 A list with class \code{"stabl_multiomic_cv"} containing:
-\\describe{
-\\item{\code{folds}}{List of fold descriptors with \code{fold}, \code{train_ids}, and
+\describe{
+\item{\code{folds}}{List of fold descriptors with \code{fold}, \code{train_ids}, and
 \code{valid_ids}.}
-\\item{\code{fold_results}}{Named list of per-fold
+\item{\code{fold_results}}{Named list of per-fold
 \code{stabl_multiomic_fit} results.}
-\\item{\code{diagnostics}}{Data frame with one row per fold/omic and columns
+\item{\code{diagnostics}}{Data frame with one row per fold/omic and columns
 \code{fold}, \code{omic}, \code{n_selected}, \code{threshold}, and \code{max_score}.}
 }
 }

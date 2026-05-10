@@ -5,6 +5,11 @@
 #' @keywords internal
 "_PACKAGE"
 
+utils::globalVariables(c(
+  "FDR", "feature", "fpr", "lambda_idx", "outcome", "precision",
+  "recall", "score", "threshold", "tpr", "value"
+))
+
 #' Validate Sample Alignment Across Inputs
 #'
 #' Checks that the predictor matrix, outcome vector, and optional group vector
