@@ -135,6 +135,98 @@ get_feature_names_out.stabl_fit <- function(object, new_hard_threshold = NULL) {
   object$feature_names[mask]
 }
 
+#' Get Cooperative-Fusion Selected Features
+#'
+#' Returns the feature names selected by the cooperative-fusion branch of a
+#' fitted multi-omic workflow.  This accessor gives downstream code a stable
+#' public surface instead of reaching into `$cooperative_fusion` directly.
+#'
+#' @param object A fitted `"stabl_multiomic_fit"` object returned by
+#'   [stabl_multiomic_train_validate()] with `cooperative_fusion = TRUE`, or a
+#'   `"stabl_multiomic_cv"` object returned by [stabl_multiomic_cv()] with
+#'   `cooperative_fusion = TRUE`.
+#' @param view Optional character scalar naming one omic view.  When supplied
+#'   for a `"stabl_multiomic_fit"`, only that view's cooperative feature names
+#'   are returned.
+#'
+#' @return For `"stabl_multiomic_fit"`, a named list of character vectors, or
+#'   a character vector when `view` is supplied.  For `"stabl_multiomic_cv"`, a
+#'   named list keyed by fold, where each element has the same structure as the
+#'   `"stabl_multiomic_fit"` method.
+#'
+#' @seealso [get_cooperative_diagnostics()],
+#'   [stabl_multiomic_train_validate()], [stabl_multiomic_cv()]
+#' @export
+get_cooperative_features <- function(object, view = NULL) {
+  UseMethod("get_cooperative_features")
+}
+
+#' @export
+get_cooperative_features.stabl_multiomic_fit <- function(object, view = NULL) {
+  cf <- .check_cooperative_branch(object)
+  features <- cf$selected_features
+
+  if (is.null(view)) {
+    return(features)
+  }
+
+  if (length(view) != 1L || is.na(view) || !(view %in% names(features))) {
+    stop(
+      "`view` must name one of the cooperative-fusion omic views.",
+      call. = FALSE
+    )
+  }
+
+  features[[view]]
+}
+
+#' @export
+get_cooperative_features.stabl_multiomic_cv <- function(object, view = NULL) {
+  out <- lapply(object$fold_results, get_cooperative_features, view = view)
+  names(out) <- names(object$fold_results)
+  out
+}
+
+#' Get Cooperative-Fusion Tuning Diagnostics
+#'
+#' Returns the cooperative-fusion tuning diagnostics from a fitted multi-omic
+#' workflow.  For train/validation fits this is the per-candidate tuning table;
+#' for outer cross-validation fits this is the fold diagnostics table restricted
+#' to cooperative diagnostic columns.
+#'
+#' @param object A `"stabl_multiomic_fit"` or `"stabl_multiomic_cv"` object
+#'   with cooperative fusion enabled.
+#'
+#' @return A `data.frame` of cooperative tuning diagnostics.
+#'
+#' @seealso [get_cooperative_features()],
+#'   [stabl_multiomic_train_validate()], [stabl_multiomic_cv()]
+#' @export
+get_cooperative_diagnostics <- function(object) {
+  UseMethod("get_cooperative_diagnostics")
+}
+
+#' @export
+get_cooperative_diagnostics.stabl_multiomic_fit <- function(object) {
+  cf <- .check_cooperative_branch(object)
+  cf$diagnostics
+}
+
+#' @export
+get_cooperative_diagnostics.stabl_multiomic_cv <- function(object) {
+  diagnostics <- object$diagnostics
+  cooperative_cols <- grep("^cooperative_", names(diagnostics), value = TRUE)
+
+  if (length(cooperative_cols) == 0L) {
+    stop(
+      "No cooperative-fusion diagnostics available; fit with `cooperative_fusion = TRUE`.",
+      call. = FALSE
+    )
+  }
+
+  diagnostics[, c("fold", "omic", cooperative_cols), drop = FALSE]
+}
+
 #' Get Per-Feature Importance Scores (Maximum Stability Score)
 #'
 #' Returns a scalar summary of how stably each feature is selected across the
@@ -252,6 +344,25 @@ print.stabl_multiomic_cv <- function(x, ...) {
     )
   }
   invisible(NULL)
+}
+
+.check_cooperative_branch <- function(object) {
+  if (is.null(object$cooperative_fusion)) {
+    stop(
+      "No cooperative-fusion branch available; fit with `cooperative_fusion = TRUE`.",
+      call. = FALSE
+    )
+  }
+
+  if (is.null(object$cooperative_fusion$selected_features) ||
+      is.null(object$cooperative_fusion$diagnostics)) {
+    stop(
+      "Malformed cooperative-fusion branch: expected `selected_features` and `diagnostics`.",
+      call. = FALSE
+    )
+  }
+
+  object$cooperative_fusion
 }
 
 # Null-coalescing helper (package-internal)

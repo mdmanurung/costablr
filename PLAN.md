@@ -80,23 +80,24 @@ For command-level evidence and exact validation results, use `PROGRESS.md`.
 - Python reference scripts remain the behavior anchor for parity checks where tests are not yet frozen.
 - Current workspace scope (2026-05-03): CI workflow implementation is deferred; validation is performed via local R test suites.
 
-## Vignette Status (as of 2026-05-08) — Complete
+## Vignette Status (as of 2026-05-09) — Complete
 
-All 5 stablr vignettes authored; 4 built in `doc/`, 1 pending build:
+All 5 stablr vignettes authored and built in `doc/`:
 - `stablr-intro.html` (335K) ✅
 - `stablr-multiomic.html` (1.4M) ✅
 - `stablr-python-parity.html` (561K) ✅ — OOL regression + COVID-19 binary classification
 - `stablr-tcga.html` (787K) ✅ — TCGA Breast Cancer multi-omic (M15 stablr-native version)
-- `stablr-cooperative.Rmd` (434L) ✅ authored, syntax validated — pending full build (runs n_bootstraps=50 cooperative fits; build time ~10 min)
+- `stablr-cooperative.html` ✅
 
 ## Current Planning Focus (Forward Only)
 
 1. ~~**[ACTIVE] Bug-fix milestone — audit findings (2026-05-08).**~~ **CLOSED 2026-05-08. All 7 fixes landed; PASS 356, FAIL 0, SKIP 3.**
 2. ~~Harden cooperative fusion behavior.~~ **CLOSED 2026-05-08 (M12).**
-3. ~~Additional parity tests for multiclass (multinomial) and Cox families.~~ **CLOSED 2026-05-08. 7 new test cases added; see PROGRESS.md.**
-4. Render `stablr-cooperative.Rmd` vignette (build time ~10 min; deferred pending cluster availability).
+3. ~~Promote cooperative fusion before CRAN-prep hardening.~~ **CLOSED 2026-05-10. Public cooperative accessors added and targeted suite green.**
+4. ~~Additional parity tests for multiclass (multinomial) and Cox families.~~ **CLOSED 2026-05-08. 7 new test cases added; see PROGRESS.md.**
 5. Keep local deterministic validation green for every forward change.
 6. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
+7. Next priority after cooperative promotion: CRAN-prep hardening.
 
 ## Remediation Audit Execution Status (2026-05-08)
 
@@ -391,24 +392,53 @@ Acceptance criteria (met):
 - Missing-`multiview` failure messages are deterministic and actionable, validated via `.has_multiview()` mocking.
 - Full local package suite remains green: `PASS 326, FAIL 0, WARN 0, SKIP 3` (sparsegl absent).
 
-## Experimental Track: Cooperative Fusion (Non-Blocking)
+## Milestone: Cooperative Fusion Promotion (2026-05-10) — CLOSED
 
-- Track type: experimental workflow-layer extension, not blocking Phase 6 closure.
+Goal: promote cooperative fusion from an experimental-only branch to a documented,
+public workflow surface while preserving its optional dependency boundary and
+non-cooperative return contract.
+
+Delivered:
+
+- Added exported accessors `get_cooperative_features()` and
+  `get_cooperative_diagnostics()` for `stabl_multiomic_fit`.
+- Added `stabl_multiomic_cv` methods so outer-CV cooperative features and
+  diagnostics can be inspected without reaching into nested list internals.
+- Added mock-object regression tests that pin accessor behavior without requiring
+  another `multiview` model fit.
+- Regenerated Rd help pages and manually updated the package NAMESPACE.
+
+Acceptance criteria (met):
+
+- Cooperative branch remains opt-in and `multiview` remains optional.
+- Default `cooperative_fusion = FALSE` return shape is unchanged.
+- Public accessors fail clearly when cooperative fusion is absent.
+- Targeted multiomic workflow suite remains green: `PASS 108`, `FAIL 0`,
+  `WARN 0`, `SKIP 0`.
+- Full local package suite remains green: `PASS 1359`, `FAIL 0`, `WARN 2`,
+  `SKIP 0`.
+
+## Promoted Track: Cooperative Fusion (Non-Blocking)
+
+- Track type: promoted workflow-layer extension, not blocking Phase 6 closure.
 - Source restriction: `multiview/` is the only in-repo cooperative reference.
 - Naming policy: use `rho` for cooperation strength (avoid collision with elastic-net `alpha`).
 - Implementation status and command evidence are maintained in `PROGRESS.md`.
 - Immediate operational queue is maintained in `HANDOFF.md`.
+- Public accessor surface: `get_cooperative_features()` and
+  `get_cooperative_diagnostics()`.
 
 Current cooperative touchpoints:
 
 1. `r-pkg/stablr/R/multiomic_workflows.R` owns cooperative workflow orchestration and additive diagnostics.
 2. `r-pkg/stablr/R/input_validation.R` owns cooperative argument normalization and family/selector guards.
 3. `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R` is the behavior-regression surface for cooperative hardening.
-4. `r-pkg/stablr/R/stabl_accessors.R` is the next surface for cooperative print/report ergonomics.
+4. `r-pkg/stablr/R/stabl_accessors.R` owns cooperative print/report ergonomics and public cooperative accessors.
 5. `MultiView.md` remains the cooperative design/evidence bridge.
 
-Exit criteria from experimental status:
+Promotion criteria:
 
 - Deterministic behavior-level cooperative tests pass.
 - Optional-dependency failure paths are validated and stable.
+- Public cooperative result inspection does not require direct `$` traversal.
 - Operator-facing docs (`HANDOFF.md`) and factual logs (`PROGRESS.md`) remain synchronized.

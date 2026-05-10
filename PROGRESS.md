@@ -39,6 +39,36 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Cooperative Fusion Promotion (2026-05-10)
+
+- Promoted cooperative-fusion inspection from nested-list access to exported public accessors:
+  - `get_cooperative_features()` for `stabl_multiomic_fit` and `stabl_multiomic_cv`.
+  - `get_cooperative_diagnostics()` for `stabl_multiomic_fit` and `stabl_multiomic_cv`.
+- Added clear absent-branch errors instructing callers to fit with `cooperative_fusion = TRUE`.
+- Added lightweight mock-object regression coverage in
+  `r-pkg/stablr/tests/testthat/test-multiomic-workflows.R`:
+  - selected-feature list and per-view extraction,
+  - tuning diagnostics extraction,
+  - absent-branch failure behavior,
+  - outer-CV feature and cooperative-diagnostics extraction.
+- Regenerated Rd pages for the new accessors and manually updated `NAMESPACE`
+  because this package keeps an existing non-roxygen-generated namespace file.
+- Updated `PLAN.md` and `HANDOFF.md` to record cooperative promotion as complete
+  and move the next implementation priority to CRAN-prep hardening.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'multiomic-workflows')"
+# -> PASS 108, FAIL 0, WARN 0, SKIP 0
+
+conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"
+# -> PASS 1359, FAIL 0, WARN 2, SKIP 0
+```
+
+Warnings are the existing `future` package built-under-R-version warnings emitted
+from `test-rng-determinism.R`; no cooperative-fusion failures or skips remain.
+
 ### Remediation Continuation (2026-05-09)
 
 - Implemented targeted test-first remediation for previously failing contexts:

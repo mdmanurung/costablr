@@ -42,10 +42,10 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
-- Workspace mode: post-M9 hardening and polish.
+- Workspace mode: cooperative-fusion promotion complete; CRAN-prep hardening is next.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
-- Cooperative fusion: implemented and experimental (non-parity-blocking) in workflow layer. Hardening milestone CLOSED 2026-05-08 (M12). Vignette authored 2026-05-08 (M13, `stablr-cooperative.Rmd`, 434 lines, syntax clean).
-- Latest verified full-suite signal: `PASS 1351`, `FAIL 0`, `WARN 2`, `SKIP 0` (see `PROGRESS.md` for command trail).
+- Cooperative fusion: promoted workflow-layer extension (non-parity-blocking). Hardening milestone CLOSED 2026-05-08 (M12); promotion accessor milestone CLOSED 2026-05-10. Public inspection surface now includes `get_cooperative_features()` and `get_cooperative_diagnostics()`.
+- Latest verified full-suite signal: `PASS 1359`, `FAIL 0`, `WARN 2`, `SKIP 0` (see `PROGRESS.md` for command trail).
 - Latest verified vignette signal: all 5 vignettes build successfully in one pass (`stablr-cooperative`, `stablr-intro`, `stablr-multiomic`, `stablr-python-parity`, `stablr-tcga`).
 
 ### Remediation continuation snapshot (2026-05-08)
@@ -64,9 +64,9 @@ For details that must not be duplicated here:
 
 ### Immediate next tasks (updated)
 
-1. Keep full-suite regression checks green for forward changes.
-2. Keep full vignette build green for forward changes.
-3. Decide next milestone priority (CRAN-prep hardening vs cooperative-fusion promotion).
+1. Start CRAN-prep hardening with a local `R CMD check`/package-check pass.
+2. Keep full-suite regression checks green for forward changes.
+3. Keep full vignette build green for forward changes.
 
 ### Cooperative touchpoints (implementation surfaces)
 
@@ -83,6 +83,8 @@ For details that must not be duplicated here:
 - `cooperation_selection = "validation"` is unsupported for `family = "cox"`.
 - `cooperation_selector = "lambda.1se"` is valid only with `cooperation_selection = "cv"`.
 - Outer fold construction behavior (`.make_multiomic_cv_folds()`) is stable; cooperative diagnostics are additive only.
+- Cooperative result inspection should use `get_cooperative_features()` and
+  `get_cooperative_diagnostics()` instead of relying on nested list internals.
 
 ### Command entrypoints
 
@@ -126,7 +128,7 @@ conda run -n R4_51 R CMD INSTALL multiview
 
 - Core Python-frozen parity closure (gaussian/binomial/multinomial + elastic-net metrics/exports/visuals) is complete; authoritative evidence remains in `PROGRESS.md`.
 - Cox remains non-applicable for Python-frozen parity anchors and is maintained through R-native hardening gates only.
-- Cooperative fusion remains `stablr`-native and experimental; hardening tasks above are the active closure path.
+- Cooperative fusion remains `stablr`-native, optional, and non-parity-blocking; it now has a promoted public inspection surface.
 
 ## Update protocol
 

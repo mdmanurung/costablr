@@ -22,6 +22,13 @@ devtools::install_local("r-pkg/stablr")
 See the vignettes in `vignettes/` for end-to-end examples:
 - `stablr-intro.Rmd`: Basic regression and feature selection
 - `stablr-multiomic.Rmd`: Multi-omic and classification workflows
+- `stablr-cooperative.Rmd`: Cooperative fusion workflows with `multiview`
+- `stablr-python-parity.Rmd`: Python-to-R parity examples
+- `stablr-tcga.Rmd`: TCGA Breast Cancer multi-omic workflow
+
+Cooperative-fusion results can be inspected with
+`get_cooperative_features()` and `get_cooperative_diagnostics()` when
+`cooperative_fusion = TRUE`.
 
 ## Documentation
 

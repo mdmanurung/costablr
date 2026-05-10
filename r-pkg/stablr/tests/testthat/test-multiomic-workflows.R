@@ -975,3 +975,100 @@ test_that("print.stabl_multiomic_fit omits cooperative line when branch absent",
   expect_false(any(grepl("Cooperative fusion", out)),
                info = "print should not mention cooperative fusion when branch is NULL")
 })
+
+test_that("cooperative accessors expose selected features and diagnostics", {
+  diagnostics <- data.frame(
+    rho = c(0, 0.3),
+    lambda = c(0.12, 0.08),
+    metric_value = c(0.4, 0.2),
+    selected = c(FALSE, TRUE)
+  )
+  fit <- structure(
+    list(
+      fits = list(omic_a = NULL, omic_b = NULL),
+      selected_features = list(omic_a = character(0), omic_b = character(0)),
+      selected_train = list(omic_a = matrix(nrow = 0, ncol = 0),
+                            omic_b = matrix(nrow = 0, ncol = 0)),
+      selected_valid = NULL,
+      early_fusion = NULL,
+      late_fusion = NULL,
+      cooperative_fusion = list(
+        selected_features = list(omic_a = c("a1", "a3"), omic_b = "b2"),
+        diagnostics = diagnostics
+      )
+    ),
+    class = "stabl_multiomic_fit"
+  )
+
+  expect_equal(
+    get_cooperative_features(fit),
+    list(omic_a = c("a1", "a3"), omic_b = "b2")
+  )
+  expect_equal(get_cooperative_features(fit, view = "omic_b"), "b2")
+  expect_equal(get_cooperative_diagnostics(fit), diagnostics)
+  expect_error(get_cooperative_features(fit, view = "missing"), "view")
+})
+
+test_that("cooperative accessors fail clearly when branch is absent", {
+  fit <- structure(
+    list(
+      fits = list(omic_a = NULL),
+      selected_features = list(omic_a = character(0)),
+      selected_train = list(omic_a = matrix(nrow = 0, ncol = 0)),
+      selected_valid = NULL,
+      early_fusion = NULL,
+      late_fusion = NULL
+    ),
+    class = "stabl_multiomic_fit"
+  )
+
+  expect_error(get_cooperative_features(fit), "cooperative_fusion = TRUE")
+  expect_error(get_cooperative_diagnostics(fit), "cooperative_fusion = TRUE")
+})
+
+test_that("cooperative accessors support multiomic cv objects", {
+  fold_fit <- structure(
+    list(
+      fits = list(omic_a = NULL, omic_b = NULL),
+      selected_features = list(omic_a = character(0), omic_b = character(0)),
+      selected_train = list(omic_a = matrix(nrow = 0, ncol = 0),
+                            omic_b = matrix(nrow = 0, ncol = 0)),
+      selected_valid = NULL,
+      early_fusion = NULL,
+      late_fusion = NULL,
+      cooperative_fusion = list(
+        selected_features = list(omic_a = "a1", omic_b = character(0)),
+        diagnostics = data.frame(rho = 0, lambda = 0.1, metric_value = 0.2,
+                                 selected = TRUE)
+      )
+    ),
+    class = "stabl_multiomic_fit"
+  )
+  cv <- structure(
+    list(
+      folds = list(list(fold = "Fold1")),
+      fold_results = list(Fold1 = fold_fit),
+      diagnostics = data.frame(
+        fold = "Fold1",
+        omic = c("omic_a", "omic_b"),
+        n_selected = c(1L, 0L),
+        threshold = c(0.3, 0.3),
+        max_score = c(0.5, 0.1),
+        cooperative_rho = c(0, 0),
+        cooperative_lambda = c(0.1, 0.1),
+        cooperative_score = c(0.2, 0.2)
+      )
+    ),
+    class = "stabl_multiomic_cv"
+  )
+
+  expect_equal(get_cooperative_features(cv), list(Fold1 = list(
+    omic_a = "a1",
+    omic_b = character(0)
+  )))
+  expect_named(
+    get_cooperative_diagnostics(cv),
+    c("fold", "omic", "cooperative_rho", "cooperative_lambda",
+      "cooperative_score")
+  )
+})
