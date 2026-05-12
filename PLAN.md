@@ -109,6 +109,9 @@ Generated `doc/` output is build output, not the edit source.
 
 ## Current Planning Focus (Forward Only)
 
+0. **[ACTIVE] TCGA nested-CV head-to-head analysis.** Full SLURM job submitted
+   for cached stablr-vs-DIABLO three-class TCGA benchmark; monitor job
+   `24750538` and render `stablr-tcga-nestedcv.Rmd` from the resulting cache.
 1. ~~**[ACTIVE] Bug-fix milestone — audit findings (2026-05-08).**~~ **CLOSED 2026-05-08. All 7 fixes landed; PASS 356, FAIL 0, SKIP 3.**
 2. ~~Harden cooperative fusion behavior.~~ **CLOSED 2026-05-08 (M12).**
 3. ~~Promote cooperative fusion before CRAN-prep hardening.~~ **CLOSED 2026-05-10. Public cooperative accessors added and targeted suite green.**

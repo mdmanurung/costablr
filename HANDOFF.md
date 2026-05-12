@@ -42,6 +42,16 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
+- TCGA nested-CV head-to-head scaffold is in place:
+  - exported `stabl_multiomic_nested_cv()` supports stratified folds,
+    custom categorical strata, numeric-strata quantile binning, and
+    outer-fold parallelism via `cv_workers`;
+  - `r-pkg/stablr/vignettes/stablr-tcga-nestedcv.Rmd` renders from cache or
+    prints the SLURM command when the cache is absent;
+  - `r-pkg/stablr/inst/analysis/run_tcga_nestedcv.R` runs the cached
+    stablr-vs-DIABLO TCGA benchmark with stablr knockoff artificial features;
+  - full SLURM job `24750538` was submitted and was pending for `Priority` at
+    the submission check.
 - Workspace mode: initial CRAN-prep hardening pass complete; local manual-PDF tooling remains the only package-check warning.
 - R4_51 install status: local `stablr` source package installed from
   `r-pkg/stablr` into the conda env library; exact-location load check reports
@@ -89,9 +99,11 @@ For details that must not be duplicated here:
 
 ### Immediate next tasks (updated)
 
-1. Decide whether to install/fix local TeX manual tooling (`inconsolata.sty`) or defer manual PDF validation to CI/CRAN-like builders.
-2. Keep full-suite regression checks green for forward changes.
-3. Keep full vignette and pkgdown documentation builds green for forward changes.
+1. Monitor SLURM job `24750538`; when it finishes, confirm
+   `r-pkg/stablr/inst/analysis/cache/tcga_nestedcv_results.rds` is complete
+   and re-render `stablr-tcga-nestedcv.Rmd` from cache.
+2. Decide whether to install/fix local TeX manual tooling (`inconsolata.sty`) or defer manual PDF validation to CI/CRAN-like builders.
+3. Keep full-suite regression checks and vignette renders green for forward changes.
 
 ### Vignette runtime profile (2026-05-10)
 
@@ -159,6 +171,18 @@ Build vignettes:
 
 ```bash
 conda run -n R4_51 Rscript -e "devtools::build_vignettes('r-pkg/stablr')"
+```
+
+Run TCGA nested-CV smoke workflow:
+
+```bash
+conda run -n R4_51 Rscript r-pkg/stablr/inst/analysis/run_tcga_nestedcv.R --cache /tmp/tcga_nestedcv_smoke.rds --force --smoke --cv-workers 1 --stabl-workers 1 --diablo-workers 1
+```
+
+Submit full TCGA nested-CV benchmark:
+
+```bash
+sbatch r-pkg/stablr/inst/analysis/tcga_nestedcv.slurm
 ```
 
 Build pkgdown documentation website:

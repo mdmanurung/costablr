@@ -36,6 +36,31 @@ methods on exactly the same samples and blocks.
 The heavy computation is not run while rendering this vignette.  It is executed
 through SLURM and cached as an RDS file.
 
+## Methodological Audit
+
+This workflow was checked against the `nestedcv` vignette guidance for p >> n
+biomedical prediction.  In particular, no filter or feature-selection result is
+computed on the full dataset before cross-validation.  STABL selection,
+downstream multinomial refitting, DIABLO component tuning, and DIABLO `keepX`
+tuning all occur inside the relevant training split before a held-out outer
+fold is predicted.
+
+The design also follows p >> n variable-selection practice:
+
+- predictors are passed as numeric matrices and model scaling is left inside the
+  fitting procedures rather than learned globally before CV;
+- the outer loop estimates performance, while the inner loop selects candidates
+  and tuning parameters;
+- stablr uses knockoff artificial features for FDP-aware stability selection;
+- the deliverable is a recurrence profile over outer folds, not a single
+  definitive biomarker list;
+- no naive post-selection p-values are reported.
+
+Potential confirmatory extensions, outside this cached benchmark, are external
+cohort validation and refitting unpenalised subtype models on only the most
+recurrent features to report effect estimates with appropriate post-selection
+qualification.
+
 ## Run on SLURM
 
 ```{r cache-setup}

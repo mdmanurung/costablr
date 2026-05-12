@@ -39,6 +39,48 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### TCGA Nested-CV Head-to-Head Analysis Scaffold (2026-05-12)
+
+- Added `stabl_multiomic_nested_cv()` as an exported repeated nested-CV
+  workflow for multi-omic STABL classification.
+- The nested-CV API supports:
+  - repeated outer CV for held-out performance estimation,
+  - inner CV for candidate selection,
+  - explicit stratified or unstratified folds,
+  - user-supplied categorical strata,
+  - user-supplied continuous strata with quantile binning,
+  - `cv_workers` outer-fold parallelism and existing `workers` STABL
+    bootstrap parallelism.
+- Added `r-pkg/stablr/vignettes/stablr-tcga-nestedcv.Rmd`, a cache-backed
+  research vignette comparing stablr with mixOmics DIABLO on three-class
+  TCGA PAM50 classification using mRNA and miRNA blocks.
+- Added `r-pkg/stablr/inst/analysis/run_tcga_nestedcv.R` and
+  `r-pkg/stablr/inst/analysis/tcga_nestedcv.slurm`.
+  - Full defaults: repeated stratified 5-fold outer CV x 20 repeats,
+    5-fold inner CV, stablr multinomial STABL with knockoff artificial
+    features, 500 bootstraps, 50 lambda values, and DIABLO tuning via
+    `block.plsda()`, `perf()`, `tune.block.splsda()`, and weighted-vote
+    `centroids.dist` predictions.
+  - The runner caches the full result RDS and exports performance,
+    feature-recurrence, and feature-overlap CSVs.
+- Submitted full HPC job:
+  - `sbatch r-pkg/stablr/inst/analysis/tcga_nestedcv.slurm`
+  - job id `24750538`
+  - status at submission check: pending, reason `Priority`.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr', filter = 'nested-cv')"
+# -> FAIL 0, WARN 0, SKIP 0, PASS 27
+
+conda run -n R4_51 Rscript r-pkg/stablr/inst/analysis/run_tcga_nestedcv.R --cache /tmp/tcga_nestedcv_smoke.rds --force --smoke --cv-workers 1 --stabl-workers 1 --diablo-workers 1
+# -> smoke workflow completed; produced stablr and DIABLO performance table
+
+conda run -n R4_51 Rscript -e "rmarkdown::render('r-pkg/stablr/vignettes/stablr-tcga-nestedcv.Rmd', output_dir = tempfile(), quiet = TRUE)"
+# -> render ok
+```
+
 ### Intro Vignette Clarity Pass (2026-05-12)
 
 - Refined `r-pkg/stablr/vignettes/stablr-intro.Rmd` for new users while
