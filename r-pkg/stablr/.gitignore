@@ -3,3 +3,4 @@
 /vignettes/*.html
 /vignettes/*-cache/
 /vignettes/tcga_results/
+/inst/analysis/cache/

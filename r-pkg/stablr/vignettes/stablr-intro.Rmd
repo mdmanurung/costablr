@@ -1,8 +1,8 @@
 ---
-title: "Quick Start with stablr"
+title: "Introduction to stablr"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Quick Start with stablr}
+  %\VignetteIndexEntry{Introduction to stablr}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -27,14 +27,26 @@ controls the false-discovery proportion (FDP) by comparing real features against
 artificial decoys.
 
 The `stablr` package provides a pure-R implementation with full
-`glmnet`-ecosystem compatibility.  This vignette is deliberately the fast
-path: small simulated data, random-permutation decoys, and enough bootstraps to
-show the workflow without making package builds slow.
+`glmnet`-ecosystem compatibility.  The examples use small simulated data,
+random-permutation decoys, and a limited number of bootstraps so that the
+vignette remains suitable for routine package builds.
 
-**Core idea in one sentence:** a feature is considered a reliable biomarker if
-it is selected by the sparse learner *consistently* across many bootstrap
-resamples, and its selection frequency is substantially higher than what
-randomly permuted noise features achieve.
+In this setting, a reliable biomarker is not a feature selected once by a
+penalised model.  It is a feature selected repeatedly across bootstrap
+resamples, with a selection frequency that stands apart from the frequencies
+obtained by artificial noise features.
+
+The workflow is:
+
+1. Prepare a numeric feature matrix `x` and an outcome vector `y`.
+2. Build a lambda grid with `auto_lambda_grid()`.
+3. Fit STABL with `stabl_fit()`.
+4. Inspect selected features, stability scores, and diagnostic plots.
+
+The fitted object is a ranked feature-selection result rather than a prediction
+model.  It records which features pass the stability threshold, how often each
+feature was selected, and how those selections compare with the
+artificial-feature reference.
 
 ## Installation
 
@@ -47,16 +59,32 @@ devtools::install("r-pkg/stablr")
 library(stablr)
 ```
 
-## Learning objectives
+## Scope
 
-By the end of this vignette you will be able to:
+This vignette covers the single-omic introduction to `stablr`:
 
-1. Build a compact penalty grid with `auto_lambda_grid()`.
-2. Fit a quick STABL model with `stabl_fit()` and read the printed summary.
-3. Extract selected features (`get_support()`) and ranked stability scores
+1. preparing the input objects expected by `stabl_fit()`;
+2. building a compact penalty grid with `auto_lambda_grid()`;
+3. fitting a small binary or regression example;
+4. extracting selected features (`get_support()`) and stability scores
    (`get_importances()`).
-4. Interpret a stability-path plot and an FDR graph.
-5. Switch between lasso, adaptive lasso, and elastic-net base learners.
+5. reading the stability-path and FDP diagnostic plots;
+6. switching between lasso, adaptive lasso, and elastic-net base learners.
+
+## Basic input shape
+
+The examples below use ordinary R objects:
+
+| Object | Expected shape | Notes |
+|---|---|---|
+| `x` | numeric matrix or matrix-like object, samples in rows and features in columns | Column names become feature names in output. |
+| `y` | outcome vector with one value per row of `x` | Use `0`/`1` or a factor-like outcome for `family = "binomial"`; use numeric values for `family = "gaussian"`. |
+| `lambda_grid` | data frame returned by `auto_lambda_grid()` | Each row defines a sparse model setting evaluated during bootstrapping. |
+
+If `x` has row names and `y` has names, they should refer to the same samples in
+the same order.  This convention is especially important in biomarker analyses,
+where a silent sample mismatch can be more damaging than an explicit model
+error.
 
 ---
 
@@ -64,27 +92,35 @@ By the end of this vignette you will be able to:
 
 ### Simulated data
 
-We generate a 120-sample x 24-feature dataset.  Five features (F1-F5) carry a
-true signal; the remaining 19 are pure noise.  Because we know the ground truth,
-we can verify that the highest-ranked features are the planted signals before
-moving to real data.
+Binary classification is often the first biomarker-screening setting: rows are
+samples, columns are candidate features, and the outcome has two classes.  The
+simulated data have 120 samples and 24 features.  Five features (B1-B5) carry a
+true signal; the remaining 19 are pure noise.  Because this is a controlled
+simulation, the expected number of real features is known before fitting:
+`length(signal_features_bin) == 5`.
 
 ```{r sim-binary}
-n <- 120; p <- 24; n_signal <- 5
-X_bin <- matrix(rnorm(n * p), nrow = n,
-                dimnames = list(paste0("s", seq_len(n)),
-                                paste0("F", seq_len(p))))
+n_bin <- 120; p_bin <- 24; n_signal_bin <- 5
+signal_features_bin <- paste0("B", seq_len(n_signal_bin))
 
-# True signal in the first 5 features
-beta_bin       <- c(rep(1.5, n_signal), rep(0, p - n_signal))
+X_bin <- matrix(rnorm(n_bin * p_bin), nrow = n_bin,
+                dimnames = list(paste0("s", seq_len(n_bin)),
+                                paste0("B", seq_len(p_bin))))
+
+# True signal in B1-B5; all other features are independent noise.
+beta_bin       <- c(rep(1.8, n_signal_bin), rep(0, p_bin - n_signal_bin))
 log_odds       <- X_bin %*% beta_bin
-y_bin          <- rbinom(n, size = 1, prob = plogis(log_odds))
+y_bin          <- rbinom(n_bin, size = 1, prob = plogis(log_odds))
 names(y_bin)   <- rownames(X_bin)
 table(y_bin)
+
+signal_features_bin
 ```
 
-The `table()` output shows the class balance of the outcome.  A roughly 50/50
-split is ideal; large imbalances can affect how the lasso selects features.
+The `table()` output gives the class balance.  This small example is easiest to
+interpret when the two classes are not strongly imbalanced; in real analyses,
+substantial imbalance should be considered before interpreting the selected
+features.
 
 ### Fitting STABL
 
@@ -99,16 +135,22 @@ and records which features are selected.  Key arguments:
 | Argument | What it does |
 |---|---|
 | `family` | Passed to `glmnet`; `"binomial"` for 0/1 outcome, `"gaussian"` for continuous. |
-| `n_bootstraps` | Number of bootstrap resamples.  50 is fine for this quick start; use 500+ for final results. |
+| `n_bootstraps` | Number of bootstrap resamples.  The examples use 40-50; final analyses usually need hundreds. |
 | `artificial_type` | `"random_permutation"` adds column-permuted decoys; `"knockoff"` uses model-X knockoffs for stronger FDP control. |
 | `random_state` | Integer seed for full reproducibility. |
 
-We use `n_bootstraps = 50` and `n_lambda = 12` here for a vignette-friendly
-runtime.  The downstream vignettes use real datasets and slightly larger
-settings.
+The example uses `n_bootstraps = 50` and keeps the strong-penalty end of a
+20-point lambda path.  This gives a short runtime and a compact support.  Lower
+Lower penalties admit more features, which can be useful for diagnostics
+but can obscure a small planted signal in a short introductory run.  Final analyses
+should use more bootstrap resamples and should check that the selected features
+are not an artefact of one narrow grid choice.
 
 ```{r fit-binary}
-lambda_bin <- auto_lambda_grid(X_bin, y_bin, family = "binomial", n_lambda = 12)
+lambda_bin_full <- auto_lambda_grid(
+  X_bin, y_bin, family = "binomial", n_lambda = 20
+)
+lambda_bin <- lambda_bin_full[seq_len(6), , drop = FALSE]
 
 fit_bin <- stabl_fit(
   x               = X_bin,
@@ -130,29 +172,49 @@ fit_bin
   bootstraps).
 - **n selected** --- features passing the threshold; for our 5-signal data you
   expect a small number close to 5.
-- **FDP estimate** --- estimated upper bound on the false-discovery proportion
-  among selected features; values well below 0.05 indicate reliable selection.
+- **FDP+ estimate** --- estimated upper bound on the false-discovery proportion
+  among selected features.  With only five planted signals and the additive
+  `+1` FDP+ correction, the best possible value for a perfect five-feature
+  selection is `1 / 5 = 0.2`; larger real analyses can support smaller values.
+
+In a real analysis, these numbers are best read as a screening summary.  The
+most interpretable fits have a selected set of plausible size, a visible gap
+between selected and unselected stability scores, and features that remain
+credible under expert review.
 
 ### Inspecting results
 
-`get_support()` returns the *names* of features that exceed the stability
-threshold --- these are your candidate biomarkers.  On this deliberately small
-example, F1-F5 should dominate the ranked list even if the exact selected set
-varies slightly with platform and `glmnet` version.
+`get_support()` returns a named logical vector for the features that exceed the
+stability threshold.  `get_feature_names_out()` returns those names directly.
+`get_feature_names_out()` gives the selected biomarker names directly, whereas
+`get_support()` is useful when the original feature matrix needs to be subset by
+the selected mask.
+
+In this controlled example the planted real features are B1-B5, so the selected
+set should match `signal_features_bin`.
 
 `get_importances()` returns a named numeric vector of stability scores
 (selection frequencies) for *all* features, sorted from highest to lowest.
 A score of 0.8 means the feature was selected in 80% of bootstraps.  The gap
-between the top entries and the lower ones shows how cleanly signal features
+between the top entries and the lower ones shows how cleanly planted features
 separate from noise.
 
 ```{r results-binary}
 # Features selected at the STABL threshold
-get_support(fit_bin)
+selected_bin <- get_feature_names_out(fit_bin)
+selected_bin
+
+# Compare the selected set against the known simulation truth
+setdiff(signal_features_bin, selected_bin)  # missed planted features
+setdiff(selected_bin, signal_features_bin)  # selected noise features
 
 # Stability scores for all features (sorted descending)
 head(get_importances(fit_bin), 10)
 ```
+
+The two `setdiff()` calls are only possible because the simulation truth is
+known.  In real data, the corresponding evidence comes from the ranked
+stability scores, external validation, and biological or clinical review.
 
 ### Visualisation
 
@@ -161,20 +223,34 @@ lambda increases (left = weak penalty, many features selected; right = strong
 penalty, few features selected).  Features are coloured by whether they exceed
 the threshold.  Look for a visible gap between the top-scoring cluster and the
 bulk of near-zero lines: that gap is your signal-to-noise contrast.  On the
-simulated data F1-F5 should form a distinct upper band.
+simulated data B1-B5 should form a distinct upper band.
 
 ```{r plot-binary, fig.alt = "Stability path for binary classification"}
 plot_stabl_path(fit_bin, title = "Binary classification - stability path")
 ```
 
+The plotting helpers return ordinary `ggplot` objects, so the same plot can be
+displayed in the vignette or saved to disk.
+
+```{r save-path-plot, eval = FALSE}
+path_plot <- plot_stabl_path(fit_bin, title = "Binary classification - stability path")
+ggplot2::ggsave("stability-path.png", path_plot, width = 7, height = 5)
+```
+
 **FDR graph** --- the x-axis sweeps candidate thresholds from 0 to 1; the
 y-axis shows the estimated FDP at each threshold.  The dashed vertical line
 marks the chosen threshold (minimises FDP while keeping at least one feature);
-the horizontal dashed line is the FDP target (default 0.05).  A good result
-shows the chosen threshold sitting below the FDP target line.
+the horizontal dashed line is the FDP target (default 0.05).  In this tiny
+five-signal simulation the FDP+ lower bound is `1 / 5 = 0.2`, so use this graph
+as a threshold diagnostic rather than expecting the curve to fall below 0.05.
 
 ```{r fdr-binary, fig.alt = "FDR estimate graph for binary classification"}
 plot_fdr_graph(fit_bin, title = "Binary classification - FDR estimate")
+```
+
+```{r save-fdr-plot, eval = FALSE}
+fdr_plot <- plot_fdr_graph(fit_bin, title = "Binary classification - FDR estimate")
+ggplot2::ggsave("fdr-graph.png", fdr_plot, width = 7, height = 5)
 ```
 
 ---
@@ -183,23 +259,38 @@ plot_fdr_graph(fit_bin, title = "Binary classification - FDR estimate")
 
 ### Simulated data
 
-We reuse the same 120 x 24 dimensions but draw an independent feature matrix
-and generate a *continuous* outcome (linear combination of F1-F5 plus Gaussian
-noise).  The only change to the fitting workflow is `family = "gaussian"`.
+The regression workflow differs mainly in the outcome.  With
+`family = "gaussian"`, `y` is continuous rather than binary.  This example uses
+an independent simulation rather than reusing the binary feature matrix.  Again,
+exactly five features (R1-R5) are planted as real before fitting; the remaining
+19 are independent noise features.
 
 ```{r sim-reg}
-X_reg <- matrix(rnorm(n * p), nrow = n,
-                dimnames = list(paste0("s", seq_len(n)),
-                                paste0("F", seq_len(p))))
-beta_reg     <- c(rep(2, n_signal), rep(0, p - n_signal))
-y_reg        <- X_reg %*% beta_reg + rnorm(n, sd = 1)
+n_reg <- 160; p_reg <- 24; n_signal_reg <- 5
+signal_features_reg <- paste0("R", seq_len(n_signal_reg))
+
+X_reg <- matrix(rnorm(n_reg * p_reg), nrow = n_reg,
+                dimnames = list(paste0("s", seq_len(n_reg)),
+                                paste0("R", seq_len(p_reg))))
+beta_reg     <- c(rep(3, n_signal_reg), rep(0, p_reg - n_signal_reg))
+signal_reg   <- as.numeric(X_reg %*% beta_reg)
+y_reg        <- signal_reg + rnorm(n_reg, sd = 0.5)
 names(y_reg) <- rownames(X_reg)
+
+signal_features_reg
 ```
 
 ### Fitting STABL
 
+The code mirrors the binary example.  Moving from classification to regression
+requires changing `family`, rebuilding the lambda grid for the new outcome, and
+refitting the model.
+
 ```{r fit-reg}
-lambda_reg <- auto_lambda_grid(X_reg, y_reg, family = "gaussian", n_lambda = 12)
+lambda_reg_full <- auto_lambda_grid(
+  X_reg, y_reg, family = "gaussian", n_lambda = 20
+)
+lambda_reg <- lambda_reg_full[seq_len(6), , drop = FALSE]
 
 fit_reg <- stabl_fit(
   x               = X_reg,
@@ -216,18 +307,28 @@ fit_reg
 
 ### Results
 
-The strongest scores should again concentrate on F1-F5.  You may notice slightly different
-stability scores compared to the binary fit --- this is expected because the
-Gaussian loss function changes the effective sparsity of each bootstrap model.
+The strongest scores should concentrate on R1-R5, the planted regression
+features.  You may notice different stability scores compared to the binary fit
+--- this is expected because the Gaussian loss function changes the effective
+sparsity of each bootstrap model.
 
 ```{r results-reg}
-get_support(fit_reg)
+selected_reg <- get_feature_names_out(fit_reg)
+selected_reg
+
+setdiff(signal_features_reg, selected_reg)  # missed planted features
+setdiff(selected_reg, signal_features_reg)  # selected noise features
+
 head(get_importances(fit_reg), 10)
 ```
 
+The selected feature names give the thresholded screening result.  The full
+importance vector keeps the ranked evidence for features just below the chosen
+threshold.
+
 ### Visualisation
 
-The stability path should look qualitatively similar to the binary case: F1-F5
+The stability path should look qualitatively similar to the binary case: R1-R5
 curve upward and separate from the noise features.  Small differences in curve
 heights between the two tasks reflect how each family amplifies feature signal.
 
@@ -239,6 +340,10 @@ plot_stabl_path(fit_reg, title = "Regression - stability path")
 
 ## 3. Learner variants
 
+The default base learner is lasso.  The package also exposes variants for
+settings in which the selection problem has a different structure.  The examples
+below reuse the binary simulation so that the learner choice is the only change.
+
 ### Adaptive lasso
 
 The adaptive lasso re-weights the L1 penalty so that features with small
@@ -249,9 +354,10 @@ selection frequencies while noise features are pushed further toward zero.
 **When to use it:** prefer adaptive lasso when you expect a sparse true signal
 and want a tighter biomarker list with fewer borderline features.
 
-**What to expect:** `get_support(fit_ada)` should return F1-F5, and
-`get_importances()` will typically show higher scores for true features
-compared to plain lasso.
+**What to expect:** B1-B5 should remain among the strongest-ranked features,
+and `get_importances()` will typically show higher scores for true features
+compared to plain lasso.  Borderline noise features can still appear because
+this variant chunk uses a broader introductory lambda grid.
 
 ```{r adaptive-lasso}
 lambda_ada <- auto_lambda_grid(X_bin, y_bin, family = "binomial", n_lambda = 10)
@@ -267,8 +373,12 @@ fit_ada <- stabl_fit(
   random_state    = 42L
 )
 
-get_support(fit_ada)
+get_feature_names_out(fit_ada)
+sum(get_support(fit_ada))
 ```
+
+The count from `sum(get_support(fit_ada))` shows how compact the selected set
+has become.  `get_importances(fit_ada)` keeps the full feature ranking.
 
 ### Elastic net
 
@@ -302,15 +412,20 @@ fit_en <- stabl_fit(
   random_state    = 42L
 )
 
-get_support(fit_en)
+get_feature_names_out(fit_en)
 ```
 
 ---
 
 ## Next steps
 
-- See `vignette("stablr-multiomic")` for a bounded, real-data multi-omic
-  analysis with early and late fusion.
-- See `?stabl_multiomic_cv` for grouped cross-validation workflows.
-- See `?save_stabl_results` for exporting scores, plots, and selected-feature
-  tables to disk.
+This vignette is limited to the single-omic package basics: fitting a model,
+inspecting selected features, viewing diagnostics, and trying common learner
+variants.  Further entry points are:
+
+- Use more bootstraps for final analyses, typically hundreds rather than the
+  small values used here.
+- Use `vignette("stablr-multiomic")` when your data contain multiple omics
+  views.
+- Use `?save_stabl_results` when you are ready to export scores, plots, and
+  selected-feature tables to disk.

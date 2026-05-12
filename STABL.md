@@ -46,6 +46,10 @@ must remain explicit in code and tests:
 2. Generate artificial features $\tilde{X} \in \mathbb{R}^{n \times q}$ using either:
    - random permutation of selected original columns, or
    - knockoff generation.
+   In the R implementation, fixed-design knockoff calls that enter the
+   `p < n < 2p` augmentation regime must still return an artificial block with
+   the original `n` rows; augmented helper rows are construction-only and are
+   trimmed before concatenation.
 3. Concatenate original and artificial blocks:
    $\mathbb{X} = [X | \tilde{X}] \in \mathbb{R}^{n \times (p+q)}$.
 4. Define index sets:

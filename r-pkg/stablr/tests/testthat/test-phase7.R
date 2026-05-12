@@ -547,12 +547,23 @@ test_that("plot_fdr_graph returns a ggplot object", {
   fit <- .make_fit()
   p   <- plot_fdr_graph(fit)
   expect_s3_class(p, "ggplot")
+
+  built <- ggplot2::ggplot_build(p)
+  hline <- built$data[[length(built$data)]]
+  expect_equal(unique(hline$yintercept), 0.05)
 })
 
 test_that("plot_fdr_graph errors when no FDRs_ present", {
   skip_if_not_installed("ggplot2")
   fit <- .make_fit(artificial_type = NULL, hard_threshold = 0.3)
   expect_error(plot_fdr_graph(fit), "artificial_type")
+})
+
+test_that("plot_fdr_graph validates fdr_target", {
+  skip_if_not_installed("ggplot2")
+  fit <- .make_fit()
+  expect_error(plot_fdr_graph(fit, fdr_target = -0.1), "fdr_target")
+  expect_s3_class(plot_fdr_graph(fit, fdr_target = NULL), "ggplot")
 })
 
 test_that("plot_roc returns a ggplot object", {

@@ -1,0 +1,161 @@
+---
+title: "TCGA Breast Cancer Nested-CV Head-to-Head: stablr vs DIABLO"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{TCGA Breast Cancer Nested-CV Head-to-Head: stablr vs DIABLO}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4,
+  cache = FALSE
+)
+```
+
+## Overview
+
+This notebook is the HPC-backed research version of the compact TCGA vignette.
+It compares `stablr` and mixOmics DIABLO on the same three-class PAM50 breast
+cancer task: Basal, Her2, and LumA.
+
+The analysis follows a nested cross-validation design.  The outer folds estimate
+generalisation.  The inner folds perform model selection and tuning.  Feature
+selection is therefore repeated inside each training split, not performed once
+on the full data before validation.
+
+The primary head-to-head uses mRNA and miRNA only.  The protein block in
+`mixOmics::breast.TCGA` is available only for the original training samples,
+while all 220 samples have mRNA and miRNA.  Excluding protein keeps the two
+methods on exactly the same samples and blocks.
+
+The heavy computation is not run while rendering this vignette.  It is executed
+through SLURM and cached as an RDS file.
+
+## Run on SLURM
+
+```{r cache-setup}
+analysis_script <- file.path("..", "inst", "analysis", "run_tcga_nestedcv.R")
+if (!file.exists(analysis_script)) {
+  analysis_script <- file.path("r-pkg", "stablr", "inst", "analysis", "run_tcga_nestedcv.R")
+}
+source(analysis_script)
+
+cache_path <- file.path("..", "inst", "analysis", "cache", "tcga_nestedcv_results.rds")
+if (!file.exists(cache_path)) {
+  cache_path <- file.path("r-pkg", "stablr", "inst", "analysis", "cache", "tcga_nestedcv_results.rds")
+}
+
+slurm_cmd <- "sbatch r-pkg/stablr/inst/analysis/tcga_nestedcv.slurm"
+cat("Expected cache:", cache_path, "\n")
+cat("Submit command:", slurm_cmd, "\n")
+```
+
+```{r cache-status}
+has_results <- tcga_cache_complete(cache_path)
+if (!has_results) {
+  cat(
+    "Nested-CV cache is not available yet.\n",
+    "Submit the SLURM job above, then render this notebook again.\n",
+    sep = ""
+  )
+}
+```
+
+## Analysis Design
+
+```{r design-summary, eval = has_results}
+res <- readRDS(cache_path)
+str(res$settings)
+```
+
+`stablr` uses multinomial stability selection with knockoff artificial features.
+The candidate workflows are mRNA-only, miRNA-only, and early fusion across mRNA
+and miRNA.  Candidate choice is based on inner-CV balanced error rate.
+
+DIABLO uses the mixOmics multiblock sPLS-DA workflow: `block.plsda()` and
+`perf()` choose the number of components, `tune.block.splsda()` tunes `keepX`,
+and the locked outer-fold model is evaluated with weighted-vote
+`centroids.dist` predictions.
+
+## Predictive Performance
+
+```{r performance, eval = has_results}
+res$performance
+```
+
+```{r confusion, eval = has_results}
+stabl_conf <- table(
+  Truth = res$stablr$outer_predictions$truth,
+  Predicted = res$stablr$outer_predictions$predicted
+)
+diablo_conf <- table(
+  Truth = res$diablo$outer_predictions$truth,
+  Predicted = res$diablo$outer_predictions$predicted
+)
+
+cat("stablr confusion matrix:\n")
+print(stabl_conf)
+cat("\nDIABLO confusion matrix:\n")
+print(diablo_conf)
+```
+
+```{r paired-fold-performance, eval = has_results}
+fold_metric <- function(pred) {
+  by_fold <- split(pred, pred$fold_id)
+  do.call(rbind, lapply(names(by_fold), function(id) {
+    m <- tcga_metrics(by_fold[[id]]$truth, by_fold[[id]]$predicted)
+    data.frame(fold_id = id, m, stringsAsFactors = FALSE)
+  }))
+}
+
+stabl_fold <- fold_metric(res$stablr$outer_predictions)
+diablo_fold <- fold_metric(res$diablo$outer_predictions)
+paired <- merge(stabl_fold, diablo_fold, by = "fold_id",
+                suffixes = c("_stablr", "_DIABLO"))
+paired$delta_BER <- paired$balanced_error_rate_stablr -
+  paired$balanced_error_rate_DIABLO
+paired$delta_accuracy <- paired$accuracy_stablr - paired$accuracy_DIABLO
+summary(paired[, c("delta_BER", "delta_accuracy")])
+```
+
+## Feature Comparison
+
+```{r feature-overlap, eval = has_results}
+res$feature_comparison$overlap
+```
+
+```{r feature-recurrence, eval = has_results}
+recurrence <- res$feature_comparison$recurrence
+head(recurrence[order(recurrence$block, -recurrence$recurrence), ], 30)
+```
+
+```{r shared-features, eval = has_results}
+shared <- do.call(rbind, lapply(split(recurrence, recurrence$block), function(tab) {
+  stabl_feats <- tab$feature[tab$method == "stablr"]
+  diablo_feats <- tab$feature[tab$method == "DIABLO"]
+  tab[tab$feature %in% intersect(stabl_feats, diablo_feats), ]
+}))
+shared[order(shared$block, shared$feature, shared$method), ]
+```
+
+## Exported Artifacts
+
+The SLURM runner writes these files next to the cache:
+
+```{r exported-files, eval = has_results}
+list.files(dirname(cache_path), pattern = "tcga_nestedcv", full.names = TRUE)
+```
+
+The CSV files are intended for manuscript tables and supplement material:
+performance, feature recurrence, and feature overlap by omic block.
+
+## Session Info
+
+```{r session-info, eval = has_results}
+res$session_info
+```

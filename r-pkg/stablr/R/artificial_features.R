@@ -59,7 +59,21 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
 
   .make_ko_chunk <- function(x_chunk) {
     tryCatch(
-      knockoff::create.fixed(x_chunk)$Xk,
+      {
+        xk <- withCallingHandlers(
+          knockoff::create.fixed(x_chunk, sigma = 1)$Xk,
+          warning = function(w) {
+            if (grepl("Augmenting the model with extra rows",
+                      conditionMessage(w), fixed = TRUE)) {
+              invokeRestart("muffleWarning")
+            }
+          }
+        )
+        if (nrow(xk) > nrow(x_chunk)) {
+          xk <- xk[seq_len(nrow(x_chunk)), , drop = FALSE]
+        }
+        xk
+      },
       error = function(e) {
         warning(
           "knockoff::create.fixed failed; falling back to random ",

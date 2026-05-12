@@ -190,7 +190,8 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 #' Plot the FDP+ FDR Estimate Curve
 #'
 #' Plots the estimated FDR at each stability threshold, with a vertical dashed
-#' line marking the optimal threshold (the one minimising the FDR estimate).
+#' line marking the optimal threshold (the one minimising the FDR estimate) and
+#' a horizontal dashed line marking the FDP target.
 #' Requires that `object` was fitted with `artificial_type` set (not `NULL`).
 #'
 #' @param object A fitted `"stabl_fit"` object.
@@ -213,18 +214,27 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 #'
 #' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
 #' @param title Character scalar; plot title.  Default `"FDR Estimate"`.
+#' @param fdr_target Numeric scalar or `NULL`; FDP target shown as a horizontal
+#'   dashed line.  Use `NULL` to omit the target line.  Default `0.05`.
 #'
 #' @return A `ggplot` object.  The curve shows the FDP+ estimate at each
 #'   candidate threshold; a vertical dashed line marks the optimal threshold
-#'   stored in `object$fdr_min_threshold_`.
+#'   stored in `object$fdr_min_threshold_`; a horizontal dashed line marks
+#'   `fdr_target` when supplied.
 #'
 #' @seealso [stabl_fit()], [plot_stabl_path()]
 #' @export
-plot_fdr_graph <- function(object, title = "FDR Estimate") {
+plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
   .check_fitted_stabl(object)
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     stop("Package 'ggplot2' is required for plotting. ",
          "Install with: install.packages(\"ggplot2\")", call. = FALSE)
+  }
+  if (!is.null(fdr_target) &&
+      !(is.numeric(fdr_target) && length(fdr_target) == 1L &&
+        is.finite(fdr_target) && fdr_target >= 0)) {
+    stop("`fdr_target` must be a non-negative numeric scalar or NULL.",
+         call. = FALSE)
   }
   if (is.null(object$FDRs_) || is.null(object$fdr_threshold_range)) {
     stop(
@@ -247,7 +257,7 @@ plot_fdr_graph <- function(object, title = "FDR Estimate") {
     opt_label      <- sprintf("Optimal threshold = %.2f", optimal_thresh)
   }
 
-  ggplot2::ggplot(df, ggplot2::aes(x = threshold, y = FDR)) +
+  p <- ggplot2::ggplot(df, ggplot2::aes(x = threshold, y = FDR)) +
     ggplot2::geom_line(colour = .stablr_colors$noise, linewidth = 1) +
     ggplot2::geom_vline(
       xintercept = optimal_thresh,
@@ -273,6 +283,17 @@ plot_fdr_graph <- function(object, title = "FDR Estimate") {
     ggplot2::theme(
       panel.grid.minor   = ggplot2::element_blank()
     )
+
+  if (!is.null(fdr_target)) {
+    p <- p + ggplot2::geom_hline(
+      yintercept = fdr_target,
+      linetype   = "dashed",
+      colour     = .stablr_colors$threshold,
+      linewidth  = 0.6
+    )
+  }
+
+  p
 }
 
 # ── ROC curve ─────────────────────────────────────────────────────────────────

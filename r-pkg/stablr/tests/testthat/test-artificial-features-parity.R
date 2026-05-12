@@ -32,3 +32,19 @@ test_that("make_artificial_features random_permutation preserves no-duplicate so
   expect_equal(length(unique(out$noise_col_indices)), 6L)
   expect_true(all(out$noise_col_indices >= 1L & out$noise_col_indices <= ncol(x)))
 })
+
+test_that("make_knockoff_features handles p < n < 2p augmentation without fallback", {
+  skip_if_not_installed("knockoff")
+  withr::local_seed(3)
+  x <- matrix(rnorm(60 * 40), nrow = 60,
+              dimnames = list(paste0("s", 1:60), paste0("f", 1:40)))
+
+  expect_warning(
+    out <- make_knockoff_features(x, n_injected = 10L),
+    NA
+  )
+
+  expect_equal(dim(out$x_augmented), c(60L, 50L))
+  expect_length(out$noise_col_indices, 10L)
+  expect_true(all(out$noise_col_indices >= 1L & out$noise_col_indices <= ncol(x)))
+})

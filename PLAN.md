@@ -80,13 +80,14 @@ For command-level evidence and exact validation results, use `PROGRESS.md`.
 - Python reference scripts remain the behavior anchor for parity checks where tests are not yet frozen.
 - Current workspace scope (2026-05-03): CI workflow implementation is deferred; validation is performed via local R test suites.
 
-## Vignette Status (as of 2026-05-10) — Complete
+## Vignette Status (as of 2026-05-12) — Complete
 
 All 5 stablr vignettes have canonical source under `r-pkg/stablr/vignettes/`
 and rebuild successfully via `devtools::build_vignettes('r-pkg/stablr')`.
 Generated `doc/` output is build output, not the edit source.
 
-- `stablr-intro.Rmd` ✅ — quick simulated-data start.
+- `stablr-intro.Rmd` ✅ — simulated-data introduction with clearer input
+  contract, selected-feature interpretation, and single-omic scope boundaries.
 - `stablr-multiomic.Rmd` ✅ — bounded real OOL multi-omic workflow.
 - `stablr-python-parity.Rmd` ✅ — bounded Python-to-R workflow mapping with
   high-fidelity parity settings documented as an extended run.
@@ -113,9 +114,12 @@ Generated `doc/` output is build output, not the edit source.
 3. ~~Promote cooperative fusion before CRAN-prep hardening.~~ **CLOSED 2026-05-10. Public cooperative accessors added and targeted suite green.**
 4. ~~Additional parity tests for multiclass (multinomial) and Cox families.~~ **CLOSED 2026-05-08. 7 new test cases added; see PROGRESS.md.**
 5. ~~Initial CRAN-prep hardening pass.~~ **CLOSED 2026-05-10. Package-code `R CMD check --no-manual` is `Status: OK`; full manual check has only local TeX `inconsolata.sty` warning.**
-6. Keep local deterministic validation green for every forward change.
-7. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
-8. Next CRAN-prep priority: decide whether to install/fix local TeX manual tooling or defer manual PDF validation to CI/CRAN-like builders.
+6. ~~FDR graph vignette mismatch: documented horizontal FDP target line missing from `plot_fdr_graph()`.~~ **CLOSED 2026-05-12. Helper now draws `fdr_target = 0.05` by default; targeted plotting tests green.**
+7. ~~Intro-vignette toy simulations over-selected in regression because low-penalty lambda values made noise features stable.~~ **CLOSED 2026-05-12. Binary and regression examples now use independent planted-support simulations and compact strong-penalty lambda grids; render green.**
+8. ~~Intro-vignette clarity pass for new users while preserving introductory scope.~~ **CLOSED 2026-05-12. Added input-shape orientation, smoother selected-feature interpretation, explicit plot-saving pattern, and less formulaic prose; single-vignette render green.**
+9. Keep local deterministic validation green for every forward change.
+10. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
+11. Next CRAN-prep priority: decide whether to install/fix local TeX manual tooling or defer manual PDF validation to CI/CRAN-like builders.
 
 ## Remediation Audit Execution Status (2026-05-08)
 
@@ -460,3 +464,22 @@ Promotion criteria:
 - Optional-dependency failure paths are validated and stable.
 - Public cooperative result inspection does not require direct `$` traversal.
 - Operator-facing docs (`HANDOFF.md`) and factual logs (`PROGRESS.md`) remain synchronized.
+
+## Maintenance Notes
+
+- 2026-05-12: Quick-start vignette regression simulation should keep gaussian
+  outcomes as named numeric vectors. The immediate implementation fix is logged
+  in `PROGRESS.md`; no roadmap or acceptance-gate change is required.
+- 2026-05-12: Knockoff artificial-feature generation now covers the
+  `p < n < 2p` fixed-design augmentation case without falling back to random
+  permutation. This is logged in `PROGRESS.md`; no roadmap or acceptance-gate
+  change is required.
+- 2026-05-12: `stablr-multiomic.Rmd` now explicitly states that it is a bounded
+  OOL package example rather than a full reproduction of the Python tutorial
+  notebook. Tutorial-dataset parity remains owned by `stablr-python-parity.Rmd`;
+  no roadmap or acceptance-gate change is required.
+- 2026-05-12: `stablr-python-parity.Rmd` now runs the repository tutorial data
+  path with notebook-scale OOL/COVID settings and reports selected-feature
+  overlap against `Notebook examples/Tutorial Notebook.ipynb`. The fresh render
+  recovered all 7 OOL tutorial features and all 6 COVID tutorial features; no
+  roadmap or acceptance-gate change is required.

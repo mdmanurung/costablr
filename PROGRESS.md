@@ -39,6 +39,73 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Intro Vignette Clarity Pass (2026-05-12)
+
+- Refined `r-pkg/stablr/vignettes/stablr-intro.Rmd` for new users while
+  keeping the scope limited to the package introduction.
+- Added a compact input-shape section for `x`, `y`, and `lambda_grid`, with
+  explicit sample-alignment guidance.
+- Clarified that the fitted object is a ranked feature-selection result rather
+  than a prediction-model tutorial.
+- Expanded binary and regression interpretation around selected features,
+  stability scores, simulation-only truth checks, and diagnostic plots.
+- Changed the binary plot chunks to display plots in the vignette and moved
+  disk-saving examples to non-evaluated chunks.
+- Revised newly added prose to avoid formulaic tutorial phrasing and keep a more
+  direct explanatory style.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "rmarkdown::render('r-pkg/stablr/vignettes/stablr-intro.Rmd', output_dir = tempfile(), quiet = TRUE)"
+# -> rendered successfully
+```
+
+### FDR Graph FDP Target Line Fix (2026-05-12)
+
+- Updated `plot_fdr_graph()` to draw the documented horizontal dashed FDP
+  target line by default at `fdr_target = 0.05`.
+- Added `fdr_target` as an optional argument; `NULL` omits the line.
+- Fixed the intro vignette FDR example so it relies on the plotting helper
+  instead of manually adding a malformed `geom_hline()` layer.
+- Updated `plot_fdr_graph` Rd documentation and added regression coverage for
+  the target line and `fdr_target` validation.
+- Reinstalled local `stablr` source into the default `R4_51` R library
+  (`/exports/para-lipg-hpc/mdmanurung/R/4.5`) so interactive use sees the new
+  helper signature.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "pkgload::load_all('r-pkg/stablr', quiet = TRUE); testthat::test_file('r-pkg/stablr/tests/testthat/test-phase7.R')"
+# -> FAIL 0, WARN 0, SKIP 0, PASS 83
+
+conda run -n R4_51 R CMD INSTALL r-pkg/stablr
+# -> * DONE (stablr)
+
+conda run -n R4_51 Rscript -e 'library(stablr); p <- plot_fdr_graph(structure(list(stabl_scores_=matrix(0,1,1), feature_names="x", fitted_lambda_grid=data.frame(lambda=1), support_=TRUE, FDRs_=c(0.1,0.04), fdr_threshold_range=c(0.1,0.2), fdr_min_threshold_=0.2, min_fdr_=0.04), class="stabl_fit")); b <- ggplot2::ggplot_build(p); cat(unique(b$data[[length(b$data)]]$yintercept), "\n")'
+# -> 0.05
+```
+
+### R4_51 Local Package Install (2026-05-12)
+
+- Installed the local source package from `r-pkg/stablr` into the `R4_51`
+  conda environment library at
+  `/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/R4_51/lib/R/library`.
+- Verified the installed package loads from that exact library and reports
+  version `0.0.0.9000`.
+
+Validation:
+
+```bash
+conda run -n R4_51 R CMD INSTALL -l /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/R4_51/lib/R/library r-pkg/stablr
+# -> * DONE (stablr)
+
+conda run -n R4_51 Rscript -e "lib <- '/exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/R4_51/lib/R/library'; library(stablr, lib.loc = lib); cat(as.character(packageVersion('stablr')), '\n'); cat(system.file(package = 'stablr'), '\n')"
+# -> 0.0.0.9000
+# -> /exports/archive/hg-funcgenom-research/mdmanurung/conda/envs/R4_51/lib/R/library/stablr
+```
+
 ### Vignette Runtime Realism Pass (2026-05-10)
 
 - Refreshed the five-vignette source set to balance realistic examples with
@@ -1082,3 +1149,145 @@ All 4 vignettes build without errors.
 ## Environment Notes
 - R runtime is available via conda environment `R4_51`.
 - Validation command used in this workspace: `conda run -n R4_51 Rscript -e "testthat::test_local('r-pkg/stablr')"`.
+
+### Quick-Start Regression Simulation Fix (2026-05-12)
+
+- Fixed `r-pkg/stablr/vignettes/stablr-intro.Rmd` regression simulation chunk
+  so the linear predictor from `%*%` is coerced to a numeric vector before
+  adding Gaussian noise and assigning sample names.
+- Rationale: `%*%` returns a one-column matrix; keeping `y_reg` as a plain
+  named numeric vector is the expected shape for the gaussian quick-start path.
+- Follow-up fix: renamed binary plot objects from `p` to `path_plot` and
+  `fdr_plot` so the feature-count scalar `p <- 24` is not overwritten before
+  the regression simulation chunk.
+
+Validation:
+
+- `conda run -n R4_51 Rscript -e "<focused regression simulation + gaussian stabl_fit smoke>"`
+  passed.
+- Checks confirmed `y_reg` is numeric, has no matrix dimensions, preserves
+  sample names, `auto_lambda_grid(..., family = "gaussian")` returns a valid
+  grid, and a 5-bootstrap gaussian `stabl_fit()` completes.
+- Full `stablr-intro.Rmd` render initially reproduced the user failure at
+  `sim-reg`: `n * p` failed because `p` had been rebound to a ggplot object.
+- Full-render validation after renaming the plot variables passed:
+  `conda run -n R4_51 Rscript -e "rmarkdown::render('r-pkg/stablr/vignettes/stablr-intro.Rmd', output_file = tempfile(fileext = '.html'), quiet = FALSE)"`
+  completed all 29 chunks and created the HTML output in `/tmp`.
+
+### Intro Vignette Planted-Support Calibration (2026-05-12)
+
+- Updated `r-pkg/stablr/vignettes/stablr-intro.Rmd` so binary and regression
+  quick-start examples no longer reuse shared simulation dimensions/state.
+- Binary example now defines explicit planted real features `B1`-`B5`
+  (`signal_features_bin`) and uses a compact strong-penalty slice from a
+  20-point binomial lambda path.
+- Regression example now defines an independent 160 x 24 simulation with
+  planted real features `R1`-`R5` (`signal_features_reg`) and uses a compact
+  strong-penalty slice from a 20-point gaussian lambda path.
+- Result inspection chunks now compare selected features with the known planted
+  support using `setdiff(...)`, making missed planted features and selected
+  noise features explicit in the rendered output.
+- Adjusted vignette interpretation text for tiny-example FDP+: with exactly
+  five selected planted features and the additive `+1` FDP+ correction, the
+  best possible FDP+ is `1 / 5 = 0.2`, so the plot is documented as a threshold
+  diagnostic rather than expected to fall below the default 0.05 target.
+
+Validation:
+
+- `conda run -n R4_51 Rscript -e "<binary/regression intro simulation verification>"`
+  reported `binary selected 5 B1,B2,B3,B4,B5 threshold 0.74 min_fdp 0.2` and
+  `reg selected 5 R1,R2,R3,R4,R5 threshold 0.08 min_fdp 0.2`.
+- `conda run -n R4_51 Rscript -e "td <- tempdir(); rmarkdown::render('r-pkg/stablr/vignettes/stablr-intro.Rmd', output_file = tempfile(fileext = '.html'), knit_root_dir = td, quiet = FALSE)"`
+  completed all 29 chunks and created the HTML output in `/tmp`.
+
+### Knockoff Augmentation Warning Fix (2026-05-12)
+
+- Fixed `r-pkg/stablr/R/artificial_features.R` so
+  `make_knockoff_features()` handles the `p < n < 2p` case where
+  `knockoff::create.fixed()` augments the design with extra rows.
+- Updated `STABL.md` to document that those augmented rows are
+  construction-only and the artificial block is trimmed back to the original
+  sample count before concatenation.
+- The wrapper now supplies `sigma = 1`, muffles only the known augmentation
+  warning, and trims returned knockoff rows back to the original sample count
+  before appending artificial features.
+- Added regression coverage in
+  `r-pkg/stablr/tests/testthat/test-artificial-features-parity.R` for
+  `p < n < 2p` knockoff generation without fallback warnings.
+
+Validation:
+
+- `conda run -n R4_51 Rscript -e "setwd('r-pkg/stablr'); devtools::load_all(quiet = TRUE); testthat::test_file('tests/testthat/test-artificial-features-parity.R')"`
+  passed: `PASS 10`, `FAIL 0`, `WARN 0`, `SKIP 0`.
+- `conda run -n R4_51 Rscript -e "<60 x 40 gaussian stabl_fit smoke with artificial_type = 'knockoff'>"`
+  returned a valid `stabl_fit` object with `stabl_scores_` dimensions `40 x 3`.
+- `conda run -n R4_51 R CMD INSTALL r-pkg/stablr` completed successfully and
+  installed the patched source into `/exports/para-lipg-hpc/mdmanurung/R/4.5`.
+- Installed-package smoke check with `library(stablr)` returned a valid
+  `stabl_fit` object with `stabl_scores_` dimensions `40 x 3`.
+
+### Tutorial Notebook vs Multiomic Vignette Comparison (2026-05-12)
+
+- Compared `Notebook examples/Tutorial Notebook.ipynb` against
+  `r-pkg/stablr/vignettes/stablr-multiomic.Rmd`, focusing on the tutorial
+  datasets.
+- Main finding: the multiomic vignette is intentionally a bounded package
+  example, not a full tutorial parity reproduction.
+  - Tutorial OOL-CV training data: 150 samples with CyTOF 1502 features,
+    Proteomics 1317 features, and Metabolomics 3529 features.
+  - R multiomic vignette: bundled OOL subset with 150 training samples and
+    21 validation samples, CyTOF 100 features and Proteomics 100 features only.
+  - Tutorial COVID-19 data: Proteomics binary classification with 68 training
+    samples and 784 validation samples; this dataset is absent from
+    `stablr-multiomic.Rmd` and represented in `stablr-python-parity.Rmd`.
+- Preprocessing difference is likely a major source of result drift:
+  the tutorial applies zero-variance filtering, high-missingness filtering,
+  median imputation, and standardisation before STABL; `stablr-multiomic.Rmd`
+  mostly uses the bundled matrices directly.
+- Added an explicit note to `stablr-multiomic.Rmd` documenting this scope
+  boundary and pointing tutorial-parity users to
+  `vignette("stablr-python-parity")`.
+
+Validation:
+
+- Read-only Python inspection confirmed the tutorial data dimensions and
+  intended preprocessing retention counts.
+- Read-only R inspection confirmed `load_ool_data()` returns OOL train
+  dimensions `150 x 100` for both CyTOF and Proteomics, validation dimensions
+  `21 x 100` for both omics, and no missing values.
+- No full vignette render was run; the source edit is prose-only.
+
+### Python Parity Vignette Full Render (2026-05-12)
+
+- Updated `r-pkg/stablr/vignettes/stablr-python-parity.Rmd` so the tutorial
+  parity path discovers repository-level `Sample Data` from the package
+  vignette working directory.
+- Matched the tutorial preprocessing sequence more closely:
+  zero-variance filtering, `LowInfoFilter(max_nan_fraction = 0.2)` behavior,
+  median imputation, and population-SD standardisation.
+- Switched the rendered tutorial-data run to the notebook-scale STABL settings:
+  OOL uses 500 bootstraps, 10 lambda values, and `artificial_type = "knockoff"`;
+  COVID-19 uses 1000 bootstraps, 10 lambda values, and
+  `artificial_type = "random_permutation"`.
+- Added explicit selected-feature overlap reporting against the Python tutorial
+  notebook feature sets.
+- COVID-19 validation preprocessing now preserves the full training feature
+  space and fills validation-missing retained columns from training medians,
+  allowing the validation ROC/PRC chunks to run after full-training feature
+  selection.
+
+Validation:
+
+- `conda run -n R4_51 Rscript -e 'setwd("r-pkg/stablr"); knitr::opts_chunk$set(cache.rebuild = TRUE); rmarkdown::render("vignettes/stablr-python-parity.Rmd", output_format="html_document", clean=FALSE, quiet=FALSE)'`
+  completed all 42 chunks and created `stablr-python-parity.html`.
+- Rendered OOL result: 150 training samples x 1317 features, 21 validation
+  samples x 1317 features; selected 9 features and recovered all 7 Python
+  tutorial OOL features (`Overlap count: 7 of 7`). Validation Pearson
+  `r = 0.877`, RMSE `14.69`.
+- Rendered COVID-19 result: 68 training samples x 1463 features, 784 validation
+  samples x 1463 features; selected 13 features and recovered all 6 Python
+  tutorial COVID-19 features (`Overlap count: 6 of 6`).
+- Expected warnings observed: OOL knockoff construction falls back for chunks
+  where fixed-design knockoff dimensions require `n > p`; COVID-19 glmnet emits
+  rare-class bootstrap warnings for some resamples. Neither warning stopped the
+  render.
