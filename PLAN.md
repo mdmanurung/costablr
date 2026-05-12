@@ -80,11 +80,13 @@ For command-level evidence and exact validation results, use `PROGRESS.md`.
 - Python reference scripts remain the behavior anchor for parity checks where tests are not yet frozen.
 - Current workspace scope (2026-05-03): CI workflow implementation is deferred; validation is performed via local R test suites.
 
-## Vignette Status (as of 2026-05-12) — Complete
+## Vignette Status (as of 2026-05-12) — Rewrite Pending Render Validation
 
-All 5 stablr vignettes have canonical source under `r-pkg/stablr/vignettes/`
-and rebuild successfully via `devtools::build_vignettes('r-pkg/stablr')`.
-Generated `doc/` output is build output, not the edit source.
+All 6 stablr vignette sources have canonical source under
+`r-pkg/stablr/vignettes/`.  Generated `doc/` output is build output, not the
+edit source.  The five non-nested-CV vignettes previously rebuilt successfully
+via `devtools::build_vignettes('r-pkg/stablr')`; after the 2026-05-12 narrative
+rewrite, parallel render validation is active as SLURM array job `24752130`.
 
 - `stablr-intro.Rmd` ✅ — simulated-data introduction with clearer input
   contract, selected-feature interpretation, and single-omic scope boundaries.
@@ -94,6 +96,9 @@ Generated `doc/` output is build output, not the edit source.
 - `stablr-tcga.Rmd` ✅ — TCGA Breast Cancer multi-omic workflow.
 - `stablr-cooperative.Rmd` ✅ — bounded cooperative fusion workflow; outer CV
   shown but not evaluated during vignette builds.
+- `stablr-tcga-nestedcv.Rmd` ⏸ — HPC-backed nested-CV research vignette;
+  source rewritten, but excluded from the vignette render array because the
+  benchmark cache is managed by the separate TCGA nested-CV SLURM workflow.
 
 ## Documentation Website Status (as of 2026-05-10) — Complete
 
@@ -109,20 +114,24 @@ Generated `doc/` output is build output, not the edit source.
 
 ## Current Planning Focus (Forward Only)
 
-0. **[ACTIVE] TCGA nested-CV head-to-head analysis.** Full SLURM job submitted
+0. **[ACTIVE] Vignette render validation after narrative rewrite.** Parallel
+   SLURM array `24752130` renders the five non-nested-CV vignettes with 6 CPUs,
+   128 GB RAM, and 24H walltime per task; monitor logs in
+   `r-pkg/stablr/inst/analysis/cache/vignette-renders/`.
+1. **[ACTIVE] TCGA nested-CV head-to-head analysis.** Full SLURM job submitted
    for cached stablr-vs-DIABLO three-class TCGA benchmark; monitor job
    `24750538` and render `stablr-tcga-nestedcv.Rmd` from the resulting cache.
-1. ~~**[ACTIVE] Bug-fix milestone — audit findings (2026-05-08).**~~ **CLOSED 2026-05-08. All 7 fixes landed; PASS 356, FAIL 0, SKIP 3.**
-2. ~~Harden cooperative fusion behavior.~~ **CLOSED 2026-05-08 (M12).**
-3. ~~Promote cooperative fusion before CRAN-prep hardening.~~ **CLOSED 2026-05-10. Public cooperative accessors added and targeted suite green.**
-4. ~~Additional parity tests for multiclass (multinomial) and Cox families.~~ **CLOSED 2026-05-08. 7 new test cases added; see PROGRESS.md.**
-5. ~~Initial CRAN-prep hardening pass.~~ **CLOSED 2026-05-10. Package-code `R CMD check --no-manual` is `Status: OK`; full manual check has only local TeX `inconsolata.sty` warning.**
-6. ~~FDR graph vignette mismatch: documented horizontal FDP target line missing from `plot_fdr_graph()`.~~ **CLOSED 2026-05-12. Helper now draws `fdr_target = 0.05` by default; targeted plotting tests green.**
-7. ~~Intro-vignette toy simulations over-selected in regression because low-penalty lambda values made noise features stable.~~ **CLOSED 2026-05-12. Binary and regression examples now use independent planted-support simulations and compact strong-penalty lambda grids; render green.**
-8. ~~Intro-vignette clarity pass for new users while preserving introductory scope.~~ **CLOSED 2026-05-12. Added input-shape orientation, smoother selected-feature interpretation, explicit plot-saving pattern, and less formulaic prose; single-vignette render green.**
-9. Keep local deterministic validation green for every forward change.
-10. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
-11. Next CRAN-prep priority: decide whether to install/fix local TeX manual tooling or defer manual PDF validation to CI/CRAN-like builders.
+2. ~~**[ACTIVE] Bug-fix milestone — audit findings (2026-05-08).**~~ **CLOSED 2026-05-08. All 7 fixes landed; PASS 356, FAIL 0, SKIP 3.**
+3. ~~Harden cooperative fusion behavior.~~ **CLOSED 2026-05-08 (M12).**
+4. ~~Promote cooperative fusion before CRAN-prep hardening.~~ **CLOSED 2026-05-10. Public cooperative accessors added and targeted suite green.**
+5. ~~Additional parity tests for multiclass (multinomial) and Cox families.~~ **CLOSED 2026-05-08. 7 new test cases added; see PROGRESS.md.**
+6. ~~Initial CRAN-prep hardening pass.~~ **CLOSED 2026-05-10. Package-code `R CMD check --no-manual` is `Status: OK`; full manual check has only local TeX `inconsolata.sty` warning.**
+7. ~~FDR graph vignette mismatch: documented horizontal FDP target line missing from `plot_fdr_graph()`.~~ **CLOSED 2026-05-12. Helper now draws `fdr_target = 0.05` by default; targeted plotting tests green.**
+8. ~~Intro-vignette toy simulations over-selected in regression because low-penalty lambda values made noise features stable.~~ **CLOSED 2026-05-12. Binary and regression examples now use independent planted-support simulations and compact strong-penalty lambda grids; render green.**
+9. ~~Intro-vignette clarity pass for new users while preserving introductory scope.~~ **CLOSED 2026-05-12. Added input-shape orientation, smoother selected-feature interpretation, explicit plot-saving pattern, and less formulaic prose; single-vignette render green.**
+10. Keep local deterministic validation green for every forward change.
+11. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
+12. Next CRAN-prep priority: decide whether to install/fix local TeX manual tooling or defer manual PDF validation to CI/CRAN-like builders.
 
 ## Remediation Audit Execution Status (2026-05-08)
 

@@ -19,19 +19,20 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-This notebook is the HPC-backed research version of the compact TCGA vignette.
+The compact TCGA vignette shows the workflow.  This vignette asks for evidence.
 It compares `stablr` and mixOmics DIABLO on the same three-class PAM50 breast
 cancer task: Basal, Her2, and LumA.
 
-The analysis follows a nested cross-validation design.  The outer folds estimate
-generalisation.  The inner folds perform model selection and tuning.  Feature
-selection is therefore repeated inside each training split, not performed once
-on the full data before validation.
+The design is nested cross-validation.  Outer folds estimate generalisation.
+Inner folds tune the models.  Feature selection is repeated inside each
+training split, rather than performed once on the full dataset before
+validation.  That distinction is the difference between a benchmark and an
+optimistic story.
 
-The primary head-to-head uses mRNA and miRNA only.  The protein block in
+The head-to-head uses mRNA and miRNA only.  The protein block in
 `mixOmics::breast.TCGA` is available only for the original training samples,
-while all 220 samples have mRNA and miRNA.  Excluding protein keeps the two
-methods on exactly the same samples and blocks.
+while all 220 samples have mRNA and miRNA.  Excluding protein keeps both
+methods on the same samples and blocks.
 
 The heavy computation is not run while rendering this vignette.  It is executed
 through SLURM and cached as an RDS file.
@@ -39,11 +40,11 @@ through SLURM and cached as an RDS file.
 ## Methodological Audit
 
 This workflow was checked against the `nestedcv` vignette guidance for p >> n
-biomedical prediction.  In particular, no filter or feature-selection result is
-computed on the full dataset before cross-validation.  STABL selection,
-downstream multinomial refitting, DIABLO component tuning, and DIABLO `keepX`
-tuning all occur inside the relevant training split before a held-out outer
-fold is predicted.
+biomedical prediction.  No filter or feature-selection result is computed on
+the full dataset before cross-validation.  STABL selection, downstream
+multinomial refitting, DIABLO component tuning, and DIABLO `keepX` tuning all
+occur inside the relevant training split before a held-out outer fold is
+predicted.
 
 The design also follows p >> n variable-selection practice:
 
@@ -56,10 +57,9 @@ The design also follows p >> n variable-selection practice:
   definitive biomarker list;
 - no naive post-selection p-values are reported.
 
-Potential confirmatory extensions, outside this cached benchmark, are external
-cohort validation and refitting unpenalised subtype models on only the most
-recurrent features to report effect estimates with appropriate post-selection
-qualification.
+The benchmark is still exploratory.  Confirmatory extensions would include
+external cohort validation and refitting unpenalised subtype models on only the
+most recurrent features, with explicit post-selection qualification.
 
 ## Run on SLURM
 
@@ -93,14 +93,17 @@ if (!has_results) {
 
 ## Analysis Design
 
+The cache records the exact settings used by the SLURM runner:
+
 ```{r design-summary, eval = has_results}
 res <- readRDS(cache_path)
 str(res$settings)
 ```
 
-`stablr` uses multinomial stability selection with knockoff artificial features.
-The candidate workflows are mRNA-only, miRNA-only, and early fusion across mRNA
-and miRNA.  Candidate choice is based on inner-CV balanced error rate.
+`stablr` uses multinomial stability selection with knockoff artificial
+features.  The candidate workflows are mRNA-only, miRNA-only, and early fusion
+across mRNA and miRNA.  Candidate choice is based on inner-CV balanced error
+rate.
 
 DIABLO uses the mixOmics multiblock sPLS-DA workflow: `block.plsda()` and
 `perf()` choose the number of components, `tune.block.splsda()` tunes `keepX`,
@@ -108,6 +111,10 @@ and the locked outer-fold model is evaluated with weighted-vote
 `centroids.dist` predictions.
 
 ## Predictive Performance
+
+The performance table is the first readout.  The confusion matrices show where
+the methods make their mistakes, which is often more informative than a single
+accuracy number.
 
 ```{r performance, eval = has_results}
 res$performance
@@ -149,6 +156,10 @@ summary(paired[, c("delta_BER", "delta_accuracy")])
 ```
 
 ## Feature Comparison
+
+Feature recurrence is the biomarker-side counterpart to predictive
+performance.  A recurrent feature is not merely selected once; it survives
+across many outer training splits.
 
 ```{r feature-overlap, eval = has_results}
 res$feature_comparison$overlap

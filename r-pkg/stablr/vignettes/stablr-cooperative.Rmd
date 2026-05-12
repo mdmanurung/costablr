@@ -33,11 +33,15 @@ if (!requireNamespace("multiview", quietly = TRUE)) {
 
 ## Overview
 
-This vignette demonstrates **cooperative fusion** --- a third multi-omic
-integration strategy in `stablr` that sits between early and late fusion.
-Cooperative fusion fits the views *jointly* via the `multiview` package while
-letting each view retain its own coefficient path, allowing the omics to
-"cooperate" on shared signal rather than competing in a concatenated space.
+Early fusion asks all features to compete in one wide matrix.  Late fusion lets
+each omic make its own prediction and combines the answers afterward.
+Cooperative fusion asks a subtler question: can the views be fitted together
+without erasing their identities?
+
+In `stablr`, cooperative fusion uses the optional `multiview` package.  Each
+view keeps its own coefficient path, but the paths are encouraged to agree
+through a cooperation strength `rho`.  The omics are neither fully pooled nor
+fully isolated.
 
 **When should you use cooperative fusion?**
 
@@ -48,14 +52,14 @@ letting each view retain its own coefficient path, allowing the omics to
 | **Late fusion** | Per-omic fits, then learn a weighted blend of predictions. | Each omic may predict independently; you want omic weights. |
 | **Cooperative fusion** | Joint multiview fit with cooperation strength `rho`; each view has its own coefficient path. | Omics share some signal structure; you want cross-view feature selection to be coherent. |
 
-The cooperation strength parameter `rho` controls how much views are encouraged
-to share their signal.  At `rho = 0` cooperative fusion reduces to independent
-fits; as `rho` grows, views penalise each other towards a common prediction.
-`stablr` tunes `rho` automatically over a user-supplied grid.
+The cooperation strength `rho` controls how much the views are encouraged to
+share signal.  At `rho = 0`, cooperative fusion reduces to independent fits. As
+`rho` grows, the views are penalised toward a common prediction.  `stablr`
+tunes `rho` over a user-supplied grid.
 
 ## Learning objectives
 
-By the end of this vignette you will be able to:
+By the end, you should be able to:
 
 1. Explain what `rho` controls in cooperative fusion and how to choose a grid.
 2. Run `stabl_multiomic_train_validate()` with `cooperative_fusion = TRUE` and
@@ -72,10 +76,10 @@ By the end of this vignette you will be able to:
 ## 1. Load the data
 
 We use the same Onset of Labor (OOL) dataset as `vignette("stablr-multiomic")`:
-two omic layers (CyTOF immune profiling + Proteomics) in 150 pregnant women,
-with days-to-onset-of-labor (DOS) as the continuous regression target.  The
-examples use compact grids so the vignette remains buildable; enlarge the
-bootstrap count and `rho` grid for a final analysis.
+CyTOF immune profiling and Proteomics measured on the same women, with
+days-to-onset-of-labor (DOS) as the continuous outcome.  The examples use
+compact grids so the vignette remains buildable; enlarge the bootstrap count
+and `rho` grid for a final analysis.
 
 ```{r load}
 library(stablr)
@@ -93,11 +97,10 @@ lapply(ool_train$x_list, dim)
 
 ## 2. Build lambda grids
 
-Cooperative fusion requires a lambda grid for each omic, exactly as in
-`vignette("stablr-multiomic")`.  We build one grid per omic with
-`auto_lambda_grid()` and pass them as a named list.  Twelve lambda values are
-enough to demonstrate the workflow without making each cooperative fit too
-expensive.
+Cooperative fusion still needs a lambda grid for each omic.  We build one grid
+per view with `auto_lambda_grid()` and pass the grids as a named list.  Twelve
+lambda values are enough to demonstrate the workflow without making each
+cooperative fit too expensive.
 
 ```{r lambda-grids}
 lambda_list <- list(
@@ -119,10 +122,9 @@ vapply(lambda_list, nrow, integer(1L))
 
 ## 3. Running cooperative fusion
 
-Activate cooperative fusion by setting `cooperative_fusion = TRUE` and
-supplying a `rho` grid.  `stablr` fits one multiview model per `rho` value
-(using shared inner CV folds), then picks the best `rho` by the chosen
-`cooperation_type_measure`.
+Activate cooperative fusion with `cooperative_fusion = TRUE` and a `rho` grid.
+`stablr` fits one multiview model per `rho` value using shared inner CV folds,
+then picks the best `rho` by the chosen `cooperation_type_measure`.
 
 Key arguments:
 
@@ -153,8 +155,8 @@ cf_fit <- stabl_multiomic_train_validate(
 )
 ```
 
-`print()` shows a summary of every active branch.  When cooperative fusion is
-present you will see a `Cooperative fusion:` block at the bottom:
+`print()` shows every active branch.  When cooperative fusion is present, a
+`Cooperative fusion:` block appears at the bottom:
 
 ```{r print-fit}
 cf_fit
@@ -175,8 +177,8 @@ cf_fit
 
 ## 4. Navigating `$cooperative_fusion`
 
-The `cooperative_fusion` element of the result list contains detailed tuning
-output.
+The `cooperative_fusion` element contains the selected model and the tuning
+surface that led to it.
 
 ```{r cf-element}
 cf <- cf_fit$cooperative_fusion
@@ -215,25 +217,26 @@ print(head(cf$valid_predictions))
 
 ### Tuning diagnostics
 
-`$diagnostics` records the CV score at every `rho` in the grid, making it
-possible to inspect the tuning surface:
+`$diagnostics` records the CV score at every `rho` in the grid, so the tuning
+choice can be inspected rather than treated as a black box:
 
 ```{r cf-diagnostics}
 # One row per rho value
 print(cf$diagnostics[, c("rho", "lambda", "metric_value", "selected")])
 ```
 
-The `selected` column marks the winning `rho`.  If the surface is flat (similar
-`metric_value` across `rho`), the omics do not benefit strongly from
-cooperation and `rho = 0` is a safe choice.
+The `selected` column marks the winning `rho`.  If the surface is flat, with
+similar `metric_value` across `rho`, the omics are not gaining much from
+cooperation and `rho = 0` is a defensible choice.
 
 ---
 
 ## 5. Policy constraints
 
-`stablr` enforces two hard constraints to prevent silently incorrect analyses:
+Some combinations are rejected on purpose.  These guards prevent analyses that
+look reasonable in code but do not have a valid tuning interpretation.
 
-### Constraint 1 --- `lambda.1se` requires CV mode
+### Constraint 1 - `lambda.1se` requires CV mode
 
 `lambda.1se` applies the "one-standard-error" rule and is only well-defined
 when cross-validation is used to estimate the error surface.  Requesting it
@@ -256,7 +259,7 @@ stabl_multiomic_train_validate(
 )
 ```
 
-### Constraint 2 --- Cox family cannot use validation-based tuning
+### Constraint 2 - Cox family cannot use validation-based tuning
 
 The multiview Cox path does not support external validation scoring, so
 `cooperation_selection = "validation"` with `family = "cox"` is not supported.
@@ -294,9 +297,9 @@ stabl_multiomic_train_validate(
 
 ## 6. What happens when `multiview` is not installed
 
-Cooperative fusion is guarded by `requireNamespace("multiview")`.  If
-`multiview` is absent and you set `cooperative_fusion = TRUE`, `stablr` stops
-immediately with an informative error before any computation runs:
+Cooperative fusion is optional.  If `multiview` is absent and
+`cooperative_fusion = TRUE`, `stablr` stops immediately with an informative
+error before any computation runs:
 
 ```
 Error: `cooperative_fusion = TRUE` requires the optional 'multiview' package
@@ -312,15 +315,15 @@ R CMD INSTALL multiview
 install.packages("multiview")
 ```
 
-Setting `cooperative_fusion = FALSE` (the default) never triggers this check,
-so all other `stablr` functionality works without `multiview`.
+Setting `cooperative_fusion = FALSE`, the default, never triggers this check, so
+the rest of `stablr` works without `multiview`.
 
 ---
 
 ## 7. Comparing cooperative, early, and late fusion
 
-Run all three strategies in a single call and compare which features each
-selects:
+The most useful comparison is often side by side.  Run all three strategies in
+one call, then compare the selected features:
 
 ```{r all-strategies}
 all_fit <- stabl_multiomic_train_validate(
@@ -369,19 +372,19 @@ cat("\nIn early fusion but not cooperative:\n")
 print(setdiff(ef_features, cf_features))
 ```
 
-**Interpreting differences:** Early fusion sees all features simultaneously in
-a single penalised model; cooperative fusion fits per-view paths that are
-encouraged to agree.  Features unique to cooperative fusion may carry cross-view
-signal that is diluted in the concatenated early-fusion space.
+**Interpreting differences:** early fusion sees all features simultaneously in
+one penalised model; cooperative fusion fits per-view paths that are encouraged
+to agree.  Features unique to cooperative fusion may carry cross-view signal
+that is diluted in the concatenated early-fusion space.
 
 ---
 
 ## 8. Cross-validation with cooperative fusion
 
-Use `stabl_multiomic_cv()` when no pre-defined validation split is available.
-Cooperative fusion parameters propagate to every outer fold automatically.
-This is a realistic analysis pattern, but it multiplies the cost by the number
-of outer folds, so the code is shown but not evaluated during vignette builds:
+Use `stabl_multiomic_cv()` when no predefined validation split is available.
+Cooperative fusion parameters propagate to every outer fold.  This is a
+realistic analysis pattern, but it multiplies cost by the number of outer
+folds, so the code is shown but not evaluated during vignette builds:
 
 ```{r cv-fit, eval = FALSE}
 cv_fit <- stabl_multiomic_cv(
@@ -404,8 +407,8 @@ cv_fit
 ```
 
 The `$diagnostics` data frame includes cooperative-specific columns
-(`cooperative_rho`, `cooperative_lambda`, `cooperative_score`, etc.) so you can
-inspect how `rho` was selected in each outer fold:
+(`cooperative_rho`, `cooperative_lambda`, `cooperative_score`, etc.), making it
+possible to inspect how `rho` was selected in each outer fold:
 
 ```{r cv-diagnostics, eval = FALSE}
 print(cv_fit$diagnostics[, c("fold", "omic", "n_selected",
@@ -415,6 +418,9 @@ print(cv_fit$diagnostics[, c("fold", "omic", "n_selected",
 ---
 
 ## 9. Choosing `rho` and design guidance
+
+The useful `rho` grid is usually modest.  Treat it as a scientific sensitivity
+analysis: did the views need to cooperate, and if so, how strongly?
 
 | Decision | Guidance |
 |---|---|
@@ -429,12 +435,12 @@ print(cv_fit$diagnostics[, c("fold", "omic", "n_selected",
 
 ## Next steps
 
-- See `vignette("stablr-multiomic")` for a walk-through of per-omic, early,
-  and late fusion on the same OOL dataset.
+- See `vignette("stablr-multiomic")` for per-omic, early, and late fusion on
+  the same OOL dataset.
 - See `vignette("stablr-intro")` for single-omic STABL and learner options.
 - Pass `groups` to `stabl_multiomic_train_validate()` to prevent leakage in
-  longitudinal designs; the grouped bootstrap and outer-fold construction both
+  longitudinal designs; grouped bootstrapping and outer-fold construction both
   respect this argument.
 - For binomial and Cox outcomes, set `family = "binomial"` or `family = "cox"`
-  and adjust `cooperation_type_measure` (e.g., `"auc"` for binomial,
-  `"deviance"` for Cox).
+  and adjust `cooperation_type_measure`, such as `"auc"` for binomial or
+  `"deviance"` for Cox.

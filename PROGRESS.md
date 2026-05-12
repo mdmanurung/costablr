@@ -39,6 +39,46 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Vignette Narrative Rewrite and Parallel Render Submission (2026-05-12)
+
+- Rewrote prose across all six canonical vignette sources under
+  `r-pkg/stablr/vignettes/` in an original, curiosity-driven scientific
+  narrative voice while preserving executable code chunks and runtime settings.
+- Updated:
+  - `stablr-intro.Rmd`
+  - `stablr-multiomic.Rmd`
+  - `stablr-python-parity.Rmd`
+  - `stablr-tcga.Rmd`
+  - `stablr-cooperative.Rmd`
+  - `stablr-tcga-nestedcv.Rmd`
+- Added `r-pkg/stablr/inst/analysis/render_vignettes.slurm`, a five-task SLURM
+  array renderer for all non-nested-CV vignettes:
+  - `stablr-intro.Rmd`
+  - `stablr-multiomic.Rmd`
+  - `stablr-python-parity.Rmd`
+  - `stablr-tcga.Rmd`
+  - `stablr-cooperative.Rmd`
+- The nested-CV vignette was intentionally excluded from the render array
+  because its heavy computation is managed separately.
+- Submitted the parallel render array:
+  - `sbatch r-pkg/stablr/inst/analysis/render_vignettes.slurm`
+  - job id `24752130`
+  - requested resources per array task: 6 CPUs, 128 GB RAM, 24H walltime
+  - status at submission check: pending as `24752130_[0-4%5]`
+
+Validation:
+
+```bash
+bash -n r-pkg/stablr/inst/analysis/render_vignettes.slurm
+# -> syntax ok
+
+sbatch r-pkg/stablr/inst/analysis/render_vignettes.slurm
+# -> Submitted batch job 24752130
+
+squeue -j 24752130
+# -> 24752130_[0-4%5] pending
+```
+
 ### TCGA Nested-CV Head-to-Head Analysis Scaffold (2026-05-12)
 
 - Added `stabl_multiomic_nested_cv()` as an exported repeated nested-CV

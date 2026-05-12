@@ -20,16 +20,20 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-This vignette translates the **mixOmics N-Integration Chapter 6** case study
-into the `stablr` idiom.  The original mixOmics workflow uses sparse multi-block
-Discriminant Analysis (sgccaDA) to classify breast cancer subtypes.  Here we ask
-the same scientific question: which mRNA and miRNA features robustly distinguish
-Basal-like tumours from all other subtypes?
+Breast cancer subtype is a molecular label, but it is also a test of
+integration.  The same tumour is measured by mRNA and miRNA assays.  Some
+signals should be visible in one view, some in the other, and some only when the
+views are allowed to compete or cooperate.
 
-The analysis uses the real `breast.TCGA` train/test split from `mixOmics`, but
-with compact STABL settings so the vignette is realistic without becoming a
-long benchmark.  Increase the bootstrap count and lambda-grid size before using
-the result as publication evidence.
+This vignette translates the **mixOmics N-Integration Chapter 6** case study
+into the `stablr` idiom.  The original mixOmics workflow uses sparse
+multi-block Discriminant Analysis (sgccaDA) to classify breast cancer subtypes.
+Here we ask a narrower question: which mRNA and miRNA features robustly
+distinguish Basal-like tumours from all other subtypes?
+
+The analysis uses the real `breast.TCGA` train/test split from `mixOmics`, with
+compact STABL settings so the vignette stays practical.  Increase the bootstrap
+count and lambda-grid size before treating the result as publication evidence.
 
 **Dataset:** `breast.TCGA` from the `mixOmics` package.
 
@@ -52,6 +56,10 @@ library(mixOmics)
 ```
 
 ## 1. Load and prepare data
+
+The train and test matrices are already aligned within the `mixOmics` object.
+We extract mRNA and miRNA, then turn the PAM50 subtype into a binary Basal vs
+non-Basal outcome.
 
 ```{r load-data}
 data(breast.TCGA)
@@ -83,9 +91,10 @@ cat("Test:     ", sum(y_test),  "Basal /", sum(y_test == 0),  "non-Basal\n")
 
 ## 2. Per-omic STABL
 
-We first assess each omic independently.  This establishes a baseline before
-running the integrated workflow.  The vignette uses 30 bootstraps and 12 lambda
-values to keep runtime bounded; use 500-1000 bootstraps for final reporting.
+The first pass treats each assay as its own experiment.  This tells us whether
+mRNA and miRNA each contain stable Basal signal before the integrated model is
+allowed to mix them.  The vignette uses 30 bootstraps and 12 lambda values to
+keep runtime bounded; use 500-1000 bootstraps for final reporting.
 
 ```{r mrna-fit}
 lambda_mrna <- auto_lambda_grid(
@@ -140,8 +149,11 @@ print(plot_stabl_path(fit_mirna, title = "miRNA - stability path"))
 
 ## 3. Integrated multi-omic pipeline
 
-The integrated workflow fits per-omic STABL models, an early-fusion STABL model
-on the concatenated feature matrix, and a late-fusion validation predictor.
+The integrated workflow repeats the per-omic fits inside a common pipeline,
+adds early fusion on the concatenated matrix, and learns a late-fusion
+validation predictor.  In other words, it asks three related questions:
+what is stable in each view, what is stable when all features compete, and how
+much does each view help prediction on held-out tumours?
 
 ```{r integrated-fit}
 lambda_list <- list(
@@ -187,6 +199,10 @@ print(plot_stabl_path(multi_fit$fits$mirna, title = "Integrated - miRNA"))
 
 ## 4. Validation performance
 
+Feature stability is only one axis of evidence.  The held-out test set asks
+whether the selected features and fusion weights carry predictive information
+outside the training data.
+
 ```{r validation-performance}
 lf_preds <- multi_fit$late_fusion$valid_predictions
 
@@ -223,8 +239,9 @@ if (length(mrna_feats) > 0) {
 
 ## 5. Export results
 
-For a vignette, export to `tempdir()` so rendering does not leave generated
-files in the package source tree.
+For a vignette, exports go to `tempdir()` so rendering does not leave generated
+files in the package source tree.  In a real analysis, these CSVs are the
+bridge to notebooks, review tables, and downstream biological interpretation.
 
 ```{r export-results}
 tcga_out_dir <- file.path(tempdir(), "stablr_tcga_results")
@@ -235,6 +252,10 @@ list.files(tcga_out_dir, recursive = TRUE)
 
 ## 6. Comparison with mixOmics
 
+The two toolchains ask related but not identical questions.  mixOmics builds
+latent components for discrimination.  `stablr` centers the feature list and
+calibrates selection stability against decoys.
+
 | Aspect | mixOmics (sgccaDA) | stablr |
 |---|---|---|
 | Method | Sparse CCA + LDA | Bootstrap-stability lasso |
@@ -244,8 +265,8 @@ list.files(tcga_out_dir, recursive = TRUE)
 | Output | Components + loadings | Feature names + stability scores |
 
 Both approaches target compact mRNA and miRNA biomarker sets for the Basal
-subtype.  STABL's advantage is explicit FDP control with no assumption of a
-shared latent space between omics.
+subtype.  STABL's advantage is explicit FDP control with no assumption that the
+omics must share a latent space.
 
 ```{r session-info}
 sessionInfo()

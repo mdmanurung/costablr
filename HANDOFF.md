@@ -42,6 +42,21 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
+- Vignette narrative rewrite is in place across all six canonical sources under
+  `r-pkg/stablr/vignettes/`.  The rewrite used an original, curiosity-driven
+  scientific narrative voice and preserved executable code chunks and runtime
+  settings.
+- Parallel render validation for the five non-nested-CV vignettes was submitted
+  as SLURM array job `24752130` using
+  `r-pkg/stablr/inst/analysis/render_vignettes.slurm`.
+  - Per-task resources: 6 CPUs, 128 GB RAM, 24H walltime.
+  - Array targets: `stablr-intro.Rmd`, `stablr-multiomic.Rmd`,
+    `stablr-python-parity.Rmd`, `stablr-tcga.Rmd`, and
+    `stablr-cooperative.Rmd`.
+  - `stablr-tcga-nestedcv.Rmd` was intentionally excluded from this render
+    array because its benchmark cache is managed by the separate nested-CV
+    workflow.
+  - Status at submission check: pending as `24752130_[0-4%5]`.
 - TCGA nested-CV head-to-head scaffold is in place:
   - exported `stabl_multiomic_nested_cv()` supports stratified folds,
     custom categorical strata, numeric-strata quantile binning, and
@@ -99,11 +114,13 @@ For details that must not be duplicated here:
 
 ### Immediate next tasks (updated)
 
-1. Monitor SLURM job `24750538`; when it finishes, confirm
+1. Monitor SLURM array job `24752130`; when tasks finish, inspect logs under
+   `r-pkg/stablr/inst/analysis/cache/vignette-renders/` and confirm the five
+   non-nested vignette HTML renders completed successfully.
+2. Monitor SLURM job `24750538`; when it finishes, confirm
    `r-pkg/stablr/inst/analysis/cache/tcga_nestedcv_results.rds` is complete
    and re-render `stablr-tcga-nestedcv.Rmd` from cache.
-2. Decide whether to install/fix local TeX manual tooling (`inconsolata.sty`) or defer manual PDF validation to CI/CRAN-like builders.
-3. Keep full-suite regression checks and vignette renders green for forward changes.
+3. Decide whether to install/fix local TeX manual tooling (`inconsolata.sty`) or defer manual PDF validation to CI/CRAN-like builders.
 
 ### Vignette runtime profile (2026-05-10)
 
@@ -183,6 +200,12 @@ Submit full TCGA nested-CV benchmark:
 
 ```bash
 sbatch r-pkg/stablr/inst/analysis/tcga_nestedcv.slurm
+```
+
+Submit parallel render validation for rewritten non-nested vignettes:
+
+```bash
+sbatch r-pkg/stablr/inst/analysis/render_vignettes.slurm
 ```
 
 Build pkgdown documentation website:

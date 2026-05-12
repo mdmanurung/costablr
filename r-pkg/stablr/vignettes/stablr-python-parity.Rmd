@@ -20,12 +20,17 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-This vignette maps the analyses from the STABL Tutorial Notebook onto the R
+A reimplementation earns trust in the details.  The R package does not need to
+share Python's syntax, but it should answer the same scientific questions under
+the same data preparation, resampling, penalty grid, artificial-feature
+strategy, and seed.
+
+This vignette maps the analyses from the STABL Tutorial Notebook onto the
 `stablr` API.  When the repository-level tutorial data are available, it uses
-the same preprocessing shape, bootstrap counts, lambda-grid size, artificial
-feature strategy, and random seed as the notebook sections reproduced below.
-Package builds without the tutorial data fall back to the bundled OOL subset
-and skip the COVID-19 section.
+the same preprocessing shape, bootstrap counts, lambda-grid size,
+artificial-feature strategy, and random seed as the notebook sections
+reproduced below.  Package builds without the tutorial data fall back to the
+bundled OOL subset and skip the COVID-19 section.
 
 | Aspect | Python (`stabl`) | R (`stablr`) |
 |---|---|---|
@@ -64,8 +69,11 @@ notebook's default STABL classifier settings.
 
 ## Preprocessing helpers
 
-The Python tutorial uses:
+Parity starts before model fitting.  The Python tutorial uses this preprocessing
+chain:
 `VarianceThreshold -> LowInfoFilter -> SimpleImputer (median) -> StandardScaler`.
+The helper functions below reproduce that shape in R and keep the fitted
+training-set transformations available for validation data.
 
 ```{r preprocess-helpers}
 find_tutorial_dir <- function(dataset) {
@@ -131,6 +139,11 @@ preprocess_apply <- function(x, pipe) {
 ---
 
 ## Part 1 -- Regression: Onset of Labor Proteomics
+
+The first comparison is a regression task.  We use proteomics to predict
+days-to-onset-of-labor.  If the full tutorial data are present, they are used;
+otherwise the vignette falls back to the bundled OOL subset so the document can
+still render as part of the package.
 
 ```{r ool-load}
 ool_dir <- find_tutorial_dir("Onset of Labor")
@@ -237,6 +250,11 @@ if (length(sel_prot_names) > 0) {
 
 ## Part 2 -- Binary Classification: COVID-19 Proteomics
 
+The second comparison is binary classification.  It is deliberately optional
+because the COVID-19 tutorial files are not bundled with the package.  When the
+data are present, the section follows the notebook's proteomics classifier
+settings and checks whether the same named proteins are recovered.
+
 ```{r covid-check}
 covid_dir <- find_tutorial_dir("COVID-19")
 covid_train_dir <- if (!is.na(covid_dir)) {
@@ -340,6 +358,10 @@ if (length(sel_covid_names) > 0) {
 
 ## Part 3 -- Full pipeline: validation performance
 
+STABL itself is a feature-selection step.  A downstream predictive model is a
+separate decision.  The short examples below fit ordinary validation models
+only after the stability-selected features have been identified.
+
 ```{r ool-pipeline}
 sel_names_prot <- names(which(get_support(fit_prot)))
 cat("OOL: using", length(sel_names_prot), "selected features for final model\n")
@@ -384,16 +406,18 @@ if (length(sel_names_covid) > 0) {
 
 ## Parity notes
 
-- `glmnet` LASSO and scikit-learn LASSO differ in coordinate descent
-  implementation. Feature selections should be concordant but not identical.
+Parity here means matched behavior, not byte-for-byte identity.  `glmnet` LASSO
+and scikit-learn LASSO use different coordinate-descent implementations, so
+feature selections should be concordant but need not be identical.
+
 - With the repository tutorial data available, the OOL run recovers the Python
   tutorial's seven selected OOL proteomics features and may include additional
-  R-specific features because `glmnet` and scikit-learn use different solvers.
+  R-specific features because the solvers differ.
 - With the repository tutorial data available, the COVID-19 run recovers the
   Python tutorial's six selected COVID-19 proteomics features and may include
   additional R-specific features.
-- Stability scores should be compared at matched bootstrap counts, artificial
-  feature strategy, lambda grid, and preprocessing choices.
+- Stability scores should be compared only at matched bootstrap counts,
+  artificial-feature strategy, lambda grid, and preprocessing choices.
 
 ```{r session-info}
 sessionInfo()
