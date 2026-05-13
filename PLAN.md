@@ -156,7 +156,10 @@ narrative rewrite, parallel render validation completed as SLURM array job
     all 11 RaJIVE-style preprocessed immune views, stratified elastic-net
     STABL, cache/export artifact discipline, reader-facing interpretation
     sections, selected-feature clustering heatmaps, multiclass late-fusion
-    scaffolding, and auxiliary cooperative one-vs-rest branches. Heavy branches
+    scaffolding, and auxiliary cooperative one-vs-rest branches. The package
+    workflow now exposes the same OVR strategy directly via
+    `family = "multinomial", cooperative_fusion = TRUE`; native multinomial
+    cooperative optimization remains out of scope. Heavy branches
     should run through `scratch/scripts/run_costablr_baseline_groups_branch.R`
     and `scratch/slurm/costablr_baseline_*.slurm`; the notebook now defaults to
     cached branch consumption (`LOAD_CACHED_RESULTS = TRUE`, heavy `RUN_*`
@@ -220,10 +223,11 @@ narrative rewrite, parallel render validation completed as SLURM array job
     **CLOSED 2026-05-13.** Fixed INT-001 through INT-006 and IMPL-001 through
     IMPL-007 in dependency order. The follow-up performance tranche fixed
     PERF-001, PERF-002, PERF-003, PERF-005, PERF-006, and NAT-002; NAT-001
-    and NAT-003 remain deferred skipped placeholders. Closure signal:
-    full suite `PASS 1481`, `FAIL 0`, `WARN 2`, `SKIP 3`; `devtools::check()`
-    has `0 errors`, with only local `qpdf`/timestamp/toolchain warnings/notes;
-    `pkgdown::check_pkgdown()` reports no problems.
+    and NAT-003 remain deferred skipped placeholders. Latest closure signal:
+    full local test directory passes with `WARN 2` and `SKIP 4`;
+    `devtools::check()` has `0 errors`, with only local
+    `qpdf`/timestamp/toolchain warnings/notes; `pkgdown::check_pkgdown()`
+    reports no problems.
 20. ~~Monitor renamed scratch visualization rerun.~~ **CLOSED 2026-05-13.**
     Scratch AURORA notebooks, helpers, SLURM scripts, cache roots, and output
     roots are now `costablr_*` namespaced under the standalone repository. All

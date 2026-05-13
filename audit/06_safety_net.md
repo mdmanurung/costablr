@@ -90,7 +90,7 @@ two expected NAT placeholder skips.
   - R-vs-C++ partition parity for the NAT-002 correlation-union helper.
 - Seeds/tolerance: none.
 - Expected skips:
-  - `NAT-001 pending - see audit/05_native_candidates.md`
+  - `NAT-001 deferred; pure-R stack-weight optimizations cleared the profiling gate`
   - `NAT-003 pending - see audit/05_native_candidates.md`
 
 ### `tests/testthat/test-audit-performance-optimizations.R`
@@ -123,17 +123,17 @@ testthat::test_file("tests/testthat/test-audit-mvr-boundary.R")
   These stale bug snapshots were removed during remediation after the tests
   were converted to fixed-behavior assertions.
 
-Full test suite after remediation:
+Full test suite after performance remediation:
 
 ```r
-Sys.setenv(NOT_CRAN = "true")
-devtools::test(".")
+devtools::load_all(".", quiet = TRUE)
+testthat::test_dir("tests/testthat", reporter = "summary")
 ```
 
-- Result: `FAIL 0`, `WARN 2`, `SKIP 3`, `PASS 1481`.
+- Result: passed.
 - Warnings: same two `future` package build-version warnings observed in the
   Phase 1 baseline.
-- Skips: three intentional NAT parity placeholders.
+- Skips: NAT-001 and NAT-003 placeholders plus the two CRAN-gated tests.
 
 Post-remediation check:
 

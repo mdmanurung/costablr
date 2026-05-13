@@ -214,7 +214,9 @@ must remain explicit in code and tests:
 - Multiclass probability stacking requires every outcome label to be present
   in the supplied probability-column levels; mismatches are errors rather than
   silently dropped samples.
-- Cooperative fusion remains restricted to families supported by `multiview`;
-  multinomial cooperative learning is intentionally rejected. Multiclass
-  cooperative analyses should be expressed as explicit one-vs-rest binomial
-  branches when needed.
+- `stabl_multiomic_train_validate(cooperative_fusion = TRUE)` supports
+  `family = "multinomial"` as workflow-level automatic one-vs-rest
+  cooperative fusion: one binomial `multiview` model is fitted per class,
+  class response probabilities are row-normalized, and selected features are
+  exposed both by class and as a per-view union. Native multinomial
+  optimization inside `multiview` remains out of scope.

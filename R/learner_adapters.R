@@ -629,7 +629,15 @@ auto_lambda_grid <- function(
 .make_glmnet_batch_adapter <- function(family, alpha_fixed, bootstrap_threshold) {
   .validate_bootstrap_threshold(bootstrap_threshold)
   feature_abs_coefs_batch <- .feature_abs_coefs_batch
+  `.coerce_feature_abs_coefs_batch` <- .coerce_feature_abs_coefs_batch
+  `.feature_abs_coefs_batch_fallback` <- .feature_abs_coefs_batch_fallback
+  `.feature_abs_coefs` <- .feature_abs_coefs
+  environment(feature_abs_coefs_batch) <- environment()
   selected_by_bootstrap_threshold <- .selected_by_bootstrap_threshold
+  `.validate_bootstrap_threshold` <- .validate_bootstrap_threshold
+  `.resolve_bootstrap_threshold` <- .resolve_bootstrap_threshold
+  `.parse_bootstrap_threshold` <- .parse_bootstrap_threshold
+  environment(selected_by_bootstrap_threshold) <- environment()
 
   function(x, y, lambda_grid) {
     n_lambdas  <- nrow(lambda_grid)
@@ -675,8 +683,17 @@ auto_lambda_grid <- function(
                                                bootstrap_threshold) {
   .validate_bootstrap_threshold(bootstrap_threshold)
   feature_abs_coefs <- .feature_abs_coefs
+  environment(feature_abs_coefs) <- environment()
   feature_abs_coefs_batch <- .feature_abs_coefs_batch
+  `.coerce_feature_abs_coefs_batch` <- .coerce_feature_abs_coefs_batch
+  `.feature_abs_coefs_batch_fallback` <- .feature_abs_coefs_batch_fallback
+  `.feature_abs_coefs` <- .feature_abs_coefs
+  environment(feature_abs_coefs_batch) <- environment()
   selected_by_bootstrap_threshold <- .selected_by_bootstrap_threshold
+  `.validate_bootstrap_threshold` <- .validate_bootstrap_threshold
+  `.resolve_bootstrap_threshold` <- .resolve_bootstrap_threshold
+  `.parse_bootstrap_threshold` <- .parse_bootstrap_threshold
+  environment(selected_by_bootstrap_threshold) <- environment()
 
   function(x, y, lambda_grid) {
     lambda_seq <- lambda_grid[["lambda"]]
@@ -711,7 +728,15 @@ auto_lambda_grid <- function(
   }
   groups <- as.integer(as.factor(feature_groups))
   feature_abs_coefs_sparsegl_batch <- .feature_abs_coefs_sparsegl_batch
+  `.coerce_sparsegl_abs_coefs_batch` <- .coerce_sparsegl_abs_coefs_batch
+  `.feature_abs_coefs_sparsegl_batch_fallback` <- .feature_abs_coefs_sparsegl_batch_fallback
+  `.feature_abs_coefs_sparsegl` <- .feature_abs_coefs_sparsegl
+  environment(feature_abs_coefs_sparsegl_batch) <- environment()
   selected_by_bootstrap_threshold <- .selected_by_bootstrap_threshold
+  `.validate_bootstrap_threshold` <- .validate_bootstrap_threshold
+  `.resolve_bootstrap_threshold` <- .resolve_bootstrap_threshold
+  `.parse_bootstrap_threshold` <- .parse_bootstrap_threshold
+  environment(selected_by_bootstrap_threshold) <- environment()
 
   function(x, y, lambda_grid) {
     n_lambdas  <- nrow(lambda_grid)

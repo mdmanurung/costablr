@@ -174,6 +174,10 @@ get_feature_names_out.stabl_fit <- function(object, new_hard_threshold = NULL) {
 #' @param view Optional character scalar naming one omic view.  When supplied
 #'   for a `"stabl_multiomic_fit"`, only that view's cooperative feature names
 #'   are returned.
+#' @param class_level Optional character scalar naming one one-vs-rest class
+#'   for multinomial cooperative fusion.  When supplied, class-specific
+#'   selected features are returned instead of the default union across
+#'   classes.
 #'
 #' @return For `"stabl_multiomic_fit"`, a named list of character vectors, or
 #'   a character vector when `view` is supplied.  For `"stabl_multiomic_cv"`, a
@@ -183,14 +187,33 @@ get_feature_names_out.stabl_fit <- function(object, new_hard_threshold = NULL) {
 #' @seealso [get_cooperative_diagnostics()],
 #'   [stabl_multiomic_train_validate()], [stabl_multiomic_cv()]
 #' @export
-get_cooperative_features <- function(object, view = NULL) {
+get_cooperative_features <- function(object, view = NULL, class_level = NULL) {
   UseMethod("get_cooperative_features")
 }
 
 #' @export
-get_cooperative_features.stabl_multiomic_fit <- function(object, view = NULL) {
+get_cooperative_features.stabl_multiomic_fit <- function(object,
+                                                        view = NULL,
+                                                        class_level = NULL) {
   cf <- .check_cooperative_branch(object)
   features <- cf$selected_features
+
+  if (!is.null(class_level)) {
+    if (is.null(cf$selected_features_by_class)) {
+      stop(
+        "`class_level` is only available for one-vs-rest multinomial cooperative fusion.",
+        call. = FALSE
+      )
+    }
+    if (length(class_level) != 1L || is.na(class_level) ||
+        !(class_level %in% names(cf$selected_features_by_class))) {
+      stop(
+        "`class_level` must name one of the one-vs-rest cooperative classes.",
+        call. = FALSE
+      )
+    }
+    features <- cf$selected_features_by_class[[class_level]]
+  }
 
   if (is.null(view)) {
     return(features)
@@ -207,8 +230,15 @@ get_cooperative_features.stabl_multiomic_fit <- function(object, view = NULL) {
 }
 
 #' @export
-get_cooperative_features.stabl_multiomic_cv <- function(object, view = NULL) {
-  out <- lapply(object$fold_results, get_cooperative_features, view = view)
+get_cooperative_features.stabl_multiomic_cv <- function(object,
+                                                       view = NULL,
+                                                       class_level = NULL) {
+  out <- lapply(
+    object$fold_results,
+    get_cooperative_features,
+    view = view,
+    class_level = class_level
+  )
   names(out) <- names(object$fold_results)
   out
 }
@@ -334,12 +364,22 @@ print.stabl_multiomic_fit <- function(x, ...) {
     cf <- x$cooperative_fusion
     n_cf_sel <- sum(vapply(cf$selected_features, length, integer(1L)))
     cat("  Cooperative fusion:\n")
-    cat("    selection:     ", cf$selection, "\n", sep = "")
-    cat("    rho (chosen):  ", cf$rho, "\n", sep = "")
-    cat("    selector:      ", cf$selector, "\n", sep = "")
-    cat("    type.measure:  ", cf$type_measure, "\n", sep = "")
-    cat("    score:         ", round(cf$score, 4L), "\n", sep = "")
-    cat("    selected feats: ", n_cf_sel, " (across views)\n", sep = "")
+    if (identical(cf$task_type, "multiclass_ovr")) {
+      cat("    task:          one-vs-rest multinomial\n")
+      cat("    classes:       ", paste(cf$levels, collapse = ", "), "\n", sep = "")
+      cat("    selection:     ", cf$selection, "\n", sep = "")
+      cat("    selector:      ", cf$selector, "\n", sep = "")
+      cat("    type.measure:  ", cf$type_measure, "\n", sep = "")
+      cat("    log loss:      ", round(cf$log_loss, 4L), "\n", sep = "")
+      cat("    selected feats: ", n_cf_sel, " (union across views/classes)\n", sep = "")
+    } else {
+      cat("    selection:     ", cf$selection, "\n", sep = "")
+      cat("    rho (chosen):  ", cf$rho, "\n", sep = "")
+      cat("    selector:      ", cf$selector, "\n", sep = "")
+      cat("    type.measure:  ", cf$type_measure, "\n", sep = "")
+      cat("    score:         ", round(cf$score, 4L), "\n", sep = "")
+      cat("    selected feats: ", n_cf_sel, " (across views)\n", sep = "")
+    }
   }
   invisible(x)
 }

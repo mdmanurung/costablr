@@ -39,6 +39,41 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Automatic One-Vs-Rest Cooperative Fusion (2026-05-13)
+
+- Promoted multinomial cooperative fusion from a manual scratch-workflow
+  pattern to package workflow support:
+  `stabl_multiomic_train_validate(family = "multinomial",
+  cooperative_fusion = TRUE)` now fits one binomial `multiview` cooperative
+  model per class.
+- Added one-vs-rest cooperative result fields: `task_type =
+  "multiclass_ovr"`, `levels`, `class_results`, `class_summary`,
+  `selected_features_by_class`, row-normalized class-probability predictions,
+  log loss, and classification metrics.
+- Preserved the existing cooperative accessor contract by returning
+  `selected_features`, `selected_train`, and `selected_valid` as the per-view
+  union across classes. Extended `get_cooperative_features()` with
+  `class_level` for class-specific signatures.
+- Regenerated Rd documentation for the public train/validation workflow and
+  cooperative feature accessor.
+- Kept native `multiview` multinomial optimization out of scope:
+  `.cooperative_family_to_multiview("multinomial")` still rejects the native
+  family mapping.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "parse('R/input_validation.R'); parse('R/multiomic_workflows.R'); parse('R/stabl_accessors.R'); parse('tests/testthat/test-multiomic-workflows.R'); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.'); testthat::test_file('tests/testthat/test-multiomic-workflows.R')"
+# -> PASS 148, FAIL 0, WARN 0, SKIP 0
+
+conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet=TRUE); testthat::test_dir('tests/testthat', reporter='summary')"
+# -> full local test directory passed; WARN 2 from existing future package
+#    build-version warnings; SKIP 4 (NAT-001, NAT-003, and two CRAN-gated tests)
+```
+
 ### Profiling-Gated Performance Tranche (2026-05-13)
 
 - Added old-reference performance helpers and focused parity tests for
@@ -79,6 +114,10 @@ conda run -n R4_51 Rscript scripts/profile_audit_performance.R
 
 conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet=TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R', reporter='summary'); testthat::test_file('tests/testthat/test-bootstrap-helpers.R', reporter='summary'); testthat::test_file('tests/testthat/test-stabl-fit.R', reporter='summary'); testthat::test_file('tests/testthat/test-audit-native-candidates.R', reporter='summary')"
 # -> related suites passed; audit-native-candidates now skips only NAT-001/NAT-003
+
+conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet=TRUE); testthat::test_dir('tests/testthat', reporter='summary')"
+# -> full local test directory passed; WARN 2 from existing future package
+#    build-version warnings; SKIP 4 (NAT-001, NAT-003, and two CRAN-gated tests)
 ```
 
 ### Audit Finding Status Annotation (2026-05-13)

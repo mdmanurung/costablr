@@ -91,7 +91,9 @@ field.}
 
 \item{cooperative_fusion}{Logical. When \code{TRUE}, fit a multiview-based
 cooperative learning branch in addition to the existing per-omic STABL
-fits. Requires the optional \code{multiview} package.}
+fits. For \code{family = "multinomial"}, this runs an automatic one-vs-rest
+wrapper with one binomial cooperative model per class. Requires the
+optional \code{multiview} package.}
 
 \item{rho}{Numeric scalar or vector of non-negative cooperation strengths.
 When \code{NULL}, defaults to \code{0} following \code{\link[multiview:multiview]{multiview::multiview()}}.}
@@ -107,7 +109,8 @@ cooperative \code{lambda}. \code{"lambda.1se"} is only available when
 
 \item{cooperation_type_measure}{Character scalar controlling the cooperative
 tuning metric. Supported values follow the active \code{family} and the
-multiview CV API.}
+multiview CV API; multinomial cooperative fusion uses binomial
+one-vs-rest tuning metrics.}
 
 \item{cooperation_nfolds}{Number of inner folds used when
 \code{cooperation_selection = "cv"}.}
@@ -131,9 +134,12 @@ list with \code{weights} (data.frame), \code{train_predictions} (data.frame),
 \code{valid_predictions}, and \code{score}; multinomial tasks also include
 \code{levels}, \code{log_loss}, and classification metrics.}
 \item{\code{cooperative_fusion}}{Present only when
-\code{cooperative_fusion = TRUE}. A list containing the selected multiview
-fit, chosen \code{rho} and \code{lambda}, selected features per view,
-train/validation predictions, and tuning diagnostics.}
+\code{cooperative_fusion = TRUE}. For scalar families, a list containing
+the selected multiview fit, chosen \code{rho} and \code{lambda}, selected
+features per view, train/validation predictions, and tuning
+diagnostics. For \code{family = "multinomial"}, a one-vs-rest result with
+class-specific cooperative fits, row-normalized class probabilities,
+class-specific selected features, and per-view union selections.}
 }
 }
 \description{

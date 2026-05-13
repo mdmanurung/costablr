@@ -4,7 +4,7 @@
 \alias{get_cooperative_features}
 \title{Get Cooperative-Fusion Selected Features}
 \usage{
-get_cooperative_features(object, view = NULL)
+get_cooperative_features(object, view = NULL, class_level = NULL)
 }
 \arguments{
 \item{object}{A fitted \code{"stabl_multiomic_fit"} object returned by
@@ -15,6 +15,11 @@ get_cooperative_features(object, view = NULL)
 \item{view}{Optional character scalar naming one omic view.  When supplied
 for a \code{"stabl_multiomic_fit"}, only that view's cooperative feature names
 are returned.}
+
+\item{class_level}{Optional character scalar naming one one-vs-rest class
+for multinomial cooperative fusion.  When supplied, class-specific
+selected features are returned instead of the default union across
+classes.}
 }
 \value{
 For \code{"stabl_multiomic_fit"}, a named list of character vectors, or

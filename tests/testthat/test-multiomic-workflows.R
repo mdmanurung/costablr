@@ -906,29 +906,133 @@ test_that("cooperative_fusion rejects unsupported selection combinations", {
   )
 })
 
-test_that("cooperative_fusion rejects multinomial family", {
-  set.seed(401)
-  n <- 18L
-  ids <- paste0("s", seq_len(n))
-  x_a <- matrix(rnorm(n * 3L), nrow = n,
-                dimnames = list(ids, paste0("a", seq_len(3L))))
-  x_b <- matrix(rnorm(n * 3L), nrow = n,
-                dimnames = list(ids, paste0("b", seq_len(3L))))
-  y <- setNames(factor(rep(c("A", "B", "C"), each = 6L)), ids)
-
+test_that("native multiview family mapper still rejects multinomial family", {
   expect_error(
-    stabl_multiomic_train_validate(
-      x_train_list = list(omic_a = x_a, omic_b = x_b),
-      y_train = y,
-      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+    .cooperative_family_to_multiview("multinomial"),
+    "only supports"
+  )
+})
+
+.cf_make_three_class_omic <- function(n_per_class = 8L, seed = 401L,
+                                      prefix = "s") {
+  set.seed(seed)
+  n <- 3L * n_per_class
+  ids <- paste0(prefix, seq_len(n))
+  y <- setNames(factor(rep(c("A", "B", "C"), each = n_per_class)), ids)
+  signal <- model.matrix(~ y - 1)
+  x_a <- matrix(rnorm(n * 5L, sd = 0.25), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(5L))))
+  x_b <- matrix(rnorm(n * 5L, sd = 0.25), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(5L))))
+  x_a[, 1:3] <- x_a[, 1:3] + 1.4 * signal
+  x_b[, 1:3] <- x_b[, 1:3] + 1.1 * signal
+  list(x_a = x_a, x_b = x_b, y = y)
+}
+
+test_that("cooperative_fusion supports multinomial one-vs-rest branch", {
+  skip_if_not_installed("multiview")
+
+  d <- .cf_make_three_class_omic(n_per_class = 8L, seed = 401L)
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = d$x_a, omic_b = d$x_b),
+    y_train = d$y,
+    lambda_grid = data.frame(lambda = c(0.08, 0.03)),
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "multinomial",
+    random_state = 401L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.2),
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  ))
+
+  cf <- fit$cooperative_fusion
+  expect_equal(cf$task_type, "multiclass_ovr")
+  expect_equal(cf$levels, levels(d$y))
+  expect_named(cf$class_results, levels(d$y))
+  expect_equal(nrow(cf$class_summary), length(levels(d$y)))
+  expect_true(all(levels(d$y) %in% cf$diagnostics$class))
+
+  prob_cols <- paste0("prob_", levels(d$y))
+  train_probs <- as.matrix(cf$train_predictions[, prob_cols, drop = FALSE])
+  expect_true(all(abs(rowSums(train_probs) - 1) < 1e-8))
+  expect_true(all(cf$train_predictions$predicted_class %in% levels(d$y)))
+  expect_true(is.finite(cf$log_loss))
+  expect_named(cf$train_metrics,
+               c("accuracy", "balanced_error_rate", "per_class_recall",
+                 "macro_f1", "confusion"))
+
+  for (omic in names(cf$selected_features)) {
+    by_class_union <- unique(unlist(
+      lapply(cf$selected_features_by_class, function(class_features) {
+        class_features[[omic]]
+      }),
+      use.names = FALSE
+    ))
+    expect_setequal(cf$selected_features[[omic]], by_class_union)
+  }
+})
+
+test_that("cooperative_fusion multinomial one-vs-rest supports validation selection", {
+  skip_if_not_installed("multiview")
+
+  d_tr <- .cf_make_three_class_omic(n_per_class = 8L, seed = 402L, prefix = "tr")
+  d_va <- .cf_make_three_class_omic(n_per_class = 3L, seed = 403L, prefix = "va")
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = d_tr$x_a, omic_b = d_tr$x_b),
+    y_train = d_tr$y,
+    lambda_grid = data.frame(lambda = c(0.08, 0.03)),
+    x_valid_list = list(omic_a = d_va$x_a, omic_b = d_va$x_b),
+    y_valid = d_va$y,
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "multinomial",
+    random_state = 402L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.2),
+    cooperation_selection = "validation",
+    cooperation_selector = "lambda.min"
+  ))
+
+  cf <- fit$cooperative_fusion
+  prob_cols <- paste0("prob_", levels(d_tr$y))
+  valid_probs <- as.matrix(cf$valid_predictions[, prob_cols, drop = FALSE])
+  expect_true(all(abs(rowSums(valid_probs) - 1) < 1e-8))
+  expect_true(is.finite(cf$valid_log_loss))
+  expect_named(cf$valid_metrics,
+               c("accuracy", "balanced_error_rate", "per_class_recall",
+                 "macro_f1", "confusion"))
+
+  y_bad <- as.character(d_va$y)
+  y_bad[[1L]] <- "D"
+  y_bad <- setNames(factor(y_bad), names(d_va$y))
+  expect_error(
+    suppressWarnings(stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = d_tr$x_a, omic_b = d_tr$x_b),
+      y_train = d_tr$y,
+      lambda_grid = data.frame(lambda = c(0.08, 0.03)),
+      x_valid_list = list(omic_a = d_va$x_a, omic_b = d_va$x_b),
+      y_valid = y_bad,
       artificial_type = NULL,
-      hard_threshold = 0.3,
-      n_bootstraps = 2L,
+      hard_threshold = 1e-9,
+      n_bootstraps = 1L,
+      sample_fraction = 1,
       family = "multinomial",
+      random_state = 403L,
       cooperative_fusion = TRUE,
-      rho = c(0, 0.2)
-    ),
-    "supports family"
+      rho = 0,
+      cooperation_selection = "validation",
+      cooperation_selector = "lambda.min"
+    )),
+    "Validation labels"
   )
 })
 
@@ -1212,6 +1316,49 @@ test_that("cooperative accessors expose selected features and diagnostics", {
   expect_equal(get_cooperative_features(fit, view = "omic_b"), "b2")
   expect_equal(get_cooperative_diagnostics(fit), diagnostics)
   expect_error(get_cooperative_features(fit, view = "missing"), "view")
+  expect_error(get_cooperative_features(fit, class_level = "A"), "one-vs-rest")
+})
+
+test_that("cooperative accessors expose one-vs-rest class-specific features", {
+  diagnostics <- data.frame(
+    class = c("A", "B"),
+    rho = c(0, 0.3),
+    lambda = c(0.12, 0.08),
+    metric_value = c(0.4, 0.2),
+    selected = c(FALSE, TRUE)
+  )
+  fit <- structure(
+    list(
+      fits = list(omic_a = NULL, omic_b = NULL),
+      selected_features = list(omic_a = character(0), omic_b = character(0)),
+      selected_train = list(omic_a = matrix(nrow = 0, ncol = 0),
+                            omic_b = matrix(nrow = 0, ncol = 0)),
+      selected_valid = NULL,
+      early_fusion = NULL,
+      late_fusion = NULL,
+      cooperative_fusion = list(
+        task_type = "multiclass_ovr",
+        selected_features = list(omic_a = c("a1", "a3"),
+                                 omic_b = c("b1", "b2")),
+        selected_features_by_class = list(
+          A = list(omic_a = "a1", omic_b = "b2"),
+          B = list(omic_a = "a3", omic_b = "b1")
+        ),
+        diagnostics = diagnostics
+      )
+    ),
+    class = "stabl_multiomic_fit"
+  )
+
+  expect_equal(
+    get_cooperative_features(fit, class_level = "A"),
+    list(omic_a = "a1", omic_b = "b2")
+  )
+  expect_equal(
+    get_cooperative_features(fit, view = "omic_b", class_level = "B"),
+    "b1"
+  )
+  expect_error(get_cooperative_features(fit, class_level = "C"), "class_level")
 })
 
 test_that("cooperative accessors fail clearly when branch is absent", {

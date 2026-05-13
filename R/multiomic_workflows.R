@@ -47,7 +47,9 @@
 #'   `late_fusion = FALSE`.
 #' @param cooperative_fusion Logical. When `TRUE`, fit a multiview-based
 #'   cooperative learning branch in addition to the existing per-omic STABL
-#'   fits. Requires the optional `multiview` package.
+#'   fits. For `family = "multinomial"`, this runs an automatic one-vs-rest
+#'   wrapper with one binomial cooperative model per class. Requires the
+#'   optional `multiview` package.
 #' @param rho Numeric scalar or vector of non-negative cooperation strengths.
 #'   When `NULL`, defaults to `0` following [multiview::multiview()].
 #' @param cooperation_selection Character scalar. Either `"cv"` or
@@ -59,7 +61,8 @@
 #'   `cooperation_selection = "cv"`.
 #' @param cooperation_type_measure Character scalar controlling the cooperative
 #'   tuning metric. Supported values follow the active `family` and the
-#'   multiview CV API.
+#'   multiview CV API; multinomial cooperative fusion uses binomial
+#'   one-vs-rest tuning metrics.
 #' @param cooperation_nfolds Number of inner folds used when
 #'   `cooperation_selection = "cv"`.
 #'
@@ -79,9 +82,12 @@
 #'       `valid_predictions`, and `score`; multinomial tasks also include
 #'       `levels`, `log_loss`, and classification metrics.}
 #'     \item{`cooperative_fusion`}{Present only when
-#'       `cooperative_fusion = TRUE`. A list containing the selected multiview
-#'       fit, chosen `rho` and `lambda`, selected features per view,
-#'       train/validation predictions, and tuning diagnostics.}
+#'       `cooperative_fusion = TRUE`. For scalar families, a list containing
+#'       the selected multiview fit, chosen `rho` and `lambda`, selected
+#'       features per view, train/validation predictions, and tuning
+#'       diagnostics. For `family = "multinomial"`, a one-vs-rest result with
+#'       class-specific cooperative fits, row-normalized class probabilities,
+#'       class-specific selected features, and per-view union selections.}
 #'   }
 #' @export
 stabl_multiomic_train_validate <- function(
@@ -1031,7 +1037,20 @@ stabl_multiomic_cv <- function(
                                        groups_train = NULL,
                                        family = "gaussian",
                                        random_state = NULL,
-                                       cooperative_args) {
+                                       cooperative_args,
+                                       foldid = NULL) {
+  if (identical(family, "multinomial")) {
+    return(.cooperative_multiomic_fit_ovr(
+      x_train_list = x_train_list,
+      y_train = y_train,
+      x_valid_list = x_valid_list,
+      y_valid = y_valid,
+      groups_train = groups_train,
+      random_state = random_state,
+      cooperative_args = cooperative_args
+    ))
+  }
+
   omic_names <- names(x_train_list)
   x_train_mv <- .coerce_multiomic_matrix_list(x_train_list)
   x_valid_mv <- if (is.null(x_valid_list)) NULL else .coerce_multiomic_matrix_list(x_valid_list)
@@ -1039,12 +1058,17 @@ stabl_multiomic_cv <- function(
   direction <- .cooperative_metric_direction(cooperative_args$cooperation_type_measure)
 
   if (identical(cooperative_args$cooperative_selection, "cv")) {
-    foldid <- .make_multiomic_foldid(
-      sample_ids = rownames(x_train_mv[[1L]]),
-      groups = groups_train,
-      v = cooperative_args$cooperation_nfolds,
-      random_state = random_state
-    )
+    if (is.null(foldid)) {
+      foldid <- .make_multiomic_foldid(
+        sample_ids = rownames(x_train_mv[[1L]]),
+        groups = groups_train,
+        v = cooperative_args$cooperation_nfolds,
+        random_state = random_state
+      )
+    } else if (length(foldid) != nrow(x_train_mv[[1L]])) {
+      stop("Shared cooperative `foldid` must have one value per training sample.",
+           call. = FALSE)
+    }
 
     cv_fits <- lapply(cooperative_args$rho, function(rho_value) {
       multiview::cv.multiview(
@@ -1212,6 +1236,265 @@ stabl_multiomic_cv <- function(
     diagnostics = diagnostics,
     foldid = foldid
   )
+}
+
+.cooperative_multiomic_fit_ovr <- function(x_train_list,
+                                           y_train,
+                                           x_valid_list = NULL,
+                                           y_valid = NULL,
+                                           groups_train = NULL,
+                                           random_state = NULL,
+                                           cooperative_args) {
+  omic_names <- names(x_train_list)
+  x_train_mv <- .coerce_multiomic_matrix_list(x_train_list)
+  x_valid_mv <- if (is.null(x_valid_list)) NULL else .coerce_multiomic_matrix_list(x_valid_list)
+
+  y_train_factor <- droplevels(factor(y_train))
+  names(y_train_factor) <- names(y_train)
+  class_levels <- levels(y_train_factor)
+  if (length(class_levels) < 3L) {
+    stop(
+      "One-vs-rest cooperative fusion for `family = 'multinomial'` requires at least three training classes.",
+      call. = FALSE
+    )
+  }
+
+  y_valid_factor <- NULL
+  if (!is.null(y_valid)) {
+    y_valid_factor <- factor(y_valid, levels = class_levels)
+    names(y_valid_factor) <- names(y_valid)
+    if (anyNA(y_valid_factor)) {
+      stop(
+        "Validation labels for one-vs-rest cooperative fusion must all be present in the training classes.",
+        call. = FALSE
+      )
+    }
+  }
+
+  shared_foldid <- NULL
+  if (identical(cooperative_args$cooperative_selection, "cv")) {
+    shared_foldid <- .make_multiomic_foldid(
+      sample_ids = rownames(x_train_mv[[1L]]),
+      groups = groups_train,
+      v = cooperative_args$cooperation_nfolds,
+      random_state = random_state
+    )
+  }
+
+  class_args <- cooperative_args
+  class_args$task_type <- "binomial"
+
+  class_results <- setNames(vector("list", length(class_levels)), class_levels)
+  for (class_level in class_levels) {
+    y_binary <- setNames(
+      as.integer(y_train_factor == class_level),
+      names(y_train_factor)
+    )
+    y_valid_binary <- if (is.null(y_valid_factor)) {
+      NULL
+    } else {
+      setNames(as.integer(y_valid_factor == class_level), names(y_valid_factor))
+    }
+
+    class_results[[class_level]] <- .cooperative_multiomic_fit(
+      x_train_list = x_train_list,
+      y_train = y_binary,
+      x_valid_list = x_valid_list,
+      y_valid = y_valid_binary,
+      groups_train = groups_train,
+      family = "binomial",
+      random_state = random_state,
+      cooperative_args = class_args,
+      foldid = shared_foldid
+    )
+  }
+
+  selected_features_by_class <- lapply(class_results, function(result) {
+    result$selected_features
+  })
+  selected_features <- .cooperative_union_selected_features(
+    selected_features_by_class = selected_features_by_class,
+    omic_names = omic_names
+  )
+
+  selected_train <- setNames(vector("list", length(omic_names)), omic_names)
+  selected_valid <- if (is.null(x_valid_list)) NULL else setNames(vector("list", length(omic_names)), omic_names)
+  for (omic in omic_names) {
+    selected_train[[omic]] <- .subset_selected_matrix(x_train_list[[omic]], selected_features[[omic]])
+    if (!is.null(selected_valid)) {
+      selected_valid[[omic]] <- .subset_selected_matrix(x_valid_list[[omic]], selected_features[[omic]])
+    }
+  }
+
+  train_prob <- .cooperative_ovr_probability_matrix(
+    class_results = class_results,
+    newx = x_train_mv,
+    sample_ids = rownames(x_train_mv[[1L]]),
+    class_levels = class_levels
+  )
+  train_predictions <- .cooperative_ovr_prediction_frame(train_prob)
+  log_loss <- .multiclass_log_loss(y_train_factor, train_prob)
+
+  valid_prob <- NULL
+  valid_predictions <- NULL
+  valid_log_loss <- NULL
+  valid_metrics <- NULL
+  if (!is.null(x_valid_mv)) {
+    valid_prob <- .cooperative_ovr_probability_matrix(
+      class_results = class_results,
+      newx = x_valid_mv,
+      sample_ids = rownames(x_valid_mv[[1L]]),
+      class_levels = class_levels
+    )
+    valid_predictions <- .cooperative_ovr_prediction_frame(valid_prob)
+    if (!is.null(y_valid_factor)) {
+      valid_log_loss <- .multiclass_log_loss(y_valid_factor, valid_prob)
+      valid_metrics <- .classification_metrics(
+        truth = factor(y_valid_factor, levels = class_levels),
+        predicted = factor(valid_predictions$predicted_class,
+                           levels = class_levels)
+      )
+    }
+  }
+
+  diagnostics <- do.call(rbind, lapply(class_levels, function(class_level) {
+    data.frame(
+      class = class_level,
+      class_results[[class_level]]$diagnostics,
+      stringsAsFactors = FALSE
+    )
+  }))
+  rownames(diagnostics) <- NULL
+
+  class_summary <- do.call(rbind, lapply(class_levels, function(class_level) {
+    result <- class_results[[class_level]]
+    data.frame(
+      class = class_level,
+      rho = result$rho,
+      selected_lambda = result$selected_lambda,
+      score = result$score,
+      n_selected = sum(vapply(result$selected_features, length, integer(1L))),
+      stringsAsFactors = FALSE
+    )
+  }))
+  rownames(class_summary) <- NULL
+
+  fitted_models <- lapply(class_results, function(result) result$fit)
+
+  out <- list(
+    fit = fitted_models,
+    task_type = "multiclass_ovr",
+    levels = class_levels,
+    class_results = class_results,
+    class_summary = class_summary,
+    selected_features_by_class = selected_features_by_class,
+    rho = NA_real_,
+    rho_grid = cooperative_args$rho,
+    selection = cooperative_args$cooperative_selection,
+    selector = cooperative_args$cooperation_selector,
+    type_measure = cooperative_args$cooperation_type_measure,
+    prediction_type = "response",
+    score = -log_loss,
+    log_loss = log_loss,
+    selected_lambda = NA_real_,
+    selected_features = selected_features,
+    selected_train = selected_train,
+    selected_valid = selected_valid,
+    train_predictions = train_predictions,
+    valid_predictions = valid_predictions,
+    train_metrics = .classification_metrics(
+      truth = factor(y_train_factor, levels = class_levels),
+      predicted = factor(train_predictions$predicted_class,
+                         levels = class_levels)
+    ),
+    diagnostics = diagnostics,
+    foldid = shared_foldid
+  )
+
+  if (!is.null(valid_log_loss)) {
+    out$valid_log_loss <- valid_log_loss
+  }
+  if (!is.null(valid_metrics)) {
+    out$valid_metrics <- valid_metrics
+  }
+
+  out
+}
+
+.cooperative_union_selected_features <- function(selected_features_by_class,
+                                                 omic_names) {
+  out <- setNames(vector("list", length(omic_names)), omic_names)
+  for (omic in omic_names) {
+    out[[omic]] <- unique(unlist(
+      lapply(selected_features_by_class, function(class_features) {
+        class_features[[omic]]
+      }),
+      use.names = FALSE
+    ))
+    if (is.null(out[[omic]])) {
+      out[[omic]] <- character(0)
+    }
+  }
+  out
+}
+
+.cooperative_binomial_response_predict <- function(fit,
+                                                   newx,
+                                                   s,
+                                                   sample_ids) {
+  pred <- stats::predict(fit, newx = newx, s = s, type = "response")
+  pred_mat <- .cooperative_prediction_matrix(pred, length(sample_ids))
+  out <- as.numeric(pred_mat[, 1L])
+  names(out) <- sample_ids
+  out
+}
+
+.cooperative_ovr_probability_matrix <- function(class_results,
+                                                newx,
+                                                sample_ids,
+                                                class_levels,
+                                                eps = 1e-15) {
+  prob <- matrix(
+    NA_real_,
+    nrow = length(sample_ids),
+    ncol = length(class_levels),
+    dimnames = list(sample_ids, class_levels)
+  )
+
+  for (class_level in class_levels) {
+    result <- class_results[[class_level]]
+    s <- if (identical(result$selection, "cv")) {
+      result$selector
+    } else {
+      result$selected_lambda
+    }
+    prob[, class_level] <- .cooperative_binomial_response_predict(
+      fit = result$fit,
+      newx = newx,
+      s = s,
+      sample_ids = sample_ids
+    )
+  }
+
+  prob[!is.finite(prob)] <- eps
+  prob <- pmin(pmax(prob, eps), 1 - eps)
+
+  row_totals <- rowSums(prob)
+  bad_rows <- !is.finite(row_totals) | row_totals <= 0
+  if (any(bad_rows)) {
+    prob[bad_rows, ] <- 1 / ncol(prob)
+    row_totals <- rowSums(prob)
+  }
+
+  prob / row_totals
+}
+
+.cooperative_ovr_prediction_frame <- function(prob) {
+  out <- as.data.frame(prob, check.names = FALSE)
+  names(out) <- paste0("prob_", names(out))
+  class_levels <- colnames(prob)
+  out$predicted_class <- class_levels[max.col(prob, ties.method = "first")]
+  out
 }
 
 # ---------------------------------------------------------------------------

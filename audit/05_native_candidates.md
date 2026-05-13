@@ -21,8 +21,9 @@ Existing native toolchain:
 
 - Location: `R/multiomic_workflows.R:1257`, `R/multiomic_workflows.R:1335`,
   `R/multiomic_workflows.R:1404`, `R/multiomic_workflows.R:1421`
-- Status: DEFERRED / NOT FIXED. Candidate remains good after pure-R
-  optimization is attempted.
+- Status: DEFERRED / NOT NEEDED after the 2026-05-13 profiling gate. Pure-R
+  PERF-001/PERF-002 changes cleared the strict runtime-or-allocation gate, so
+  no stack-weight native port was attempted.
 - Why it qualifies: late fusion can run thousands of random weight draws over
   dense prediction matrices/arrays. The current implementation is
   interpreter-bound arithmetic and missingness checks.
@@ -36,7 +37,7 @@ Existing native toolchain:
 - DESCRIPTION/NAMESPACE impact: no new dependencies.
 - CRAN/packaging risk: low to medium; RNG and floating-point reduction order
   are the main risks.
-- Pure-R fallback: implement PERF-001/PERF-002 first.
+- Pure-R fallback: implemented through PERF-001/PERF-002 and kept by profiling.
 
 ## Candidate NAT-002: Correlation-group union step
 

@@ -225,6 +225,7 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
     family,
     gaussian = c("default", "mse", "deviance", "mae"),
     binomial = c("default", "mse", "deviance", "class", "auc", "mae"),
+    multinomial = c("default", "mse", "deviance", "class", "auc", "mae"),
     poisson = c("default", "mse", "deviance", "mae"),
     cox = c("default", "deviance", "C"),
     character(0)
@@ -259,6 +260,7 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
     family,
     gaussian = "mse",
     binomial = "deviance",
+    multinomial = "deviance",
     poisson = "deviance",
     cox = "deviance"
   )
@@ -290,9 +292,9 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
     )
   }
 
-  if (!(family %in% c("gaussian", "binomial", "poisson", "cox"))) {
+  if (!(family %in% c("gaussian", "binomial", "multinomial", "poisson", "cox"))) {
     stop(
-      "`cooperative_fusion = TRUE` currently supports family = 'gaussian', 'binomial', 'poisson', or 'cox'.",
+      "`cooperative_fusion = TRUE` currently supports family = 'gaussian', 'binomial', 'multinomial', 'poisson', or 'cox'.",
       call. = FALSE
     )
   }
@@ -351,6 +353,7 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
     cooperative_selection = cooperative_selection,
     cooperation_selector = cooperation_selector,
     cooperation_type_measure = type_measure,
-    cooperation_nfolds = cooperation_nfolds
+    cooperation_nfolds = cooperation_nfolds,
+    task_type = if (identical(family, "multinomial")) "multiclass_ovr" else family
   )
 }

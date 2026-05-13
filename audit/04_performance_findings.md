@@ -25,7 +25,7 @@ old-reference parity helpers and a strict 10% runtime-or-allocation gate.
   behavior.
 - Pure-R suggestion: precompute `is_obs` and zero-filled predictions outside
   the loop; evaluate random weights in chunks with matrix operations.
-- Native needed: optional NAT-001 only after pure-R batching is profiled.
+- Native needed: no; pure-R batching cleared the profiling gate.
 - Validation: old/new parity passed at tolerance `1e-12`; profiling gate kept
   the implementation (`0.476s -> 0.227s`, 52.31% median runtime improvement;
   `541.27MB -> 142.85MB`, 73.61% allocation improvement).
@@ -47,7 +47,7 @@ old-reference parity helpers and a strict 10% runtime-or-allocation gate.
   renormalization.
 - Pure-R suggestion: precompute observed omic masks and combine weighting plus
   loss in one pass per random weight draw.
-- Native needed: optional NAT-001 only after pure-R simplification.
+- Native needed: no; pure-R simplification cleared the profiling gate.
 - Validation: old/new parity passed at tolerance `1e-12`; profiling gate kept
   the implementation by runtime (`6.179s -> 0.204s`, 96.70% median runtime
   improvement). Allocation increased in this target case, so the keep decision

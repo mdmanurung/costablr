@@ -1,5 +1,5 @@
 test_that("NAT-001: stacked_multi_omic R-vs-Cpp parity placeholder", {
-  skip("NAT-001 pending - see audit/05_native_candidates.md")
+  skip("NAT-001 deferred; pure-R stack-weight optimizations cleared the profiling gate")
 })
 
 test_that("NAT-002: correlation grouping R-vs-Cpp parity", {

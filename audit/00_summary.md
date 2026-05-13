@@ -39,7 +39,8 @@ passes with the expected NAT placeholder skips.
 - Phase 1 `devtools::test('.')`: `PASS 1458`, `FAIL 0`, `WARN 2`, `SKIP 0`.
 - Phase 6 `devtools::test('.')` with `NOT_CRAN=true` so snapshots run:
   `PASS 1475`, `FAIL 0`, `WARN 2`, `SKIP 3`.
-- The three skips are intentional native parity placeholders.
+- Current full local test-directory skips are NAT-001, NAT-003, and two
+  CRAN-gated tests.
 - `devtools::check('.', error_on = 'never')`: FAIL in both baseline and
   post-safety-net runs at `costablr-python-parity.Rmd` vignette rebuild.
 - `pkgdown::check_pkgdown()`: FAIL in baseline because
@@ -63,7 +64,9 @@ passes with the expected NAT placeholder skips.
   sample data, notebooks, audit reports, and planning docs.
 - Closure validation:
   - Audit safety net: pass, with NAT-001/002/003 skipped intentionally.
-  - Full suite: `PASS 1481`, `FAIL 0`, `WARN 2`, `SKIP 3`.
+  - Full test directory after the performance tranche: pass, with `WARN 2`
+    from existing `future` package build-version warnings and `SKIP 4`
+    (NAT-001, NAT-003, and two CRAN-gated tests).
   - `devtools::check('.', error_on = 'never')`: `0 errors`, `1 WARNING`,
     `2 NOTEs`; remaining items are local `qpdf`, timestamp, and conda
     toolchain warnings/notes.
@@ -171,6 +174,7 @@ metrics before simpler pure-R improvements are attempted.
 ## Gate
 
 Audit remediation complete. Safety net is updated to assert the fixed
-contracts. `devtools::test()` passes with WARN 2 and SKIP 3; `devtools::check()`
-has 0 errors and no longer fails at `costablr-python-parity.Rmd`; pkgdown
-metadata checks are clean. NAT-001 through NAT-003 remain deferred.
+contracts. The full local test directory passes with WARN 2 and SKIP 4;
+`devtools::check()` has 0 errors and no longer fails at
+`costablr-python-parity.Rmd`; pkgdown metadata checks are clean. NAT-001 and
+NAT-003 remain deferred.
