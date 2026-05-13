@@ -599,3 +599,9 @@ Promotion criteria:
   `EG_NP`, `TU_P` vs `TU_NP`, and `GA_P` vs `GA_NP`. This is a scratch
   notebook presentation update; no roadmap or acceptance-gate change is
   required.
+- 2026-05-13: A read-only comprehensive audit completed under `audit/` with
+  additive safety-net tests in new `tests/testthat/test-audit-*.R` files.
+  No fixes are approved yet. The immediate forward gate is user selection of
+  finding IDs from `audit/00_summary.md`; preserve the audit rule that `R/`,
+  `src/`, package metadata, generated docs, and pkgdown config remain
+  unchanged until explicit fix approval.

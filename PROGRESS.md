@@ -2221,3 +2221,49 @@ Validation:
   due to pre-existing package-structure issues: non-portable file names under
   `Sample Data` / `Notebook examples` and missing built `inst/doc` vignette
   outputs.
+
+### Comprehensive Read-Only Audit And Safety Net (2026-05-13)
+
+- Completed the requested audit without modifying functional code in `R/` or
+  `src/`, package metadata, man pages, README, or pkgdown config.
+- Added audit reports under `audit/`:
+  - `audit/00_summary.md`
+  - `audit/01_package_map.md`
+  - `audit/02_interface_findings.md`
+  - `audit/03_intent_findings.md`
+  - `audit/04_performance_findings.md`
+  - `audit/05_native_candidates.md`
+  - `audit/06_safety_net.md`
+- Added additive audit safety-net tests and snapshots under
+  `tests/testthat/test-audit-*.R` and `tests/testthat/_snaps/`.
+- Key verified findings include duplicate sample IDs passing alignment,
+  no-colname matrices failing selected-feature subsetting, late fusion using
+  shuffled named outcomes positionally, zero artificial-feature counts causing
+  internal subscript errors, zero subsample counts failing late, non-scalar
+  `get_support()` thresholds being accepted, and direct model-X helper
+  `random_state` not being reproducible.
+- Added skipped Rcpp parity placeholders for NAT-001, NAT-002, and NAT-003.
+
+Validation:
+
+```bash
+conda run -n R4_51 R --no-save -q -e "Sys.setenv(NOT_CRAN = 'true'); devtools::test('.')"
+# -> FAIL 0, WARN 2, SKIP 3, PASS 1475
+# -> warnings are the existing future package build-version warnings
+# -> skips are the three native-candidate parity placeholders
+
+conda run -n R4_51 R --no-save -q -e "devtools::check('.', error_on = 'never')"
+# -> failed at the same baseline vignette-build step:
+#    costablr-python-parity.Rmd chunk ool-fit rejects modelx_knockoff through
+#    a stale stablr::stabl_fit() backtrace
+
+conda run -n R4_51 R --no-save -q -e "pkgdown::check_pkgdown()"
+# -> failed at the same baseline pkgdown metadata check:
+#    _pkgdown.yml is missing costablr-tcga-nestedcv
+```
+
+Formatting note:
+
+- `air format .` was not run. The tool was not available in runtime preflight,
+  and the escalation request was rejected because formatting the entire
+  repository could rewrite files outside the audit write scope.

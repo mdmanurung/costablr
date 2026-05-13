@@ -403,6 +403,20 @@ conda run -n R4_51 R CMD INSTALL multiview
     publication settings yet;
   - use `sbatch scratch/slurm/costablr_baseline_study_protection_branches.slurm`
     for the 27 heavy branches and then submit a dependent `visualize` branch.
+- Current audit gate:
+  - read-only comprehensive audit reports are in `audit/`;
+  - additive safety-net tests are in new `tests/testthat/test-audit-*.R`
+    files, with snapshots in `tests/testthat/_snaps/`;
+  - latest audit-suite validation is
+    `FAIL 0`, `WARN 2`, `SKIP 3`, `PASS 1475` with `NOT_CRAN=true`;
+  - the three skips are intentional NAT parity placeholders;
+  - `devtools::check(error_on = 'never')` still fails before R CMD check at the
+    baseline `costablr-python-parity.Rmd` vignette-build issue;
+  - `pkgdown::check_pkgdown()` still fails at the baseline missing
+    `costablr-tcga-nestedcv` article index;
+  - no fixes are approved yet, so continue to treat `R/`, `src/`, package
+    metadata, generated docs, and `_pkgdown.yml` as read-only until the user
+    names approved audit finding IDs.
 
 ## Update protocol
 
