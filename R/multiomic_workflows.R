@@ -115,6 +115,18 @@ stabl_multiomic_train_validate <- function(
                             groups = groups_train)
 
   omic_names <- names(x_train_list)
+  train_ids <- rownames(x_train_list[[omic_names[1L]]])
+  y_train <- .subset_outcome_by_ids(y_train, train_ids)
+  if (!is.null(groups_train)) {
+    groups_train <- groups_train[train_ids]
+  }
+  if (!is.null(bootstrap_strata_train)) {
+    bootstrap_strata_train <- .subset_bootstrap_strata_by_ids(
+      bootstrap_strata_train,
+      sample_ids = train_ids,
+      arg = "bootstrap_strata_train"
+    )
+  }
   lambda_by_omic <- .resolve_multiomic_lambda_grid(lambda_grid, omic_names)
 
   if (!is.null(x_valid_list)) {
@@ -123,6 +135,12 @@ stabl_multiomic_train_validate <- function(
       y_valid = y_valid,
       train_omic_names = omic_names
     )
+    valid_ids <- rownames(x_valid_list[[omic_names[1L]]])
+    if (!is.null(y_valid)) {
+      y_valid <- .subset_outcome_by_ids(y_valid, valid_ids)
+    }
+  } else {
+    valid_ids <- NULL
   }
 
   cooperative_args <- NULL
@@ -160,6 +178,27 @@ stabl_multiomic_train_validate <- function(
   for (omic in omic_names) {
     x_train <- x_train_list[[omic]]
     if (is.data.frame(x_train)) x_train <- as.matrix(x_train)
+    if (is.null(colnames(x_train))) {
+      colnames(x_train) <- paste0("x.", seq_len(ncol(x_train)))
+    }
+    x_train_list[[omic]] <- x_train
+    if (!is.null(x_valid_list)) {
+      x_valid <- x_valid_list[[omic]]
+      if (is.data.frame(x_valid)) x_valid <- as.matrix(x_valid)
+      if (is.null(colnames(x_valid))) {
+        if (ncol(x_valid) != ncol(x_train)) {
+          stop(
+            sprintf(
+              "Validation omic '%s' has unnamed columns and a different column count from training.",
+              omic
+            ),
+            call. = FALSE
+          )
+        }
+        colnames(x_valid) <- colnames(x_train)
+      }
+      x_valid_list[[omic]] <- x_valid
+    }
 
     fit <- stabl_fit(
       x = x_train,
@@ -268,9 +307,9 @@ stabl_multiomic_train_validate <- function(
       valid_preds <- if (!is.null(x_valid_list)) {
         matrix(
           NA_real_,
-          nrow = length(y_valid),
+          nrow = length(valid_ids),
           ncol = length(omic_names),
-          dimnames = list(names(y_valid), omic_names)
+          dimnames = list(valid_ids, omic_names)
         )
       } else {
         NULL
@@ -583,11 +622,33 @@ stabl_multiomic_cv <- function(
     )
   }
 
+  base_ids <- NULL
   for (omic in train_omic_names) {
     x_valid <- x_valid_list[[omic]]
     if (!(is.data.frame(x_valid) || is.matrix(x_valid))) {
       stop(sprintf("Validation omic '%s' must be a data.frame or matrix.", omic),
            call. = FALSE)
+    }
+    sample_ids <- rownames(x_valid)
+    if (is.null(sample_ids) || anyNA(sample_ids) || any(sample_ids == "")) {
+      stop(
+        sprintf("Validation omic '%s' must have non-empty row names used as sample ids.", omic),
+        call. = FALSE
+      )
+    }
+    if (anyDuplicated(sample_ids)) {
+      stop(
+        sprintf("Validation omic '%s' row names must be unique sample ids.", omic),
+        call. = FALSE
+      )
+    }
+    if (is.null(base_ids)) {
+      base_ids <- sample_ids
+    } else if (!identical(base_ids, sample_ids)) {
+      stop(
+        sprintf("All validation omic tables must have identical sample order; mismatch at omic '%s'.", omic),
+        call. = FALSE
+      )
     }
     if (!is.null(y_valid)) {
       validate_sample_alignment(x = x_valid, y = y_valid, groups = NULL)
@@ -1234,6 +1295,9 @@ stacked_multi_omic <- function(
   if (n_omics == 0L) {
     stop("`predictions` must have at least one column.", call. = FALSE)
   }
+  if (length(y) != n_samples) {
+    stop("`y` must have one value per prediction row.", call. = FALSE)
+  }
 
   if (!is.null(random_state)) {
     old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
@@ -1254,31 +1318,49 @@ stacked_multi_omic <- function(
   best_weights <- rep(1 / n_omics, n_omics)
   best_probs   <- rep(NA_real_, n_samples)
 
-  for (i in seq_len(as.integer(n_iter))) {
-    weights <- stats::runif(n_omics, 0, 10)
-    w_mat   <- matrix(weights, nrow = n_samples, ncol = n_omics, byrow = TRUE)
-    is_obs  <- !is.na(predictions)
-    denom   <- rowSums(is_obs * w_mat)
-    num     <- rowSums(ifelse(is_obs, predictions * w_mat, 0))
-    weighted_probs <- ifelse(denom > 0, num / denom, NA_real_)
+  is_obs <- !is.na(predictions)
+  obs_mat <- is_obs
+  storage.mode(obs_mat) <- "double"
+  pred_zero <- predictions
+  pred_zero[!is_obs] <- 0
 
-    complete_idx <- !is.na(weighted_probs) & !is.na(y)
-    if (sum(complete_idx) < 2L) next
-
-    score <- tryCatch(
-      if (task_type == "binary") {
-        .r_auc(y[complete_idx], weighted_probs[complete_idx])
-      } else {
-        .r_squared(y[complete_idx], weighted_probs[complete_idx])
-      },
-      error = function(e) NA_real_
+  n_iter <- as.integer(n_iter)
+  chunk_size <- min(n_iter, 256L)
+  iter_start <- 1L
+  while (iter_start <= n_iter) {
+    block_size <- min(chunk_size, n_iter - iter_start + 1L)
+    weight_block <- matrix(
+      stats::runif(n_omics * block_size, 0, 10),
+      nrow = n_omics,
+      ncol = block_size
     )
+    num_block <- pred_zero %*% weight_block
+    denom_block <- obs_mat %*% weight_block
 
-    if (!is.na(score) && score > best_score) {
-      best_score   <- score
-      best_weights <- weights
-      best_probs   <- weighted_probs
+    for (k in seq_len(block_size)) {
+      weighted_probs <- rep(NA_real_, n_samples)
+      has_denom <- denom_block[, k] > 0
+      weighted_probs[has_denom] <- num_block[has_denom, k] / denom_block[has_denom, k]
+
+      complete_idx <- !is.na(weighted_probs) & !is.na(y)
+      if (sum(complete_idx) < 2L) next
+
+      score <- tryCatch(
+        if (task_type == "binary") {
+          .r_auc(y[complete_idx], weighted_probs[complete_idx])
+        } else {
+          .r_squared(y[complete_idx], weighted_probs[complete_idx])
+        },
+        error = function(e) NA_real_
+      )
+
+      if (!is.na(score) && score > best_score) {
+        best_score   <- score
+        best_weights <- weight_block[, k]
+        best_probs   <- weighted_probs
+      }
     }
+    iter_start <- iter_start + block_size
   }
 
   weights_df        <- data.frame(Associated_weight = best_weights,
@@ -1331,10 +1413,11 @@ stacked_multi_omic <- function(
   best_weights <- rep(1 / n_omics, n_omics)
   best_probs <- matrix(NA_real_, nrow = n_samples, ncol = n_classes,
                        dimnames = list(dimnames(arr)[[1L]], classes))
+  observed <- .multiclass_observed_omics(arr)
 
   for (i in seq_len(as.integer(n_iter))) {
     weights <- stats::runif(n_omics, 0, 10)
-    probs <- .weighted_multiclass_probabilities(arr, weights)
+    probs <- .weighted_multiclass_probabilities(arr, weights, observed = observed)
     loss <- .multiclass_log_loss(y, probs)
     score <- -loss
     if (is.finite(score) && score > best_score) {
@@ -1394,31 +1477,56 @@ stacked_multi_omic <- function(
   arr
 }
 
-.weighted_multiclass_probabilities <- function(pred_array, weights) {
+.multiclass_observed_omics <- function(pred_array) {
+  apply(is.finite(pred_array), c(1L, 3L), all)
+}
+
+.weighted_multiclass_probabilities <- function(pred_array, weights, observed = NULL) {
   n_samples <- dim(pred_array)[[1L]]
   n_classes <- dim(pred_array)[[2L]]
   n_omics <- dim(pred_array)[[3L]]
   out <- matrix(NA_real_, nrow = n_samples, ncol = n_classes,
                 dimnames = dimnames(pred_array)[1:2])
 
-  for (i in seq_len(n_samples)) {
-    row_probs <- pred_array[i, , , drop = FALSE]
-    row_probs <- matrix(row_probs, nrow = n_classes, ncol = n_omics)
-    observed <- apply(row_probs, 2L, function(x) all(is.finite(x)))
-    if (!any(observed)) next
-    w <- weights[observed]
-    p <- row_probs[, observed, drop = FALSE] %*% w / sum(w)
-    p <- as.numeric(p)
-    p[p < 0] <- 0
-    if (sum(p) <= 0 || !is.finite(sum(p))) next
-    out[i, ] <- p / sum(p)
+  if (is.null(observed)) {
+    observed <- .multiclass_observed_omics(pred_array)
+  }
+
+  denom <- as.numeric(observed %*% weights)
+  has_denom <- denom > 0
+  if (!any(has_denom)) {
+    return(out)
+  }
+
+  weighted_sum <- matrix(0.0, nrow = n_samples, ncol = n_classes,
+                         dimnames = dimnames(pred_array)[1:2])
+  for (omic in seq_len(n_omics)) {
+    rows <- observed[, omic]
+    if (any(rows)) {
+      omic_probs <- pred_array[rows, , omic, drop = FALSE]
+      dim(omic_probs) <- c(sum(rows), n_classes)
+      weighted_sum[rows, ] <- weighted_sum[rows, ] +
+        omic_probs * weights[[omic]]
+    }
+  }
+
+  out[has_denom, ] <- weighted_sum[has_denom, , drop = FALSE] / denom[has_denom]
+  out[out < 0] <- 0
+  row_totals <- rowSums(out[has_denom, , drop = FALSE])
+  valid_rows <- has_denom
+  valid_rows[has_denom] <- row_totals > 0 & is.finite(row_totals)
+  if (any(valid_rows)) {
+    out[valid_rows, ] <- out[valid_rows, , drop = FALSE] / rowSums(out[valid_rows, , drop = FALSE])
+  }
+  if (any(!valid_rows)) {
+    out[!valid_rows, ] <- NA_real_
   }
   out
 }
 
 .multiclass_log_loss <- function(y, probs, eps = 1e-15) {
   y <- factor(y, levels = colnames(probs))
-  idx <- !is.na(y) & apply(probs, 1L, function(x) all(is.finite(x)))
+  idx <- !is.na(y) & rowSums(is.finite(probs)) == ncol(probs)
   if (sum(idx) == 0L) return(Inf)
   probs <- pmin(pmax(probs[idx, , drop = FALSE], eps), 1 - eps)
   probs <- probs / rowSums(probs)

@@ -37,6 +37,13 @@
 #' @param explore Logical; if `TRUE` and no features pass the threshold, fall
 #'   back to the top `n_explore` features.  Default: `FALSE`.
 #' @param n_explore Positive integer; fallback feature count.  Default: `5L`.
+#' @param bootstrap_threshold Numeric scalar, character string, or `NULL`;
+#'   per-bootstrap feature-selection cutoff applied to absolute coefficients.
+#'   Numeric thresholds keep features with `|coef| >= bootstrap_threshold`.
+#'   Strings may be `"mean"`, `"median"`, or scaled forms such as
+#'   `"1.25*mean"`, matching sklearn `SelectFromModel` threshold syntax.
+#'   `NULL` resolves to the upstream STABL l1 default of `1e-5`. Default:
+#'   `1e-5`.
 #' @param groups Named vector of group IDs (same names as `rownames(x)`) or
 #'   `NULL`.  When supplied, [group_bootstrap_indices()] is used instead of
 #'   [classic_bootstrap_indices()].  Default: `NULL`.
@@ -178,6 +185,7 @@ stabl_fit <- function(
     fdr_threshold_range   = seq(0, 0.99, by = 0.01),
     explore               = FALSE,
     n_explore             = 5L,
+    bootstrap_threshold   = 1e-5,
     groups                = NULL,
     stratify_bootstrap    = FALSE,
     bootstrap_strata      = NULL,
@@ -219,12 +227,16 @@ stabl_fit <- function(
   # ---- Validate scalar params -----------------------------------------------
   .validate_stabl_params(n_bootstraps, sample_fraction, replace,
                          hard_threshold, artificial_type,
-                         artificial_proportion, stratify_bootstrap)
+                         artificial_proportion, stratify_bootstrap,
+                         bootstrap_threshold)
 
   n_samples   <- nrow(x)
   n_features  <- ncol(x)
   feat_names  <- colnames(x)
-  if (is.null(feat_names)) feat_names <- paste0("x.", seq_len(n_features))
+  if (is.null(feat_names)) {
+    feat_names <- paste0("x.", seq_len(n_features))
+    colnames(x) <- feat_names
+  }
 
   # ---- Lambda grid ----------------------------------------------------------
   if (identical(lambda_grid, "auto")) {
@@ -270,6 +282,15 @@ stabl_fit <- function(
   noise_col_indices <- NULL
 
   if (!is.null(artificial_type)) {
+    if (n_injected < 1L) {
+      stop(
+        "`artificial_proportion` (= ", artificial_proportion,
+        ") with n_features = ", n_features,
+        " produces n_injected = ", n_injected,
+        "; artificial features require at least one injected column.",
+        call. = FALSE
+      )
+    }
     if (verbose) message("Generating artificial features (type=",
                          artificial_type, ")...")
     art_result        <- make_artificial_features(x, n_injected,
@@ -297,24 +318,24 @@ stabl_fit <- function(
     lasso = .make_glmnet_batch_adapter(
       family              = family,
       alpha_fixed         = 1.0,
-      bootstrap_threshold = 1e-5
+      bootstrap_threshold = bootstrap_threshold
     ),
     elastic_net = .make_glmnet_batch_adapter(
       family              = family,
       alpha_fixed         = NULL,
-      bootstrap_threshold = 1e-5
+      bootstrap_threshold = bootstrap_threshold
     ),
     adaptive_lasso = .make_adaptive_lasso_batch_adapter(
       family              = family,
       gamma               = adaptive_gamma,
       epsilon             = adaptive_epsilon,
-      bootstrap_threshold = 1e-5
+      bootstrap_threshold = bootstrap_threshold
     ),
     sparse_group_lasso = .make_sgl_batch_adapter(
       family              = family,
       feature_groups      = sgl_feature_groups,
       alpha_fixed         = NULL,
-      bootstrap_threshold = 1e-5
+      bootstrap_threshold = bootstrap_threshold
     ),
     stop(
       "`base_learner` must be one of: \"lasso\", \"elastic_net\", \"adaptive_lasso\", \"sparse_group_lasso\".",
@@ -324,6 +345,15 @@ stabl_fit <- function(
 
   n_total_features <- ncol(x_fit)
   n_subsamples     <- as.integer(floor(sample_fraction * n_samples))
+
+  if (n_subsamples < 1L) {
+    stop(
+      "`sample_fraction` (= ", sample_fraction, ") with n_samples = ",
+      n_samples, " produces n_subsamples = ", n_subsamples,
+      "; at least one row must be sampled.",
+      call. = FALSE
+    )
+  }
 
   # Fix 7: reject impossible configuration before entering bootstrap
   if (!replace && n_subsamples > n_samples) {
@@ -343,10 +373,14 @@ stabl_fit <- function(
                                           replace = replace,
                                           strata = bootstrap_strata)
   } else {
-    function(.) group_bootstrap_indices(y = y, groups = groups,
-                                        n_subsamples = n_subsamples,
-                                        replace = replace,
-                                        strata = bootstrap_strata)
+    group_sampler <- .make_group_bootstrap_sampler(
+      y = y,
+      groups = groups,
+      n_subsamples = n_subsamples,
+      replace = replace,
+      strata = bootstrap_strata
+    )
+    function(.) group_sampler()
   }
   boot_indices <- lapply(seq_len(n_bootstraps), boot_sampler)
 
@@ -448,6 +482,7 @@ stabl_fit <- function(
       hard_threshold        = hard_threshold,
       artificial_type       = artificial_type,
       artificial_proportion = artificial_proportion,
+      bootstrap_threshold   = bootstrap_threshold,
       stratify_bootstrap    = !is.null(bootstrap_strata_ids),
       bootstrap_strata_levels = if (!is.null(bootstrap_strata_ids)) {
         sort(unique(as.character(bootstrap_strata_ids)))
@@ -465,7 +500,8 @@ stabl_fit <- function(
 .validate_stabl_params <- function(n_bootstraps, sample_fraction, replace,
                                    hard_threshold, artificial_type,
                                    artificial_proportion,
-                                   stratify_bootstrap) {
+                                   stratify_bootstrap,
+                                   bootstrap_threshold) {
   if (!is.numeric(n_bootstraps) || length(n_bootstraps) != 1L ||
       n_bootstraps < 1L) {
     stop("`n_bootstraps` must be a positive integer.", call. = FALSE)
@@ -503,6 +539,7 @@ stabl_fit <- function(
       (artificial_proportion <= 0 || artificial_proportion > 1)) {
     stop("`artificial_proportion` must be in (0, 1].", call. = FALSE)
   }
+  .validate_bootstrap_threshold(bootstrap_threshold)
   invisible(NULL)
 }
 
@@ -567,6 +604,18 @@ stabl_fit <- function(
   cutoff <- as.numeric(stats::quantile(corr_vals, probs = percentile / 100,
                                        names = FALSE, na.rm = TRUE)) - 0.1
 
+  .corr_groups_from_corr(corr, cutoff)
+}
+
+.corr_groups_from_corr <- function(corr, cutoff) {
+  if (exists("corr_groups_from_corr_cpp", mode = "function")) {
+    return(corr_groups_from_corr_cpp(corr, cutoff))
+  }
+  .corr_groups_from_corr_r(corr, cutoff)
+}
+
+.corr_groups_from_corr_r <- function(corr, cutoff) {
+  p <- ncol(corr)
   parent <- seq_len(p)
   find_root <- function(i) {
     while (parent[[i]] != i) {
@@ -581,9 +630,14 @@ stabl_fit <- function(
     if (ri != rj) parent[[rj]] <<- ri
   }
 
-  for (i in seq_len(p - 1L)) {
-    for (j in (i + 1L):p) {
-      if (corr[[i, j]] > cutoff) union_nodes(i, j)
+  if (p > 1L) {
+    for (j in seq.int(2L, p)) {
+      hits <- which(corr[seq_len(j - 1L), j] > cutoff)
+      if (length(hits) > 0L) {
+        for (i in hits) {
+          union_nodes(i, j)
+        }
+      }
     }
   }
 
@@ -596,15 +650,19 @@ stabl_fit <- function(
     return(groups)
   }
 
-  out <- as.integer(groups)
-  next_gid <- max(out)
-  for (src in noise_col_indices) {
+  n_groups <- length(groups)
+  out <- integer(n_groups + length(noise_col_indices))
+  out[seq_len(n_groups)] <- as.integer(groups)
+  next_gid <- max(out[seq_len(n_groups)])
+  for (i in seq_along(noise_col_indices)) {
+    src <- noise_col_indices[[i]]
     src <- as.integer(src)
+    out_pos <- n_groups + i
     if (!is.na(src) && src >= 1L && src <= length(groups)) {
-      out <- c(out, groups[[src]])
+      out[[out_pos]] <- groups[[src]]
     } else {
       next_gid <- next_gid + 1L
-      out <- c(out, next_gid)
+      out[[out_pos]] <- next_gid
     }
   }
 

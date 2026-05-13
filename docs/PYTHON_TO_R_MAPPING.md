@@ -30,7 +30,8 @@ document and should be updated as implementation proceeds.
 
 ## Next Mapping Targets
 
-- artificial feature generation (`random_permutation`, `knockoff`)
+- artificial feature generation (`random_permutation`, Python `knockoff`
+  mapped to R `modelx_knockoff`, and R `mvr_knockoff`)
 - FDR/FDP threshold computation and storage
 - stability path export helpers
 - CV and train/validation orchestration

@@ -1,7 +1,36 @@
 # 00 Summary
 
-Audit status: complete through Phase 7. No functional code in `R/` or `src/`
-was modified.
+Audit status: complete through Phase 7. The original read-only audit did not
+modify functional code in `R/` or `src/`.
+
+Remediation status: implemented 2026-05-13 for INT-001 through INT-006,
+IMPL-001 through IMPL-007, and the medium-severity performance tranche
+PERF-001, PERF-002, PERF-003, PERF-005, and PERF-006. NAT-002 is fixed by the
+profiling-gated correlation-union helper; NAT-001 and NAT-003 remain deferred
+skipped placeholders.
+
+Status annotation update: reviewed 2026-05-13. All audit documents now carry
+explicit fixed/deferred/not-planned status notes. The audit regression subset
+passes with the expected NAT placeholder skips.
+
+## Per-document status
+
+- `01_package_map.md`: INVENTORY. Baseline diagnostics that failed during the
+  audit (`devtools::check()` vignette rebuild and pkgdown index metadata) are
+  fixed in the post-remediation state.
+- `02_interface_findings.md`: FIXED. INT-001 through INT-006 have code fixes
+  and audit regression assertions.
+- `03_intent_findings.md`: FIXED. IMPL-001 through IMPL-007 have code or
+  documentation fixes and audit regression assertions where behavior changed.
+- `04_performance_findings.md`: PARTIAL FIXED. PERF-001, PERF-002, PERF-003,
+  PERF-005, and PERF-006 have profiling-gated fixes; PERF-004, PERF-007, and
+  PERF-008 remain deferred low-severity opportunities.
+- `05_native_candidates.md`: PARTIAL FIXED / NOT PLANNED. NAT-002 is fixed;
+  NAT-001 and NAT-003 remain deferred with skipped parity placeholders;
+  NAT-004 through NAT-006 are explicitly rejected for first-pass native
+  implementation.
+- `06_safety_net.md`: CURRENT. The listed audit tests are the active closure
+  safety net, with NAT-001 and NAT-003 skipped intentionally.
 
 ## Baseline status
 
@@ -15,6 +44,30 @@ was modified.
   post-safety-net runs at `costablr-python-parity.Rmd` vignette rebuild.
 - `pkgdown::check_pkgdown()`: FAIL in baseline because
   `_pkgdown.yml` omits `costablr-tcga-nestedcv`.
+
+## Remediation status
+
+- Fixed duplicate sample-ID rejection, named outcome alignment in multi-omic
+  workflows, fallback feature-name propagation for unnamed matrices,
+  validation-prediction row counts without `y_valid`, recycled stacking
+  outcomes, scalar/derived parameter validation, direct model-X helper
+  seeding, and the direct MVR C++ update-order boundary.
+- Removed stale bug snapshots after converting audit tests to fixed-behavior
+  assertions.
+- Refreshed Python-parity source/generated vignette text for
+  `modelx_knockoff` and `seq(0, 0.99, by = 0.01)`.
+- Removed internal artificial helpers from public-facing API/pkgdown indexes.
+- Added `costablr-tcga-nestedcv` and `stabl_multiomic_nested_cv` to pkgdown
+  metadata.
+- Added `.Rbuildignore` rules so R source builds exclude repository-only
+  sample data, notebooks, audit reports, and planning docs.
+- Closure validation:
+  - Audit safety net: pass, with NAT-001/002/003 skipped intentionally.
+  - Full suite: `PASS 1481`, `FAIL 0`, `WARN 2`, `SKIP 3`.
+  - `devtools::check('.', error_on = 'never')`: `0 errors`, `1 WARNING`,
+    `2 NOTEs`; remaining items are local `qpdf`, timestamp, and conda
+    toolchain warnings/notes.
+  - `pkgdown::check_pkgdown()`: no problems found.
 
 ## Top findings
 
@@ -55,18 +108,18 @@ was modified.
 
 ## Rcpp roadmap
 
-1. NAT-001: stack-weight scoring loops. Try pure-R batching first; port only
-   after profiling confirms the loop remains hot.
-2. NAT-002: correlation-group union step. Try vectorized edge extraction first.
+1. NAT-001: stack-weight scoring loops. Pure-R batching/vectorization cleared
+   the profiling gate, so no native port is currently needed.
+2. NAT-002: correlation-group union step. Fixed with
+   `corr_groups_from_corr_cpp()` after the pure-R union refactor missed the
+   strict 10% profiling gate.
 3. NAT-003: MVR rank-update solver. Highest risk; keep pure-R fallback and
    current native solver until parity tests justify changes.
 
 Do not port glmnet/sparsegl fitting, bootstrap samplers, FDP+, or similarity
 metrics before simpler pure-R improvements are attempted.
 
-## Draft NEWS bullets
-
-Draft only; `NEWS.md` was not edited because fixes are not approved yet.
+## Implemented NEWS bullets
 
 - `get_support()` now validates `new_hard_threshold` as a single non-missing
   numeric value in `(0, 1]`.
@@ -90,19 +143,17 @@ Draft only; `NEWS.md` was not edited because fixes are not approved yet.
 
 ## pkgdown impact
 
-- If `make_rp_features()` or `make_modelx_knockoff_features()` remain internal,
-  remove them from `_pkgdown.yml`.
+- `make_rp_features()` and `make_modelx_knockoff_features()` remain internal
+  and were removed from `_pkgdown.yml`.
 - If they become exported, update `NAMESPACE`, roxygen docs, and `_pkgdown.yml`
   intentionally.
-- Add or explicitly exclude `costablr-tcga-nestedcv` in `_pkgdown.yml`.
+- `costablr-tcga-nestedcv` was added to `_pkgdown.yml`.
 
-## UNCERTAIN items
+## Residual notes
 
-- The exact cause of `devtools::check()` using a `stablr::stabl_fit()`
-  backtrace while the current `costablr-python-parity.Rmd` source loads
-  `costablr` is UNCERTAIN. Stale vignette cache is plausible because ignored
-  `vignettes/costablr-python-parity-cache/` exists, but this was not modified
-  during the audit.
+- The original `devtools::check()` failure using a stale `stablr::stabl_fit()`
+  backtrace is resolved after removing ignored vignette caches and rerendering
+  `costablr-python-parity.Rmd`.
 - Cooperative-fusion outcome misalignment is inferred from positional call
   sites but was not dynamically verified.
 - Sparse-group missing-dependency behavior was not dynamically verified because
@@ -110,8 +161,8 @@ Draft only; `NEWS.md` was not edited because fixes are not approved yet.
 
 ## Not audited
 
-- Full performance benchmarks were not run; Phase 4 findings are static
-  evidence and qualitative estimates.
+- Full package-wide performance benchmarks were not run; the medium-severity
+  performance tranche was validated with targeted old-vs-new profiling gates.
 - No CRAN-like clean library matrix was created.
 - No external Python parity reruns were performed.
 - Heavy vignettes and SLURM workflows were not executed beyond the requested
@@ -119,9 +170,7 @@ Draft only; `NEWS.md` was not edited because fixes are not approved yet.
 
 ## Gate
 
-Audit complete. Safety net is in place. devtools::test() and
-devtools::check() status: test PASS with WARN 2 and SKIP 3; check NOT PASS due
-the baseline `costablr-python-parity.Rmd` vignette-build failure. Awaiting
-approval to proceed with fixes - please specify which findings (by ID) to
-address and in what order, and whether to attempt any Phase 5 Rcpp ports.
-
+Audit remediation complete. Safety net is updated to assert the fixed
+contracts. `devtools::test()` passes with WARN 2 and SKIP 3; `devtools::check()`
+has 0 errors and no longer fails at `costablr-python-parity.Rmd`; pkgdown
+metadata checks are clean. NAT-001 through NAT-003 remain deferred.

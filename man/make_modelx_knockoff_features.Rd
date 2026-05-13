@@ -11,7 +11,8 @@ make_modelx_knockoff_features(x, n_injected, random_state = NULL)
 
 \item{n_injected}{Integer; number of knockoff columns to select.}
 
-\item{random_state}{Optional integer seed.}
+\item{random_state}{Optional integer seed for direct calls.  When supplied,
+the helper uses a scoped RNG state and restores the caller's RNG on exit.}
 }
 \value{
 Named list with elements \code{x_augmented} and \code{noise_col_indices};

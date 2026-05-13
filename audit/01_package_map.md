@@ -2,6 +2,16 @@
 
 Audit date: 2026-05-13
 
+Status reviewed: 2026-05-13. This document is an inventory and baseline
+diagnostic map, not a defect list. The two actionable baseline diagnostics
+recorded here are fixed in the post-remediation state:
+
+- `devtools::check('.', error_on = 'never')`: FIXED relative to the baseline
+  vignette-build failure. Current recorded closure is `0 errors`, with only
+  local `qpdf`, timestamp, and conda toolchain warning/note items.
+- `pkgdown::check_pkgdown()`: FIXED after adding the missing
+  `costablr-tcga-nestedcv` article index entry.
+
 ## Package metadata
 
 - Package: `costablr`
@@ -177,4 +187,3 @@ Commands run in `conda run -n R4_51`.
 - `pkgdown::check_pkgdown()`: FAIL.
   - Error: `_pkgdown.yml` is missing vignette index entry
     `"costablr-tcga-nestedcv"`.
-

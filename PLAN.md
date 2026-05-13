@@ -76,7 +76,9 @@ For command-level evidence and exact validation results, use `PROGRESS.md`.
 
 Current parity baseline includes Python-aligned FDP+ defaults: the R
 `fdr_threshold_range` default is `seq(0, 0.99, by = 0.01)`, matching the
-original Python `np.arange(0., 1., .01)` sweep.
+original Python `np.arange(0., 1., .01)` sweep.  The core selector also
+exposes Python's `bootstrap_threshold` control with the upstream effective
+default `1e-5` and sklearn-style per-bootstrap `>=` coefficient thresholding.
 
 ## Active Dependencies
 
@@ -180,7 +182,10 @@ narrative rewrite, parallel render validation completed as SLURM array job
     multinomial workflow. The notebook has been executed end-to-end in
     `R4_51`; keep the helper fallback rooted on `COSTABLR_REPO_ROOT` so
     notebook-directory execution does not create nested `scratch/scratch`
-    paths.
+    paths. The old visualization array `24758968` failed because `conda` was
+    not on the batch-job `PATH`; the renamed SLURM scripts now use an explicit
+    `${CONDA_EXE:-.../conda}` fallback and visualization rerun `24766406`
+    completed all three contrast tasks with exit code `0:0`.
 16. For crossed AURORA study-by-protection exploration, use
     `scratch/03_costablr_baseline_study_protection_test.ipynb`. It is a copied
     cache-first all-view workflow targeting six labels (`EG_P`, `EG_NP`,
@@ -211,6 +216,34 @@ narrative rewrite, parallel render validation completed as SLURM array job
     artificial features preserve the `x_augmented`/`noise_col_indices` schema,
     targeted artificial-feature tests pass, and the native solver matches the
     installed `knockpy` reference on a fixed coordinate-update path.
+19. ~~Remediate the May 13 comprehensive audit findings.~~
+    **CLOSED 2026-05-13.** Fixed INT-001 through INT-006 and IMPL-001 through
+    IMPL-007 in dependency order. The follow-up performance tranche fixed
+    PERF-001, PERF-002, PERF-003, PERF-005, PERF-006, and NAT-002; NAT-001
+    and NAT-003 remain deferred skipped placeholders. Closure signal:
+    full suite `PASS 1481`, `FAIL 0`, `WARN 2`, `SKIP 3`; `devtools::check()`
+    has `0 errors`, with only local `qpdf`/timestamp/toolchain warnings/notes;
+    `pkgdown::check_pkgdown()` reports no problems.
+20. ~~Monitor renamed scratch visualization rerun.~~ **CLOSED 2026-05-13.**
+    Scratch AURORA notebooks, helpers, SLURM scripts, cache roots, and output
+    roots are now `costablr_*` namespaced under the standalone repository. All
+    four renamed notebooks execute from cache without error outputs. Binary
+    comparison visualization rerun `24766406` completed all three contrast
+    tasks with exit code `0:0`, and per-contrast visualize caches, figures, and
+    tables are present.
+21. ~~Annotate comprehensive-audit finding closure across `audit/`.~~
+    **CLOSED 2026-05-13.** Each audit document now states whether its findings
+    are fixed, deferred, or not planned. Closure signal: audit test subset
+    passes fixed INT/IMPL/performance assertions with only the two intentional
+    NAT-001/NAT-003 placeholder skips.
+22. ~~Run the profiling-gated medium performance optimization tranche.~~
+    **CLOSED 2026-05-13.** Added old-reference performance tests and
+    `scripts/profile_audit_performance.R`; kept only optimizations clearing the
+    strict 10% runtime-or-allocation gate. Implemented chunked binary stacking,
+    vectorized multiclass stacking, vector `glmnet`/`sparsegl` coefficient
+    extraction with fallback, prepared grouped-bootstrap samplers, and the
+    NAT-002 Rcpp correlation-union helper. PERF-004, PERF-007, and PERF-008
+    remain deferred low-severity opportunities.
 
 ## Remediation Audit Execution Status (2026-05-08)
 
@@ -218,7 +251,9 @@ narrative rewrite, parallel render validation completed as SLURM array job
   WI-09, WI-10, WI-11, WI-12, WI-13, WI-14, WI-15, WI-16.
 - Reclassified by source-of-truth check against Python reference:
   - H-2 to TEST-ONLY (Python random-permutation source draw is `replace=False`).
-  - M-1 to DOC-ONLY (`bootstrap_threshold = 1e-5` parity with Python).
+  - M-1 closed after implementation parity hardening
+    (`bootstrap_threshold` exposed with Python's effective `1e-5` default and
+    sklearn-style threshold syntax/comparator).
   - WI-06 dropped (Python uses requested `artificial_proportion` in FDP+ scaling).
 - Closure gate is now remediation of test regressions, not environment bootstrap:
   full-suite validation was executed in `R4_51` and returned
@@ -599,9 +634,9 @@ Promotion criteria:
   `EG_NP`, `TU_P` vs `TU_NP`, and `GA_P` vs `GA_NP`. This is a scratch
   notebook presentation update; no roadmap or acceptance-gate change is
   required.
-- 2026-05-13: A read-only comprehensive audit completed under `audit/` with
-  additive safety-net tests in new `tests/testthat/test-audit-*.R` files.
-  No fixes are approved yet. The immediate forward gate is user selection of
-  finding IDs from `audit/00_summary.md`; preserve the audit rule that `R/`,
-  `src/`, package metadata, generated docs, and pkgdown config remain
-  unchanged until explicit fix approval.
+- 2026-05-13: The comprehensive audit remediation is closed.  The additive
+  audit tests now assert fixed behavior; stale bug snapshots were removed; the
+  Python-parity vignette and pkgdown metadata were refreshed; and package
+  build ignores now exclude repository-only sample/notebook/audit assets from
+  R source builds.  Remaining native candidates NAT-001 through NAT-003 are
+  deferred to a separate profiling-driven track.

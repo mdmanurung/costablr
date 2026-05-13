@@ -1,4 +1,4 @@
-test_that("AUDIT IMPL-002: zero artificial count errors during accumulation", {
+test_that("AUDIT IMPL-002: zero artificial count is rejected early", {
   withr::local_seed(101)
   x <- matrix(
     rnorm(20),
@@ -7,7 +7,7 @@ test_that("AUDIT IMPL-002: zero artificial count errors during accumulation", {
   )
   y <- setNames(rnorm(10L), rownames(x))
 
-  expect_snapshot(error = TRUE, {
+  expect_error(
     stabl_fit(
       x = x,
       y = y,
@@ -17,11 +17,12 @@ test_that("AUDIT IMPL-002: zero artificial count errors during accumulation", {
       artificial_proportion = 0.1,
       sample_fraction = 1,
       random_state = 1L
-    )
-  })
+    ),
+    "n_injected = 0"
+  )
 })
 
-test_that("AUDIT IMPL-003: zero subsample count fails after bootstrap retries", {
+test_that("AUDIT IMPL-003: zero subsample count is rejected early", {
   withr::local_seed(102)
   x <- matrix(
     rnorm(20),
@@ -30,7 +31,7 @@ test_that("AUDIT IMPL-003: zero subsample count fails after bootstrap retries", 
   )
   y <- setNames(rep(c(0, 1), each = 5L), rownames(x))
 
-  expect_snapshot(error = TRUE, {
+  expect_error(
     stabl_fit(
       x = x,
       y = y,
@@ -41,6 +42,7 @@ test_that("AUDIT IMPL-003: zero subsample count fails after bootstrap retries", 
       hard_threshold = 0.5,
       sample_fraction = 0.01,
       random_state = 1L
-    )
-  })
+    ),
+    "n_subsamples = 0"
+  )
 })

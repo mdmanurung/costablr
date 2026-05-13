@@ -190,6 +190,22 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
     set.seed(seed)
   }
 
+  sampler <- .make_group_bootstrap_sampler(
+    y = y,
+    groups = groups,
+    n_subsamples = n_subsamples,
+    replace = replace,
+    stratify = stratify,
+    strata = strata
+  )
+
+  sampler()
+}
+
+.make_group_bootstrap_sampler <- function(y, groups, n_subsamples,
+                                          replace = FALSE,
+                                          stratify = FALSE,
+                                          strata = NULL) {
   if (length(groups) != length(y)) {
     stop("`groups` must be the same length as `y`.", call. = FALSE)
   }
@@ -208,11 +224,20 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
   )
 
   group_levels <- unique(groups)
+  idx_by_group <- lapply(group_levels, function(g) which(groups == g))
   draw_once <- if (!is.null(strata_ids)) {
+    group_strata <- .group_strata_by_level(
+      strata_ids = strata_ids,
+      groups = groups,
+      group_levels = group_levels,
+      idx_by_group = idx_by_group
+    )
     function() .stratified_group_bootstrap_indices(
       strata_ids = strata_ids,
       groups = groups,
       group_levels = group_levels,
+      idx_by_group = idx_by_group,
+      group_strata = group_strata,
       n_subsamples = n_subsamples,
       replace = replace
     )
@@ -220,35 +245,38 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
     function() .unstratified_group_bootstrap_indices(
       groups = groups,
       group_levels = group_levels,
+      idx_by_group = idx_by_group,
       n_subsamples = n_subsamples,
       replace = replace
     )
   }
 
-  sampled_idx <- draw_once()
-  # Whole-group invariant (D3): never trim partial groups, even if the
-  # final tally exceeds n_subsamples.
+  function() {
+    sampled_idx <- draw_once()
+    # Whole-group invariant (D3): never trim partial groups, even if the
+    # final tally exceeds n_subsamples.
 
-  # Avoid degenerate resamples.  Use an iterative loop (not tail recursion) so
-  # severe class imbalance cannot exhaust the call stack (Fix 6).
-  if (length(unique(y)) >= 2L) {
-    max_retries <- 1000L
-    attempt     <- 0L
-    while (length(unique(y[sampled_idx])) < 2L) {
-      attempt <- attempt + 1L
-      if (attempt > max_retries) {
-        stop(
-          "group_bootstrap_indices: could not draw a class-diverse subsample ",
-          "after ", max_retries, " attempts. ",
-          "Check class balance or group structure.",
-          call. = FALSE
-        )
+    # Avoid degenerate resamples.  Use an iterative loop (not tail recursion) so
+    # severe class imbalance cannot exhaust the call stack (Fix 6).
+    if (length(unique(y)) >= 2L) {
+      max_retries <- 1000L
+      attempt     <- 0L
+      while (length(unique(y[sampled_idx])) < 2L) {
+        attempt <- attempt + 1L
+        if (attempt > max_retries) {
+          stop(
+            "group_bootstrap_indices: could not draw a class-diverse subsample ",
+            "after ", max_retries, " attempts. ",
+            "Check class balance or group structure.",
+            call. = FALSE
+          )
+        }
+        sampled_idx <- draw_once()
       }
-      sampled_idx <- draw_once()
     }
-  }
 
-  sampled_idx
+    sampled_idx
+  }
 }
 
 .bootstrap_strata_ids <- function(strata, n, arg = "strata") {
@@ -434,34 +462,13 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
   sample(idx, length(idx), replace = FALSE)
 }
 
-.unstratified_group_bootstrap_indices <- function(groups, group_levels,
-                                                  n_subsamples, replace) {
-  # When replace = FALSE, each group may only be drawn once.
-  # Track the remaining available pool so we stop re-drawing exhausted groups.
-  remaining   <- group_levels
-  sampled_idx <- integer(0)
-
-  while (length(sampled_idx) < n_subsamples && length(remaining) > 0L) {
-    # Use index-then-subset to avoid R's `sample(x, 1)` length-1 pitfall:
-    # when length(remaining) == 1 and remaining is numeric, sample(remaining, 1L)
-    # silently behaves as sample.int(remaining, 1L) and fabricates a label.
-    pick_pos    <- sample.int(length(remaining), size = 1L)
-    g           <- remaining[[pick_pos]]
-    remaining <- if (replace) remaining else remaining[-pick_pos]
-    sampled_idx <- if (replace) {
-      c(sampled_idx, which(groups == g))
-    } else {
-      unique(c(sampled_idx, which(groups == g)))
-    }
+.group_strata_by_level <- function(strata_ids, groups, group_levels,
+                                   idx_by_group = NULL) {
+  if (is.null(idx_by_group)) {
+    idx_by_group <- lapply(group_levels, function(g) which(groups == g))
   }
-
-  sampled_idx
-}
-
-.stratified_group_bootstrap_indices <- function(strata_ids, groups, group_levels,
-                                                n_subsamples, replace) {
-  group_strata <- vapply(group_levels, function(g) {
-    stratum <- unique(as.character(strata_ids[groups == g]))
+  vapply(seq_along(group_levels), function(i) {
+    stratum <- unique(as.character(strata_ids[idx_by_group[[i]]]))
     if (length(stratum) != 1L) {
       stop(
         "Grouped stratified bootstrap requires each group to map to exactly ",
@@ -471,22 +478,69 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
     }
     stratum
   }, character(1L))
+}
+
+.unstratified_group_bootstrap_indices <- function(groups, group_levels,
+                                                  n_subsamples, replace,
+                                                  idx_by_group = NULL) {
+  # When replace = FALSE, each group may only be drawn once.
+  # Track the remaining available pool so we stop re-drawing exhausted groups.
+  if (is.null(idx_by_group)) {
+    idx_by_group <- lapply(group_levels, function(g) which(groups == g))
+  }
+  remaining_pos <- seq_along(group_levels)
+  sampled_idx <- integer(0)
+
+  while (length(sampled_idx) < n_subsamples && length(remaining_pos) > 0L) {
+    # Use index-then-subset to avoid R's `sample(x, 1)` length-1 pitfall:
+    # when length(remaining) == 1 and remaining is numeric, sample(remaining, 1L)
+    # silently behaves as sample.int(remaining, 1L) and fabricates a label.
+    pick_pos <- sample.int(length(remaining_pos), size = 1L)
+    group_pos <- remaining_pos[[pick_pos]]
+    remaining_pos <- if (replace) remaining_pos else remaining_pos[-pick_pos]
+    group_idx <- idx_by_group[[group_pos]]
+    sampled_idx <- if (replace) {
+      c(sampled_idx, group_idx)
+    } else {
+      unique(c(sampled_idx, group_idx))
+    }
+  }
+
+  sampled_idx
+}
+
+.stratified_group_bootstrap_indices <- function(strata_ids, groups, group_levels,
+                                                n_subsamples, replace,
+                                                idx_by_group = NULL,
+                                                group_strata = NULL) {
+  if (is.null(idx_by_group)) {
+    idx_by_group <- lapply(group_levels, function(g) which(groups == g))
+  }
+  if (is.null(group_strata)) {
+    group_strata <- .group_strata_by_level(
+      strata_ids = strata_ids,
+      groups = groups,
+      group_levels = group_levels,
+      idx_by_group = idx_by_group
+    )
+  }
 
   target_counts <- .stratified_counts(strata_ids, n_subsamples, replace)
   sampled_idx <- integer(0)
 
   for (stratum in names(target_counts)) {
-    remaining <- group_levels[group_strata == stratum]
+    remaining_pos <- which(group_strata == stratum)
     stratum_idx <- integer(0)
 
-    while (length(stratum_idx) < target_counts[[stratum]] && length(remaining) > 0L) {
-      pick_pos <- sample.int(length(remaining), size = 1L)
-      g <- remaining[[pick_pos]]
-      remaining <- if (replace) remaining else remaining[-pick_pos]
+    while (length(stratum_idx) < target_counts[[stratum]] && length(remaining_pos) > 0L) {
+      pick_pos <- sample.int(length(remaining_pos), size = 1L)
+      group_pos <- remaining_pos[[pick_pos]]
+      remaining_pos <- if (replace) remaining_pos else remaining_pos[-pick_pos]
+      group_idx <- idx_by_group[[group_pos]]
       stratum_idx <- if (replace) {
-        c(stratum_idx, which(groups == g))
+        c(stratum_idx, group_idx)
       } else {
-        unique(c(stratum_idx, which(groups == g)))
+        unique(c(stratum_idx, group_idx))
       }
     }
 

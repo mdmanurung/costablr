@@ -88,6 +88,52 @@ test_that("get_support returns logical vector of correct length", {
   expect_type(mask, "logical")
 })
 
+test_that("bootstrap_threshold is exposed and uses sklearn-style semantics", {
+  expect_true("bootstrap_threshold" %in% names(formals(stabl_fit)))
+
+  expect_equal(
+    costablr:::.selected_by_bootstrap_threshold(c(0, 1e-5, 2e-5), 1e-5),
+    c(FALSE, TRUE, TRUE)
+  )
+  expect_equal(
+    costablr:::.selected_by_bootstrap_threshold(c(0, 1e-5, 2e-5), NULL),
+    c(FALSE, TRUE, TRUE)
+  )
+
+  importances <- matrix(c(0, 2, 4, 1, 2, 3), nrow = 3L)
+  expect_equal(
+    costablr:::.selected_by_bootstrap_threshold(importances, "mean"),
+    matrix(c(FALSE, TRUE, TRUE, FALSE, TRUE, TRUE), nrow = 3L)
+  )
+  expect_equal(
+    costablr:::.selected_by_bootstrap_threshold(importances, "1.5*mean"),
+    matrix(c(FALSE, FALSE, TRUE, FALSE, FALSE, TRUE), nrow = 3L)
+  )
+  expect_error(
+    costablr:::.validate_bootstrap_threshold("mode"),
+    "`bootstrap_threshold`"
+  )
+
+  set.seed(123)
+  n <- 20L; p <- 5L
+  x <- matrix(
+    rnorm(n * p), n, p,
+    dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(p)))
+  )
+  y <- setNames(rnorm(n), rownames(x))
+  fit <- stabl_fit(
+    x = x,
+    y = y,
+    lambda_grid = data.frame(lambda = c(0.05, 0.1)),
+    family = "gaussian",
+    n_bootstraps = 2L,
+    artificial_type = NULL,
+    hard_threshold = 0.99,
+    bootstrap_threshold = "mean"
+  )
+  expect_identical(fit$bootstrap_threshold, "mean")
+})
+
 test_that("explore fallback selects exactly n_explore features even when all scores are tied", {
   # When hard_threshold = 0.99, nothing passes.  With explore = TRUE and
   # n_explore = 3, exactly 3 features should be returned regardless of score

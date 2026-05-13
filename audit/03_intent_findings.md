@@ -2,6 +2,9 @@
 
 ## Finding IMPL-001: `get_support()` does not validate documented threshold shape
 
+- Status: FIXED 2026-05-13. `new_hard_threshold` now resolves to a single
+  non-missing numeric value in `(0, 1]`; guarded by
+  `tests/testthat/test-audit-stabl-accessors.R`.
 - Severity: MEDIUM
 - Locations: `R/stabl_accessors.R:27`, `R/stabl_accessors.R:44`,
   `R/stabl_accessors.R:60`, `man/get_support.Rd:12`
@@ -19,6 +22,9 @@
 
 ## Finding IMPL-002: Small artificial proportions can produce zero artificial features
 
+- Status: FIXED 2026-05-13. Artificial-feature settings that round to
+  `n_injected = 0` now fail early with a parameter error; guarded by
+  `tests/testthat/test-audit-stabl-fit.R`.
 - Severity: HIGH
 - Locations: `STABL.md:42`, `STABL.md:53`, `R/stabl_fit.R:268`,
   `R/stabl_fit.R:366`, `R/stabl_fit.R:369`, `R/stabl_fit.R:407`
@@ -37,6 +43,9 @@
 
 ## Finding IMPL-003: Positive `sample_fraction` can floor to zero subsamples
 
+- Status: FIXED 2026-05-13. `sample_fraction` values that imply
+  `n_subsamples = 0` now fail early before bootstrap sampling; guarded by
+  `tests/testthat/test-audit-stabl-fit.R`.
 - Severity: MEDIUM
 - Locations: `STABL.md:27`, `R/stabl_fit.R:326`,
   `R/stabl_fit.R:473`, `R/bootstrap_helpers.R:27`,
@@ -57,6 +66,9 @@
 
 ## Finding IMPL-004: Direct `make_modelx_knockoff_features(random_state=...)` ignores its seed argument
 
+- Status: FIXED 2026-05-13. Direct helper calls now honor `random_state` with
+  scoped RNG restoration; guarded by
+  `tests/testthat/test-audit-artificial-features.R`.
 - Severity: LOW
 - Locations: `R/artificial_features.R:79`, `R/artificial_features.R:84`,
   `R/artificial_features.R:93`, `R/artificial_features.R:210`,
@@ -74,6 +86,8 @@
 
 ## Finding IMPL-005: Documentation treats internal artificial helpers as public API
 
+- Status: FIXED 2026-05-13. Public-facing API/pkgdown indexes no longer list
+  the internal artificial helpers as exported API.
 - Severity: LOW
 - Locations: `docs/API_REFERENCE.md:27`, `docs/API_REFERENCE.md:28`,
   `_pkgdown.yml:59`, `_pkgdown.yml:60`, `NAMESPACE:33`
@@ -89,6 +103,9 @@
 
 ## Finding IMPL-006: Python-parity docs have stale threshold and artificial-type text
 
+- Status: FIXED 2026-05-13 for the canonical source/generated parity docs
+  listed below. Ignored historical HTML build artifacts may still contain stale
+  rendered text until regenerated.
 - Severity: LOW
 - Locations: `STABL.md:58`, `R/artificial_features.R:218`,
   `vignettes/costablr-python-parity.Rmd:39`,
@@ -108,6 +125,9 @@
 
 ## Finding IMPL-007: pkgdown article index omits an existing vignette
 
+- Status: FIXED 2026-05-13. `_pkgdown.yml` now indexes
+  `costablr-tcga-nestedcv`, and `pkgdown::check_pkgdown()` reports no
+  problems in the post-remediation record.
 - Severity: LOW
 - Locations: `_pkgdown.yml:113`, `_pkgdown.yml:116`,
   `vignettes/costablr-tcga-nestedcv.Rmd:1`
@@ -120,4 +140,3 @@
 - Confidence: HIGH.
 - Suggested fix: add the nested-CV article to `_pkgdown.yml`, or document and
   configure its exclusion if it is intentionally off-site.
-

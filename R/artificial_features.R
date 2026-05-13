@@ -76,12 +76,20 @@ make_rp_features <- function(x, n_injected) {
 #'
 #' @param x Numeric matrix of predictors (samples \eqn{\times} features).
 #' @param n_injected Integer; number of knockoff columns to select.
-#' @param random_state Optional integer seed.
+#' @param random_state Optional integer seed for direct calls.  When supplied,
+#'   the helper uses a scoped RNG state and restores the caller's RNG on exit.
 #'
 #' @return Named list with elements `x_augmented` and `noise_col_indices`;
 #'   see [make_rp_features()] for details.
 #' @keywords internal
 make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
+  if (!is.null(random_state)) {
+    return(.with_local_seed(
+      as.integer(random_state),
+      make_modelx_knockoff_features(x, n_injected, random_state = NULL)
+    ))
+  }
+
   if (!requireNamespace("knockoff", quietly = TRUE)) {
     stop(
       "Package 'knockoff' is required for artificial_type = \"modelx_knockoff\". ",
@@ -90,9 +98,6 @@ make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
     )
   }
 
-  # NOTE: Seeding is the dispatcher's responsibility (see
-  # `make_artificial_features`).  Re-seeding here would mask any RNG
-  # consumed by the caller and is intentionally omitted (audit M-5).
   n_features <- ncol(x)
   chunk_size <- 3000L
 
@@ -188,8 +193,8 @@ make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
 #'   or `"mvr_knockoff"`.
 #' @param random_state Optional integer; passed to [set.seed()] before any
 #'   random operations for reproducibility.  `NULL` leaves the RNG unchanged.
-#'   Seeding happens exactly once in this dispatcher; downstream generators
-#'   inherit the seeded RNG state and do not re-seed (audit M-5).
+#'   Seeding happens exactly once in this dispatcher; the model-X helper is
+#'   called without its direct-call seed from this path.
 #'
 #' @return Named list with two elements:
 #'   \describe{
@@ -212,8 +217,7 @@ make_artificial_features <- function(x, n_injected, type, random_state = NULL) {
   switch(
     type,
     random_permutation = make_rp_features(x, n_injected),
-    modelx_knockoff    = make_modelx_knockoff_features(x, n_injected,
-                                                       random_state = random_state),
+    modelx_knockoff    = make_modelx_knockoff_features(x, n_injected),
     mvr_knockoff       = make_mvr_knockoff_features(x, n_injected),
     stop(
       "`type` must be \"random_permutation\", \"modelx_knockoff\", or ",

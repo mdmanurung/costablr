@@ -26,9 +26,12 @@
 #'   `"gaussian"`, `"binomial"`, `"multinomial"`, or `"cox"`.
 #' @param alpha_fixed Numeric scalar or `NULL`.  When not `NULL`, this value
 #'   overrides any `alpha` column in `lambda_val`.
-#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
-#'   used to decide that a feature is selected in a given bootstrap.  Features
-#'   with `|coef| > bootstrap_threshold` are counted as selected.
+#' @param bootstrap_threshold Numeric scalar, character string, or `NULL`;
+#'   per-bootstrap feature-selection cutoff applied to absolute coefficients.
+#'   Numeric thresholds keep features with `|coef| >= bootstrap_threshold`.
+#'   Strings may be `"mean"`, `"median"`, or scaled forms such as
+#'   `"1.25*mean"`, matching sklearn `SelectFromModel` threshold syntax.
+#'   `NULL` resolves to the upstream STABL l1 default of `1e-5`.
 #'
 #' @return A function with signature
 #'   `function(x, y, lambda_val) -> logical vector of length ncol(x)`
@@ -49,6 +52,7 @@ make_glmnet_adapter <- function(
       call. = FALSE
     )
   }
+  .validate_bootstrap_threshold(bootstrap_threshold)
 
   function(x, y, lambda_val) {
     alpha_use <- if (!is.null(alpha_fixed)) {
@@ -68,7 +72,10 @@ make_glmnet_adapter <- function(
       alpha = alpha_use,
       lambda = lambda_use
     )
-    .feature_abs_coefs(fit = fit, s = lambda_use, family = family) > bootstrap_threshold
+    .selected_by_bootstrap_threshold(
+      .feature_abs_coefs(fit = fit, s = lambda_use, family = family),
+      bootstrap_threshold
+    )
   }
 }
 
@@ -104,9 +111,12 @@ make_glmnet_adapter <- function(
 #'   reference implementation.
 #' @param epsilon Positive numeric scalar; added to the denominator of the
 #'   weight to avoid division by zero.  Default `1e-6`.
-#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
-#'   used to decide that a feature is selected in a given bootstrap.  Features
-#'   with `|coef| > bootstrap_threshold` are counted as selected.
+#' @param bootstrap_threshold Numeric scalar, character string, or `NULL`;
+#'   per-bootstrap feature-selection cutoff applied to absolute coefficients.
+#'   Numeric thresholds keep features with `|coef| >= bootstrap_threshold`.
+#'   Strings may be `"mean"`, `"median"`, or scaled forms such as
+#'   `"1.25*mean"`, matching sklearn `SelectFromModel` threshold syntax.
+#'   `NULL` resolves to the upstream STABL l1 default of `1e-5`.
 #'
 #' @return A function with signature
 #'   `function(x, y, lambda_val) -> logical vector of length ncol(x)`.
@@ -132,6 +142,7 @@ make_adaptive_lasso_adapter <- function(
   if (!is.numeric(epsilon) || length(epsilon) != 1L || epsilon <= 0) {
     stop("`epsilon` must be a positive numeric scalar.", call. = FALSE)
   }
+  .validate_bootstrap_threshold(bootstrap_threshold)
 
   function(x, y, lambda_val) {
     lambda_use <- lambda_val[["lambda"]]
@@ -157,7 +168,10 @@ make_adaptive_lasso_adapter <- function(
       lambda = lambda_use,
       penalty.factor = penalty_factor
     )
-    .feature_abs_coefs(fit = fit, s = lambda_use, family = family) > bootstrap_threshold
+    .selected_by_bootstrap_threshold(
+      .feature_abs_coefs(fit = fit, s = lambda_use, family = family),
+      bootstrap_threshold
+    )
   }
 }
 
@@ -194,8 +208,12 @@ make_adaptive_lasso_adapter <- function(
 #' @param alpha_fixed Numeric scalar in `[0, 1]` or `NULL`.  When not `NULL`,
 #'   overrides any `alpha` column in `lambda_val`.  Controls the lasso /
 #'   group-lasso mixing weight (`asparse` in `sparsegl`).
-#' @param bootstrap_threshold Positive numeric; absolute-coefficient cutoff
-#'   used to decide that a feature is selected in a given bootstrap.
+#' @param bootstrap_threshold Numeric scalar, character string, or `NULL`;
+#'   per-bootstrap feature-selection cutoff applied to absolute coefficients.
+#'   Numeric thresholds keep features with `|coef| >= bootstrap_threshold`.
+#'   Strings may be `"mean"`, `"median"`, or scaled forms such as
+#'   `"1.25*mean"`, matching sklearn `SelectFromModel` threshold syntax.
+#'   `NULL` resolves to the upstream STABL l1 default of `1e-5`.
 #'
 #' @return A function with signature
 #'   `function(x, y, lambda_val) -> logical vector of length ncol(x)`.
@@ -239,6 +257,7 @@ make_sgl_adapter <- function(
        alpha_fixed < 0 || alpha_fixed > 1)) {
     stop("`alpha_fixed` must be NULL or a numeric scalar in [0, 1].", call. = FALSE)
   }
+  .validate_bootstrap_threshold(bootstrap_threshold)
 
   .resolve_asparse <- function(lambda_val) {
     if (!is.null(alpha_fixed)) {
@@ -291,7 +310,10 @@ make_sgl_adapter <- function(
         )
         coef_mat[, k] <- .feature_abs_coefs_sparsegl(fit_k, s = lambda_use)[inv_ord]
       }
-      return(apply(coef_mat, 1L, max) > bootstrap_threshold)
+      return(.selected_by_bootstrap_threshold(
+        apply(coef_mat, 1L, max),
+        bootstrap_threshold
+      ))
     }
 
     fit <- sparsegl::sparsegl(
@@ -302,7 +324,10 @@ make_sgl_adapter <- function(
       lambda = lambda_use,
       asparse = asparse_use
     )
-    .feature_abs_coefs_sparsegl(fit, s = lambda_use)[inv_ord] > bootstrap_threshold
+    .selected_by_bootstrap_threshold(
+      .feature_abs_coefs_sparsegl(fit, s = lambda_use)[inv_ord],
+      bootstrap_threshold
+    )
   }
 }
 
@@ -414,22 +439,183 @@ auto_lambda_grid <- function(
   stop("Unsupported coefficient structure returned by sparsegl.", call. = FALSE)
 }
 
+.validate_bootstrap_threshold <- function(bootstrap_threshold) {
+  if (is.null(bootstrap_threshold)) {
+    return(invisible(NULL))
+  }
+
+  if (is.numeric(bootstrap_threshold) &&
+      length(bootstrap_threshold) == 1L &&
+      !is.na(bootstrap_threshold) &&
+      is.finite(bootstrap_threshold) &&
+      bootstrap_threshold >= 0) {
+    return(invisible(NULL))
+  }
+
+  if (is.character(bootstrap_threshold) &&
+      length(bootstrap_threshold) == 1L &&
+      !is.na(bootstrap_threshold) &&
+      !is.null(.parse_bootstrap_threshold(bootstrap_threshold))) {
+    return(invisible(NULL))
+  }
+
+  stop(
+    "`bootstrap_threshold` must be NULL, a non-negative numeric scalar, ",
+    "or a string of the form \"mean\", \"median\", \"1.25*mean\", ",
+    "or \"1.25*median\".",
+    call. = FALSE
+  )
+}
+
+.parse_bootstrap_threshold <- function(bootstrap_threshold) {
+  threshold <- gsub("\\s+", "", bootstrap_threshold)
+  if (threshold %in% c("mean", "median")) {
+    return(list(scale = 1.0, stat = threshold))
+  }
+
+  pieces <- strsplit(threshold, "\\*")[[1L]]
+  if (length(pieces) != 2L || !(pieces[[2L]] %in% c("mean", "median"))) {
+    return(NULL)
+  }
+
+  scale <- suppressWarnings(as.numeric(pieces[[1L]]))
+  if (is.na(scale) || !is.finite(scale) || scale < 0) {
+    return(NULL)
+  }
+
+  list(scale = scale, stat = pieces[[2L]])
+}
+
+.resolve_bootstrap_threshold <- function(importances, bootstrap_threshold) {
+  if (is.null(bootstrap_threshold)) {
+    return(1e-5)
+  }
+  if (is.numeric(bootstrap_threshold)) {
+    return(as.numeric(bootstrap_threshold))
+  }
+
+  spec <- .parse_bootstrap_threshold(bootstrap_threshold)
+  stat_fun <- switch(
+    spec$stat,
+    mean   = mean,
+    median = stats::median
+  )
+
+  if (is.matrix(importances)) {
+    return(spec$scale * as.numeric(apply(importances, 2L, stat_fun)))
+  }
+  spec$scale * as.numeric(stat_fun(importances))
+}
+
+.selected_by_bootstrap_threshold <- function(importances, bootstrap_threshold) {
+  .validate_bootstrap_threshold(bootstrap_threshold)
+  threshold <- .resolve_bootstrap_threshold(importances, bootstrap_threshold)
+
+  if (is.matrix(importances) && length(threshold) > 1L) {
+    threshold_mat <- matrix(
+      rep(threshold, each = nrow(importances)),
+      nrow = nrow(importances),
+      ncol = ncol(importances)
+    )
+    return(importances >= threshold_mat)
+  }
+
+  importances >= threshold
+}
+
 # ---- Batch coefficient extraction helpers ------------------------------------
 # These extract coefficients for ALL lambdas in one call, returning a
 # (p × n_lambda) numeric matrix of absolute coefficient values.
 
 .feature_abs_coefs_batch <- function(fit, lambda_seq, family = "gaussian") {
-  # Extract coefficients per lambda and column-bind.  Per-lambda calls to the
-  # existing extractor avoid multi-s return-type variance across glmnet
-  # versions while still benefiting from the single warm-start path fit.
-  col_list <- lapply(lambda_seq, function(s) .feature_abs_coefs(fit = fit, s = s,
-                                                                  family = family))
-  do.call(cbind, col_list)  # p x n_lambda numeric matrix
+  coef_obj <- tryCatch(
+    glmnet::coef.glmnet(fit, s = lambda_seq),
+    error = function(e) NULL
+  )
+  out <- if (!is.null(coef_obj)) {
+    tryCatch(
+      .coerce_feature_abs_coefs_batch(coef_obj, family = family),
+      error = function(e) NULL
+    )
+  } else {
+    NULL
+  }
+  if (!is.null(out) && is.matrix(out) && ncol(out) == length(lambda_seq)) {
+    return(out)
+  }
+
+  .feature_abs_coefs_batch_fallback(fit, lambda_seq, family = family)
 }
 
 .feature_abs_coefs_sparsegl_batch <- function(fit, lambda_seq) {
-  col_list <- lapply(lambda_seq, function(s) .feature_abs_coefs_sparsegl(fit = fit, s = s))
-  do.call(cbind, col_list)  # p x n_lambda numeric matrix
+  coef_obj <- tryCatch(
+    stats::coef(fit, s = lambda_seq),
+    error = function(e) NULL
+  )
+  out <- if (!is.null(coef_obj)) {
+    tryCatch(
+      .coerce_sparsegl_abs_coefs_batch(coef_obj),
+      error = function(e) NULL
+    )
+  } else {
+    NULL
+  }
+  if (!is.null(out) && is.matrix(out) && ncol(out) == length(lambda_seq)) {
+    return(out)
+  }
+
+  .feature_abs_coefs_sparsegl_batch_fallback(fit, lambda_seq)
+}
+
+.feature_abs_coefs_batch_fallback <- function(fit, lambda_seq, family = "gaussian") {
+  col_list <- lapply(lambda_seq, function(s) {
+    .feature_abs_coefs(fit = fit, s = s, family = family)
+  })
+  do.call(cbind, col_list)
+}
+
+.feature_abs_coefs_sparsegl_batch_fallback <- function(fit, lambda_seq) {
+  col_list <- lapply(lambda_seq, function(s) {
+    .feature_abs_coefs_sparsegl(fit = fit, s = s)
+  })
+  do.call(cbind, col_list)
+}
+
+.coerce_feature_abs_coefs_batch <- function(coef_obj, family = "gaussian") {
+  row_sel <- if (family == "cox") TRUE else -1L
+
+  if (inherits(coef_obj, "dgCMatrix") || is.matrix(coef_obj)) {
+    return(abs(as.matrix(coef_obj[row_sel, , drop = FALSE])))
+  }
+  if (is.list(coef_obj)) {
+    mats <- lapply(coef_obj, function(m) {
+      abs(as.matrix(m[row_sel, , drop = FALSE]))
+    })
+    if (length(mats) == 0L) {
+      stop("Empty coefficient list returned by glmnet.", call. = FALSE)
+    }
+    dims <- lapply(mats, dim)
+    if (!all(vapply(dims[-1L], identical, logical(1L), dims[[1L]]))) {
+      stop("Inconsistent coefficient shapes returned by glmnet.", call. = FALSE)
+    }
+    out <- mats[[1L]]
+    if (length(mats) > 1L) {
+      for (i in seq.int(2L, length(mats))) {
+        out <- pmax(out, mats[[i]])
+      }
+    }
+    return(out)
+  }
+
+  stop("Unsupported coefficient structure returned by glmnet.", call. = FALSE)
+}
+
+.coerce_sparsegl_abs_coefs_batch <- function(coef_obj) {
+  if (inherits(coef_obj, "dgCMatrix") || is.matrix(coef_obj)) {
+    return(abs(as.matrix(coef_obj[-1L, , drop = FALSE])))
+  }
+
+  stop("Unsupported coefficient structure returned by sparsegl.", call. = FALSE)
 }
 
 # ---- Internal batch adapters -------------------------------------------------
@@ -441,6 +627,10 @@ auto_lambda_grid <- function(
 # from n_bootstraps × n_lambdas model fits to just n_bootstraps fits.
 
 .make_glmnet_batch_adapter <- function(family, alpha_fixed, bootstrap_threshold) {
+  .validate_bootstrap_threshold(bootstrap_threshold)
+  feature_abs_coefs_batch <- .feature_abs_coefs_batch
+  selected_by_bootstrap_threshold <- .selected_by_bootstrap_threshold
+
   function(x, y, lambda_grid) {
     n_lambdas  <- nrow(lambda_grid)
     n_features <- ncol(x)
@@ -453,8 +643,8 @@ auto_lambda_grid <- function(
       lambda_seq    <- lambda_grid[["lambda"]]
       fit           <- glmnet::glmnet(x, y, family = family, alpha = alpha_fixed,
                                       lambda = sort(lambda_seq, decreasing = TRUE))
-      coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
-      result        <- coef_mat > bootstrap_threshold
+      coef_mat      <- feature_abs_coefs_batch(fit, lambda_seq, family = family)
+      result        <- selected_by_bootstrap_threshold(coef_mat, bootstrap_threshold)
 
     } else if (has_alpha_col) {
       # Elastic net with varying alpha: one path call per unique alpha
@@ -464,8 +654,8 @@ auto_lambda_grid <- function(
         lambda_seq    <- lambda_grid[["lambda"]][row_idx]
         fit           <- glmnet::glmnet(x, y, family = family, alpha = a,
                                         lambda = sort(lambda_seq, decreasing = TRUE))
-        coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
-        result[, row_idx] <- coef_mat > bootstrap_threshold
+        coef_mat      <- feature_abs_coefs_batch(fit, lambda_seq, family = family)
+        result[, row_idx] <- selected_by_bootstrap_threshold(coef_mat, bootstrap_threshold)
       }
 
     } else {
@@ -473,8 +663,8 @@ auto_lambda_grid <- function(
       lambda_seq    <- lambda_grid[["lambda"]]
       fit           <- glmnet::glmnet(x, y, family = family, alpha = 1.0,
                                       lambda = sort(lambda_seq, decreasing = TRUE))
-      coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
-      result        <- coef_mat > bootstrap_threshold
+      coef_mat      <- feature_abs_coefs_batch(fit, lambda_seq, family = family)
+      result        <- selected_by_bootstrap_threshold(coef_mat, bootstrap_threshold)
     }
 
     result
@@ -483,6 +673,11 @@ auto_lambda_grid <- function(
 
 .make_adaptive_lasso_batch_adapter <- function(family, gamma, epsilon,
                                                bootstrap_threshold) {
+  .validate_bootstrap_threshold(bootstrap_threshold)
+  feature_abs_coefs <- .feature_abs_coefs
+  feature_abs_coefs_batch <- .feature_abs_coefs_batch
+  selected_by_bootstrap_threshold <- .selected_by_bootstrap_threshold
+
   function(x, y, lambda_grid) {
     lambda_seq <- lambda_grid[["lambda"]]
 
@@ -490,21 +685,23 @@ auto_lambda_grid <- function(
     init_fit       <- glmnet::glmnet(x, y, family = family, alpha = 0,
                                      nlambda = 30L)
     init_lambda    <- tail(init_fit$lambda, n = 1L)
-    init_scores    <- .feature_abs_coefs(fit = init_fit, s = init_lambda,
-                       family = family)
+    init_scores    <- feature_abs_coefs(fit = init_fit, s = init_lambda,
+                                         family = family)
     penalty_factor <- 1.0 / ((init_scores + epsilon) ^ gamma)
 
     # Fit adaptive lasso across the full lambda path (one call)
     fit      <- glmnet::glmnet(x, y, family = family, alpha = 1,
                                lambda         = sort(lambda_seq, decreasing = TRUE),
                                penalty.factor = penalty_factor)
-    coef_mat <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
-    coef_mat > bootstrap_threshold
+    coef_mat <- feature_abs_coefs_batch(fit, lambda_seq, family = family)
+    selected_by_bootstrap_threshold(coef_mat, bootstrap_threshold)
   }
 }
 
 .make_sgl_batch_adapter <- function(family, feature_groups, alpha_fixed,
                                     bootstrap_threshold) {
+  .validate_bootstrap_threshold(bootstrap_threshold)
+
   if (identical(family, "cox")) {
     stop(
       "Cox family is not supported by sparse_group_lasso. ",
@@ -513,6 +710,8 @@ auto_lambda_grid <- function(
     )
   }
   groups <- as.integer(as.factor(feature_groups))
+  feature_abs_coefs_sparsegl_batch <- .feature_abs_coefs_sparsegl_batch
+  selected_by_bootstrap_threshold <- .selected_by_bootstrap_threshold
 
   function(x, y, lambda_grid) {
     n_lambdas  <- nrow(lambda_grid)
@@ -553,18 +752,21 @@ auto_lambda_grid <- function(
                                       family  = "binomial",
                                       lambda  = sort(lambda_seq, decreasing = TRUE),
                                       asparse = asparse)
-          coef_k_sorted <- .feature_abs_coefs_sparsegl_batch(fit_k, lambda_seq)
+          coef_k_sorted <- feature_abs_coefs_sparsegl_batch(fit_k, lambda_seq)
           coef_k        <- coef_k_sorted[inv_ord, , drop = FALSE]
           coef_acc      <- pmax(coef_acc, coef_k)
         }
-        result[, row_idx] <- coef_acc > bootstrap_threshold
+        result[, row_idx] <- selected_by_bootstrap_threshold(coef_acc, bootstrap_threshold)
       } else {
         fit      <- sparsegl::sparsegl(x = x_s, y = y, group = grp_s,
                                        family  = family,
                                        lambda  = sort(lambda_seq, decreasing = TRUE),
                                        asparse = asparse)
-        coef_mat          <- .feature_abs_coefs_sparsegl_batch(fit, lambda_seq)
-        result[, row_idx] <- coef_mat[inv_ord, , drop = FALSE] > bootstrap_threshold
+        coef_mat          <- feature_abs_coefs_sparsegl_batch(fit, lambda_seq)
+        result[, row_idx] <- selected_by_bootstrap_threshold(
+          coef_mat[inv_ord, , drop = FALSE],
+          bootstrap_threshold
+        )
       }
     }
 

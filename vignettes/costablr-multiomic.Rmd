@@ -137,8 +137,8 @@ fit_cytof <- stabl_fit(
   y               = ool_train$y,
   lambda_grid     = lambda_cytof,
   family          = "gaussian",
-  n_bootstraps    = 100L,
-  artificial_type = "random_permutation",
+  n_bootstraps    = 200L,
+  artificial_type = "modelx_knockoff",
   random_state    = 42L
 )
 fit_cytof
@@ -155,7 +155,7 @@ fit_prot <- stabl_fit(
   y               = ool_train$y,
   lambda_grid     = lambda_prot,
   family          = "gaussian",
-  n_bootstraps    = 100L,
+  n_bootstraps    = 500L,
   artificial_type = "modelx_knockoff",
   random_state    = 42L
 )
@@ -232,8 +232,8 @@ multi_fit <- stabl_multiomic_train_validate(
   x_valid_list    = ool_valid$x_list,
   y_valid         = ool_valid$y,
   family          = "gaussian",
-  n_bootstraps    = 100L,
-  artificial_type = "random_permutation",
+  n_bootstraps    = 200L,
+  artificial_type = "modelx_knockoff",
   early_fusion    = TRUE,
   late_fusion     = TRUE,
   n_iter_lf       = 500L,

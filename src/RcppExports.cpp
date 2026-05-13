@@ -11,6 +11,18 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// corr_groups_from_corr_cpp
+Rcpp::IntegerVector corr_groups_from_corr_cpp(const Rcpp::NumericMatrix& corr, double cutoff);
+RcppExport SEXP _costablr_corr_groups_from_corr_cpp(SEXP corrSEXP, SEXP cutoffSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Rcpp::NumericMatrix& >::type corr(corrSEXP);
+    Rcpp::traits::input_parameter< double >::type cutoff(cutoffSEXP);
+    rcpp_result_gen = Rcpp::wrap(corr_groups_from_corr_cpp(corr, cutoff));
+    return rcpp_result_gen;
+END_RCPP
+}
 // mvr_solve_ungrouped_cpp
 arma::mat mvr_solve_ungrouped_cpp(const arma::mat& Sigma, int num_iter, double smoothing, double converge_tol, bool verbose, Rcpp::Nullable<Rcpp::IntegerMatrix> update_order);
 RcppExport SEXP _costablr_mvr_solve_ungrouped_cpp(SEXP SigmaSEXP, SEXP num_iterSEXP, SEXP smoothingSEXP, SEXP converge_tolSEXP, SEXP verboseSEXP, SEXP update_orderSEXP) {
@@ -29,6 +41,7 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_costablr_corr_groups_from_corr_cpp", (DL_FUNC) &_costablr_corr_groups_from_corr_cpp, 2},
     {"_costablr_mvr_solve_ungrouped_cpp", (DL_FUNC) &_costablr_mvr_solve_ungrouped_cpp, 6},
     {NULL, NULL, 0}
 };

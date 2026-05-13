@@ -19,6 +19,7 @@ stabl_fit(
   fdr_threshold_range = seq(0, 0.99, by = 0.01),
   explore = FALSE,
   n_explore = 5L,
+  bootstrap_threshold = 1e-05,
   groups = NULL,
   stratify_bootstrap = FALSE,
   bootstrap_strata = NULL,
@@ -79,6 +80,14 @@ Default: \code{seq(0, 0.99, by = 0.01)}, matching Python STABL's
 back to the top \code{n_explore} features.  Default: \code{FALSE}.}
 
 \item{n_explore}{Positive integer; fallback feature count.  Default: \code{5L}.}
+
+\item{bootstrap_threshold}{Numeric scalar, character string, or \code{NULL};
+per-bootstrap feature-selection cutoff applied to absolute coefficients.
+Numeric thresholds keep features with \verb{|coef| >= bootstrap_threshold}.
+Strings may be \code{"mean"}, \code{"median"}, or scaled forms such as
+\code{"1.25*mean"}, matching sklearn \code{SelectFromModel} threshold syntax.
+\code{NULL} resolves to the upstream STABL l1 default of \code{1e-5}. Default:
+\code{1e-5}.}
 
 \item{groups}{Named vector of group IDs (same names as \code{rownames(x)}) or
 \code{NULL}.  When supplied, \code{\link[=group_bootstrap_indices]{group_bootstrap_indices()}} is used instead of
@@ -143,6 +152,7 @@ actually used.}
 \item{\code{hard_threshold}}{As supplied.}
 \item{\code{artificial_type}}{As supplied.}
 \item{\code{artificial_proportion}}{As supplied.}
+\item{\code{bootstrap_threshold}}{As supplied.}
 \item{\code{explore}}{As supplied.}
 \item{\code{n_explore}}{As supplied.}
 \item{\code{feature_names}}{Character vector of original feature names.}

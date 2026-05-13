@@ -1,4 +1,4 @@
-test_that("AUDIT IMPL-005: direct model-X random_state argument is not reproducible", {
+test_that("AUDIT IMPL-004: direct model-X random_state argument is reproducible", {
   skip_if_not_installed("knockoff")
 
   withr::local_seed(301)
@@ -15,7 +15,7 @@ test_that("AUDIT IMPL-005: direct model-X random_state argument is not reproduci
       second$x_augmented,
       check.attributes = FALSE
     )),
-    FALSE
+    TRUE
   )
-  expect_equal(identical(first$noise_col_indices, second$noise_col_indices), FALSE)
+  expect_equal(identical(first$noise_col_indices, second$noise_col_indices), TRUE)
 })

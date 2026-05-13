@@ -16,6 +16,9 @@ The following behaviors are parity-critical for the R reimplementation and
 must remain explicit in code and tests:
 
 - FDP+ and support-mask thresholding use strict `>` comparison.
+- Per-bootstrap coefficient thresholding follows sklearn `SelectFromModel`
+  semantics: features with absolute importance `>= bootstrap_threshold` are
+  counted as selected for that bootstrap/lambda.
 - Default subsampling policy is `sample_fraction = 0.5`, `replace = FALSE`.
 - Core STABL fit returns stability scores, threshold diagnostics, and support;
    downstream predictive refit is a separate workflow stage.
@@ -32,6 +35,14 @@ must remain explicit in code and tests:
   `stabl_fit()` and the multi-omic workflow helpers. It is additive API
   surface and does not change default lasso or parity behavior when `NULL`.
 - `fdr_threshold_range` defines the threshold sweep used in FDP+ minimization.
+- `bootstrap_threshold` defines the per-bootstrap absolute-coefficient cutoff.
+  R exposes this argument with the upstream STABL effective default `1e-5`.
+  Numeric thresholds, `NULL`, `"mean"`, `"median"`, and scaled forms such as
+  `"1.25*mean"` follow sklearn `SelectFromModel` threshold syntax; `NULL`
+  resolves to `1e-5` for the l1-style learners implemented here.
+- Predictor row names, outcome sample IDs, and group sample IDs must be unique
+  before name-based alignment.  Duplicate IDs are hard errors because they
+  cannot preserve pandas-style one-to-one sample alignment.
 
 **Inputs:**
 *   $X \in \mathbb{R}^{n \times p}$: Observation matrix containing $n$ samples and $p$ features [1].
@@ -54,6 +65,9 @@ must remain explicit in code and tests:
    - Python implementation: $q = \lfloor p\pi \rfloor$.
    - R implementation: $q = \mathrm{round}(p\pi)$.
    - With the default $\pi = 1$, this gives $q = p$.
+   - When artificial features are enabled, R rejects configurations whose
+     realised $q$ is less than one instead of entering FDP+ with an empty
+     artificial block.
 2. Generate artificial features $\tilde{X} \in \mathbb{R}^{n \times q}$ using:
    - random permutation of selected original columns (`"random_permutation"`),
    - equicorrelated Gaussian model-X knockoffs (`"modelx_knockoff"`), or
@@ -77,6 +91,8 @@ must remain explicit in code and tests:
 2. For each iteration $k$, draw a random subsample of size
    $m = \lfloor sn \rfloor$ from $(Y, \mathbb{X})$.
    The default is $s=0.5$ and `replace=FALSE`.
+   R rejects configurations whose realised $m$ is less than one before
+   bootstrap sampling starts.
    In R, when `bootstrap_strata` is supplied, the draw is performed within the
    realised interaction of the supplied stratification columns.  When
    `stratify_bootstrap = TRUE` and `bootstrap_strata = NULL`, the outcome
@@ -84,7 +100,11 @@ must remain explicit in code and tests:
    preserves whole groups; grouped stratification requires every group to map
    to exactly one realised stratum.
 3. Fit the Base SRM on $(Y, \mathbb{X})_k$ across all values of the regularization parameter(s) $\lambda \in \Lambda$ [5].
-4. For each $(k, \lambda)$, derive a binary selection mask over the $p+q$ features (typically using non-zero/thresholded coefficients).
+4. For each $(k, \lambda)$, derive a binary selection mask over the $p+q$ features.
+   For coefficient-based learners this is `abs(coef) >= bootstrap_threshold`,
+   matching sklearn `SelectFromModel` bootstrap-level semantics.  This
+   bootstrap-level comparator is distinct from the later FDP+/support
+   stability comparator, which remains strict `>`.
 
 ### Step 3: Compute Feature Selection Frequencies
 1. For each feature $j \in \{1, \dots, p+q\}$ and each $\lambda \in \Lambda$, compute bootstrap selection frequency:
@@ -107,6 +127,9 @@ must remain explicit in code and tests:
    θ \in \arg\min_t FDP_+(t),
    $$
    with implementation fallback $\theta=1$ if the minimum FDP+ exceeds 1.
+   Because the default grid includes zero, an FDP+-derived $\theta=0$ is valid.
+   User-supplied hard-threshold overrides must still be single, finite numeric
+   values in `(0, 1]`.
 
 ### Step 5: Final Feature Selection and Model Fit
 1. Core STABL outputs the final selected original-feature set using strict thresholding:
@@ -126,21 +149,36 @@ must remain explicit in code and tests:
      R-only and disabled by default to preserve Python parity.
 - Thresholding comparator:
    - Both use strict $>$ for FDP+ and support-mask selection.
+- Bootstrap coefficient comparator:
+   - Both use $|coef| >= bootstrap_threshold$ when turning a single fitted
+     bootstrap model into a selected-feature mask.
 - FDP+ threshold grid defaults:
    - Python default is `np.arange(0., 1., .01)`.
    - R default is `seq(0, 0.99, by = 0.01)`.
 - Core output contract:
    - Both core fit paths stop at stability scores + thresholding + feature support; final predictive refit is handled downstream.
 - Bootstrap selection threshold (`bootstrap_threshold`):
-   - Both Python (`stabl/stabl.py:973`) and R use `1e-5` as the absolute-coefficient cutoff that decides whether a feature is "selected" in a single bootstrap fit.  This is intentionally identical; do not change one without the other.
+   - Both Python (`stabl/stabl.py:942`) and R expose
+     `bootstrap_threshold`, with an effective default of `1e-5` as the
+     absolute-coefficient cutoff that decides whether a feature is "selected"
+     in a single bootstrap fit.
+   - R supports numeric thresholds, `NULL`, `"mean"`, `"median"`, and scaled
+     forms such as `"1.25*mean"` to mirror sklearn `SelectFromModel`
+     threshold syntax.
 - Artificial-feature column-source sampling (random permutation):
    - Both Python (`stabl/stabl.py:1428`) and R draw the source column for each artificial feature with `replace = FALSE`.
 - Artificial-feature realised count:
    - Both Python (`stabl/stabl.py:1474`) and R pass the requested `artificial_proportion` directly to the FDP+ scaling factor `1/π` (no realised-vs-requested correction).
+- Direct model-X helper seeding:
+   - `make_modelx_knockoff_features(random_state = ...)` uses a scoped RNG
+     state and restores the caller's RNG on exit.  The higher-level
+     `make_artificial_features()` dispatcher seeds once before calling the
+     selected generator.
 
 ### Reviewer Checklist
 
 - Verify strict-threshold comparator (`>`) is used in both FDP+ and support extraction.
+- Verify per-bootstrap coefficient masks use `>= bootstrap_threshold`.
 - Verify default subsample policy matches documented defaults.
 - Verify FDP+ expression includes `(1 / pi)` artificial-feature scaling.
 - Verify core fit output boundary does not include final predictive refit.

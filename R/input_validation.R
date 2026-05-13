@@ -80,6 +80,9 @@ validate_sample_alignment <- function(x, y, groups = NULL) {
   if (is.null(sample_ids) || anyNA(sample_ids) || any(sample_ids == "")) {
     stop("`x` must have non-empty row names used as sample ids.", call. = FALSE)
   }
+  if (anyDuplicated(sample_ids)) {
+    stop("`x` row names must be unique sample ids.", call. = FALSE)
+  }
 
   y_ids <- .outcome_sample_ids(y)
   if (is.null(y_ids)) {
@@ -87,6 +90,9 @@ validate_sample_alignment <- function(x, y, groups = NULL) {
       "`y` must be a named vector or matrix-like outcome with row names as sample ids.",
       call. = FALSE
     )
+  }
+  if (anyDuplicated(y_ids)) {
+    stop("`y` sample ids must be unique.", call. = FALSE)
   }
 
   if (!setequal(sample_ids, y_ids)) {
@@ -101,6 +107,9 @@ validate_sample_alignment <- function(x, y, groups = NULL) {
   if (!is.null(groups)) {
     if (is.null(names(groups))) {
       stop("`groups` must be a named vector where names are sample ids.", call. = FALSE)
+    }
+    if (anyDuplicated(names(groups))) {
+      stop("`groups` sample ids must be unique.", call. = FALSE)
     }
     if (!setequal(sample_ids, names(groups))) {
       stop("Sample mismatch between `x` row names and `groups` names.", call. = FALSE)
@@ -130,6 +139,12 @@ validate_sample_alignment <- function(x, y, groups = NULL) {
 # Subset supported outcome types by sample id while preserving their shape.
 .subset_outcome_by_ids <- function(y, sample_ids) {
   y_ids <- .outcome_sample_ids(y)
+  if (anyDuplicated(sample_ids)) {
+    stop("`sample_ids` must be unique.", call. = FALSE)
+  }
+  if (anyDuplicated(y_ids)) {
+    stop("`y` sample ids must be unique.", call. = FALSE)
+  }
   idx <- match(sample_ids, y_ids)
 
   if (anyNA(idx)) {

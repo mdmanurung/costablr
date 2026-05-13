@@ -24,8 +24,10 @@ exported factories remain available for adapter-level workflows and tests.
 ## Artificial Features
 
 - `make_artificial_features()` dispatches artificial-feature generation.
-- `make_rp_features()` creates random-permutation decoy features.
-- `make_modelx_knockoff_features()` creates optional model-X knockoff decoy features.
+
+The lower-level random-permutation, model-X, and MVR helper functions are
+internal implementation details; use `make_artificial_features()` or
+`stabl_fit(artificial_type = ...)` from user code.
 
 ## Input Validation and Bootstrapping
 

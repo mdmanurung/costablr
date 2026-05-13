@@ -17,9 +17,12 @@ make_glmnet_adapter(
 \item{alpha_fixed}{Numeric scalar or \code{NULL}.  When not \code{NULL}, this value
 overrides any \code{alpha} column in \code{lambda_val}.}
 
-\item{bootstrap_threshold}{Positive numeric; absolute-coefficient cutoff
-used to decide that a feature is selected in a given bootstrap.  Features
-with \verb{|coef| > bootstrap_threshold} are counted as selected.}
+\item{bootstrap_threshold}{Numeric scalar, character string, or \code{NULL};
+per-bootstrap feature-selection cutoff applied to absolute coefficients.
+Numeric thresholds keep features with \verb{|coef| >= bootstrap_threshold}.
+Strings may be \code{"mean"}, \code{"median"}, or scaled forms such as
+\code{"1.25*mean"}, matching sklearn \code{SelectFromModel} threshold syntax.
+\code{NULL} resolves to the upstream STABL l1 default of \code{1e-5}.}
 }
 \value{
 A function with signature

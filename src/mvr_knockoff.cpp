@@ -100,11 +100,16 @@ Rcpp::IntegerVector get_update_order(
       );
     }
     Rcpp::IntegerVector out(p);
+    Rcpp::LogicalVector seen(p);
     for (int j = 0; j < p; ++j) {
       const int value = order(iter, j);
       if (value < 1 || value > p) {
         Rcpp::stop("`update_order` entries must be 1-based column indices.");
       }
+      if (seen[value - 1]) {
+        Rcpp::stop("Each `update_order` row must be a permutation of 1:p.");
+      }
+      seen[value - 1] = true;
       out[j] = value;
     }
     return out;

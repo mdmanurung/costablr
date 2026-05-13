@@ -41,9 +41,17 @@ get_support <- function(object, new_hard_threshold = NULL) {
 get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
   .check_fitted_stabl(object)
 
-  threshold <- if (!is.null(new_hard_threshold)) {
-    new_hard_threshold
+  threshold_source <- if (!is.null(new_hard_threshold)) {
+    "new_hard_threshold"
   } else if (!is.null(object$hard_threshold)) {
+    "hard_threshold"
+  } else {
+    "fdr_min_threshold_"
+  }
+
+  threshold <- if (identical(threshold_source, "new_hard_threshold")) {
+    new_hard_threshold
+  } else if (identical(threshold_source, "hard_threshold")) {
     object$hard_threshold
   } else {
     object$fdr_min_threshold_
@@ -53,6 +61,24 @@ get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
     stop(
       "No threshold available: fit with `artificial_type` or supply ",
       "`hard_threshold`.",
+      call. = FALSE
+    )
+  }
+  if (!is.numeric(threshold) || length(threshold) != 1L ||
+      is.na(threshold) || !is.finite(threshold)) {
+    stop(
+      "`new_hard_threshold` must resolve to a single non-missing numeric value in (0, 1].",
+      call. = FALSE
+    )
+  }
+  lower_bound_ok <- if (identical(threshold_source, "fdr_min_threshold_")) {
+    threshold >= 0
+  } else {
+    threshold > 0
+  }
+  if (!lower_bound_ok || threshold > 1) {
+    stop(
+      "`new_hard_threshold` must resolve to a single non-missing numeric value in (0, 1].",
       call. = FALSE
     )
   }

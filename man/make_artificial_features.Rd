@@ -21,8 +21,8 @@ or \code{"mvr_knockoff"}.}
 
 \item{random_state}{Optional integer; passed to \code{\link[=set.seed]{set.seed()}} before any
 random operations for reproducibility.  \code{NULL} leaves the RNG unchanged.
-Seeding happens exactly once in this dispatcher; downstream generators
-inherit the seeded RNG state and do not re-seed (audit M-5).}
+Seeding happens exactly once in this dispatcher; the model-X helper is
+called without its direct-call seed from this path.}
 }
 \value{
 Named list with two elements:

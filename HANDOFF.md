@@ -68,9 +68,22 @@ For details that must not be duplicated here:
   - `inst/analysis/run_tcga_nestedcv.R` runs the cached
     costablr-vs-DIABLO TCGA benchmark with costablr model-X knockoff artificial
     features;
-  - full SLURM job `24750538` was submitted and was pending for `Priority` at
-    the submission check.
-- Workspace mode: initial CRAN-prep hardening pass complete; local manual-PDF tooling remains the only package-check warning.
+  - full SLURM job `24750538` is running as of the latest check.
+- Workspace mode: May 13 audit remediation is closed; local package checks now
+  have 0 errors, with only environment/toolchain warning/note items remaining.
+- Latest audit-document signal: all files under `audit/` now explicitly state
+  whether each finding is fixed, deferred, or not planned. INT-001 through
+  INT-006, IMPL-001 through IMPL-007, and medium performance findings
+  PERF-001, PERF-002, PERF-003, PERF-005, and PERF-006 are marked fixed.
+  NAT-002 is fixed by `corr_groups_from_corr_cpp()`; PERF-004, PERF-007,
+  PERF-008, NAT-001, and NAT-003 remain deferred, and NAT-004 through NAT-006
+  remain not planned for first-pass native work. Audit test subset passes with
+  only the two intentional NAT skips.
+- Latest performance-gate signal: `scripts/profile_audit_performance.R`
+  compares old-reference helpers against current implementations with fixed
+  seeds, `system.time()`, `Rprofmem()`, and a strict 10% runtime-or-allocation
+  gate. KEEP decisions were recorded for PERF-001, PERF-002, PERF-003,
+  PERF-005, and PERF-006; NAT-003 is info-only and still deferred.
 - R4_51 install status: local `costablr` source package installed from
   `.` into the conda env library; exact-location load check reports
   version `0.0.0.9000`.
@@ -80,19 +93,30 @@ For details that must not be duplicated here:
 - Latest artificial-feature signal: the old `"knockoff"` option was removed
   and replaced by `"modelx_knockoff"`; `"mvr_knockoff"` uses a
   RcppArmadillo-backed Gaussian MVR solver with a pure-R reference fallback.
-  Roxygen docs were regenerated, targeted artificial-feature tests pass, and
-  the full package suite remains green.
+  The direct model-X helper now honors its `random_state` argument with scoped
+  RNG restoration; targeted artificial-feature tests pass.
+- Latest bootstrap-threshold parity signal: `stabl_fit()` now exposes
+  `bootstrap_threshold` with Python STABL's effective default `1e-5`.  The
+  learner adapters use sklearn-style `>=` per-bootstrap coefficient
+  thresholding and accept `NULL`, numeric thresholds, `"mean"`, `"median"`,
+  and scaled forms such as `"1.25*mean"`.  Focused `test-stabl-fit.R` passes.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
 - Cooperative fusion: promoted workflow-layer extension (non-parity-blocking). Hardening milestone CLOSED 2026-05-08 (M12); promotion accessor milestone CLOSED 2026-05-10. Public inspection surface now includes `get_cooperative_features()` and `get_cooperative_diagnostics()`.
-- Latest verified full-suite signal: `PASS 1455`, `FAIL 0`, `WARN 2`, `SKIP 0` (see `PROGRESS.md` for command trail).
-- Latest verified package-check signal: `R CMD check --no-manual` `Status: OK`; full `R CMD check` has `Status: 1 WARNING` from missing local LaTeX package `inconsolata.sty`.
+- Latest verified full-suite signal before the performance tranche:
+  `PASS 1481`, `FAIL 0`, `WARN 2`, `SKIP 3` with `NOT_CRAN=true`; skips were
+  the intentional NAT-001/002/003 placeholders. Re-run the full suite after the
+  performance tranche before cutting a release.
+- Latest verified package-check signal: `devtools::check('.', error_on =
+  'never')` has `0 errors`, `1 WARNING`, and `2 NOTEs`; remaining items are
+  missing local `qpdf`, timestamp verification, and the conda `-march=nocona`
+  compile flag.
 - Latest verified vignette signal: all 5 non-nested canonical source vignettes
   rendered successfully in SLURM array job `24752130` after the narrative
   rewrite (`costablr-cooperative`, `costablr-intro`, `costablr-multiomic`,
   `costablr-python-parity`, `costablr-tcga`).
-- Latest verified documentation-site signal: pkgdown site builds to
-  `docs/costablr` with clean metadata checks (URLs, favicons, Open Graph,
-  articles, reference metadata all OK).
+- Latest verified documentation-site signal: `pkgdown::check_pkgdown()` reports
+  no problems after adding the nested-CV article and nested-CV reference topic
+  to `_pkgdown.yml`.
 - Latest targeted plotting signal: `test-phase7.R` passes against local source
   (`PASS 83`, `FAIL 0`, `WARN 0`, `SKIP 0`).
 - Latest intro-vignette signal: `costablr-intro.Rmd` renders successfully after a
@@ -101,9 +125,17 @@ For details that must not be duplicated here:
   optional save examples, and prose tightened to avoid formulaic tutorial style.
 - Latest Python-parity vignette signal: `costablr-python-parity.Rmd` renders all
   42 chunks against repository tutorial data in `R4_51` with fresh cache
-  rebuild. OOL recovered all 7 Python tutorial selected features
-  (`Overlap count: 7 of 7`); COVID-19 recovered all 6 Python tutorial selected
-  features (`Overlap count: 6 of 6`).
+  rebuild after the `modelx_knockoff` and FDP-threshold text refresh.
+- Latest scratch relocation signal: the moved AURORA scratch notebooks,
+  helpers, runner scripts, SLURM scripts, cache roots, and output roots have
+  been renamed from `stablr_*` to `costablr_*` under
+  `/exports/para-lipg-hpc/mdmanurung/costablr`.  Active scratch files no
+  longer contain functional references to the old repo root or standalone
+  `stablr` package name.  The renamed SLURM scripts use
+  `${CONDA_EXE:-/share/software/tools/miniconda/3.10/23.3.1/bin/conda}` so
+  batch jobs do not depend on `conda` being on `PATH`.  All four renamed
+  notebooks execute from cache to `/tmp/costablr_notebook_exec` with zero error
+  outputs.
 - Latest scratch-analysis signal: ignored notebook
   `scratch/01_costablr_core_basemalvac.ipynb` now runs the STABL-only AURORA
   baseline study-group feasibility workflow with multinomial elastic net. It
@@ -160,8 +192,11 @@ For details that must not be duplicated here:
   `scratch/scripts/run_costablr_baseline_comparisons_branch.R`, with paired SLURM
   scripts `scratch/slurm/costablr_baseline_comparisons_preprocess.slurm` and
   `scratch/slurm/costablr_baseline_comparisons_branches.slurm`. Full SLURM jobs
-  were submitted as preprocessing `24758964`, model branches `24758967`, and
-  visualization `24758968`; check `squeue -j 24758964,24758967,24758968`.
+  completed for preprocessing `24758964` and model branches `24758967`. The old
+  visualization array `24758968` failed immediately with `conda: command not
+  found`; the renamed/hardened visualization rerun `24766406` completed all
+  three contrast tasks with exit code `0:0` and produced per-contrast visualize
+  caches, figures, and tables.
   Full local notebook execution now passes in `R4_51` via nbconvert with 18
   cells and no error outputs after fixing the comparison helper fallback to
   honor `COSTABLR_REPO_ROOT` before `getwd()`.
@@ -204,7 +239,8 @@ For details that must not be duplicated here:
   local branch execution disabled. The notebook now also displays cached
   early-fusion selected-feature boxplots in separate sections for `EG_P` vs
   `EG_NP`, `TU_P` vs `TU_NP`, and `GA_P` vs `GA_NP`; helper validation found
-  4, 10, and 3 selected features respectively.
+  4, 10, and 3 selected features respectively. Full branch arrays `24759581`
+  and `24759594` completed.
 - Latest bootstrap API signal: `stabl_fit()` now accepts `bootstrap_strata`
   for arbitrary categorical bootstrap stratification designs; defaults remain
   unstratified, and `stratify_bootstrap = TRUE` is retained as outcome-only
@@ -245,16 +281,15 @@ For details that must not be duplicated here:
 
 ### Immediate next tasks (updated)
 
-1. To compute the focused group-protection AURORA results, submit
-   `scratch/slurm/costablr_baseline_group_protection_preprocess.slurm`, then
-   `scratch/slurm/costablr_baseline_group_protection_branches.slurm`.
-2. After the focused branch array completes, open
-   `scratch/02_costablr_baseline_group_protection_test.ipynb` and verify that it
-   loads the canonical cache/output artifacts without local refits, including
-   the per-comparison selected-feature boxplot sections.
-3. Monitor SLURM job `24750538`; when it finishes, confirm
+1. Monitor SLURM job `24750538`; when it finishes, confirm
    `inst/analysis/cache/tcga_nestedcv_results.rds` is complete
    and re-render `costablr-tcga-nestedcv.Rmd` from cache.
+2. Render `vignettes/costablr-tcga-nestedcv.Rmd` from the completed TCGA
+   nested-CV cache and record the output path and result signal in
+   `PROGRESS.md`.
+3. For any new AURORA scratch submissions, use the `costablr_*` notebooks,
+   scripts, SLURM files, and `COSTABLR_*` environment variables; legacy
+   `STABLR_*` variables are accepted only as helper-side compatibility.
 
 ### Vignette runtime profile (2026-05-10)
 
@@ -388,8 +423,9 @@ conda run -n R4_51 R CMD INSTALL multiview
     `scratch/cache/costablr_baseline_groups_test/`;
   - the active notebook now loads those branch artifacts by default and should
     only rerun heavy work when the relevant `RUN_*` flag is explicitly set;
-  - binary comparison artifacts are generated through submitted SLURM jobs
-    `24758964` -> `24758967` -> `24758968` and land under
+  - binary comparison artifacts are generated through SLURM jobs
+    `24758964` -> `24758967`, with failed visualization job `24758968`
+    superseded by completed rerun `24766406`; artifacts land under
     `scratch/cache/costablr_baseline_binary_comparisons/` plus
     `scratch/outputs/costablr_baseline_binary_comparisons/`;
   - generated output directories under `scratch/scratch/outputs/` are local
@@ -404,19 +440,19 @@ conda run -n R4_51 R CMD INSTALL multiview
   - use `sbatch scratch/slurm/costablr_baseline_study_protection_branches.slurm`
     for the 27 heavy branches and then submit a dependent `visualize` branch.
 - Current audit gate:
-  - read-only comprehensive audit reports are in `audit/`;
-  - additive safety-net tests are in new `tests/testthat/test-audit-*.R`
-    files, with snapshots in `tests/testthat/_snaps/`;
-  - latest audit-suite validation is
-    `FAIL 0`, `WARN 2`, `SKIP 3`, `PASS 1475` with `NOT_CRAN=true`;
-  - the three skips are intentional NAT parity placeholders;
-  - `devtools::check(error_on = 'never')` still fails before R CMD check at the
-    baseline `costablr-python-parity.Rmd` vignette-build issue;
-  - `pkgdown::check_pkgdown()` still fails at the baseline missing
-    `costablr-tcga-nestedcv` article index;
-  - no fixes are approved yet, so continue to treat `R/`, `src/`, package
-    metadata, generated docs, and `_pkgdown.yml` as read-only until the user
-    names approved audit finding IDs.
+  - May 13 audit remediation is closed for INT-001 through INT-006 and
+    IMPL-001 through IMPL-007;
+  - additive audit tests now assert fixed behavior in
+    `tests/testthat/test-audit-*.R`; stale bug snapshots were removed;
+  - latest full-suite validation is `FAIL 0`, `WARN 2`, `SKIP 3`, `PASS 1481`
+    with `NOT_CRAN=true`;
+  - the three skips are intentional NAT-001, NAT-002, and NAT-003 placeholders;
+  - `devtools::check(error_on = 'never')` now rebuilds vignettes successfully
+    and reports 0 errors, with only local `qpdf`/timestamp/toolchain
+    warning/note items;
+  - `pkgdown::check_pkgdown()` reports no problems;
+  - defer NAT-001 through NAT-003 implementation until a separate profiling
+    pass justifies native work.
 
 ## Update protocol
 

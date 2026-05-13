@@ -39,6 +39,158 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Profiling-Gated Performance Tranche (2026-05-13)
+
+- Added old-reference performance helpers and focused parity tests for
+  PERF-001, PERF-002, PERF-003, PERF-005, PERF-006, and NAT-002.
+- Added `scripts/profile_audit_performance.R`, which uses fixed seeds,
+  warmups, repeated `system.time()` measurements, `gc()`, `Rprofmem()`, and a
+  strict 10% runtime-or-allocation keep gate.
+- Fixed PERF-001 by precomputing binary/regression stacking missingness and
+  zero-filled prediction matrices, then evaluating random weights in
+  deterministic chunks.
+- Fixed PERF-002 by precomputing multiclass observed-omic masks and replacing
+  row-level `apply()` scans with vectorized accumulation and row-sum checks.
+- Fixed PERF-003 by trying vector `s = lambda_seq` coefficient extraction for
+  glmnet/sparsegl first, with family/backend guarded fallback to the old
+  per-lambda path.
+- Fixed PERF-005 by adding a prepared grouped-bootstrap sampler closure with
+  precomputed group indices and group-stratum maps; `stabl_fit()` now reuses
+  that closure across bootstrap draws.
+- Fixed PERF-006/NAT-002 by adding the registered
+  `corr_groups_from_corr_cpp()` helper for the correlation-union step while
+  keeping `stats::cor()` and a pure-R fallback in R.
+- Left NAT-001 unimplemented because pure-R stacking cleared the profiling
+  gate; left NAT-003 rank-update work deferred after info-only profiling of
+  the current MVR solver.
+- Remaining performance audit gaps: PERF-004, PERF-007, and PERF-008 remain
+  deferred low-severity opportunities.
+
+Validation:
+
+```bash
+conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet=TRUE); testthat::test_file('tests/testthat/test-audit-performance-optimizations.R', reporter='summary')"
+# -> audit-performance-optimizations: all expectations passed
+
+conda run -n R4_51 Rscript scripts/profile_audit_performance.R
+# -> KEEP decisions for PERF-001, PERF-002, PERF-003, PERF-005, PERF-006;
+#    NAT-003 current MVR profile INFO_ONLY
+#    median time improvements: 52.31%, 96.70%, 95.12%, 40.91%, 96.17%
+
+conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet=TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R', reporter='summary'); testthat::test_file('tests/testthat/test-bootstrap-helpers.R', reporter='summary'); testthat::test_file('tests/testthat/test-stabl-fit.R', reporter='summary'); testthat::test_file('tests/testthat/test-audit-native-candidates.R', reporter='summary')"
+# -> related suites passed; audit-native-candidates now skips only NAT-001/NAT-003
+```
+
+### Audit Finding Status Annotation (2026-05-13)
+
+- Reviewed every document under `audit/` and added explicit status annotations
+  for fixed, deferred, and not-planned findings.
+- Marked INT-001 through INT-006 and IMPL-001 through IMPL-007 as fixed in the
+  individual finding files, with pointers to the guarding audit tests.
+- Marked PERF-001, PERF-002, PERF-003, PERF-005, and PERF-006 as fixed after
+  the profiling-gated optimization pass; PERF-004, PERF-007, and PERF-008
+  remain deferred.
+- Marked NAT-002 as fixed by the correlation-union helper; NAT-001 and
+  NAT-003 remain deferred with intentional skipped parity placeholders, and
+  NAT-004 through NAT-006 remain not planned first-pass native work.
+- Clarified that `audit/01_package_map.md` is an inventory document and that
+  its two actionable baseline diagnostics (`devtools::check()` vignette rebuild
+  failure and missing pkgdown article index) are fixed in the post-remediation
+  state.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "Sys.setenv(NOT_CRAN='true'); devtools::load_all('.', quiet=TRUE); testthat::test_dir('tests/testthat', filter='audit', reporter='summary')"
+# -> audit fixed INT/IMPL/performance assertions passed; NAT-001/NAT-003 skipped intentionally
+```
+
+### Bootstrap Threshold Parity Hardening (2026-05-13)
+
+- Exposed `bootstrap_threshold` on `stabl_fit()` with the upstream STABL
+  effective default `1e-5`.
+- Routed glmnet, adaptive-lasso, sparse-group-lasso, and internal batch
+  adapters through a shared bootstrap-threshold resolver.
+- Matched sklearn `SelectFromModel` per-bootstrap semantics by counting
+  features with absolute importance `>= bootstrap_threshold` as selected.
+- Added support for `NULL`, numeric thresholds, `"mean"`, `"median"`, and
+  scaled forms such as `"1.25*mean"`.
+- Updated `STABL.md`, `PLAN.md`, `HANDOFF.md`, and generated Rd docs for the
+  exposed argument and comparator semantics.
+
+Validation:
+
+```bash
+conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-stabl-fit.R', reporter = 'summary')"
+# -> stabl-fit: PASS all tests in file; no failures
+```
+
+### Scratch AURORA Workflow Path Rename to costablr (2026-05-13)
+
+- Renamed the moved scratch AURORA notebooks, helper scripts, runner scripts,
+  SLURM scripts, cache roots, and output roots from `stablr_*` to
+  `costablr_*`.
+- Updated functional scratch references from the old
+  `/exports/para-lipg-hpc/mdmanurung/stablr` root to the current standalone
+  `/exports/para-lipg-hpc/mdmanurung/costablr` root.
+- Updated scratch package loading from `stablr` to `costablr`, kept STABL
+  algorithm APIs such as `stabl_fit()` unchanged, and added helper-side
+  compatibility so legacy `STABLR_*` environment variables populate the new
+  `COSTABLR_*` names when the latter are unset.
+- Hardened renamed SLURM scripts to use
+  `${CONDA_EXE:-/share/software/tools/miniconda/3.10/23.3.1/bin/conda}` so
+  batch jobs do not depend on `conda` being on `PATH`.
+- Fixed standalone-root notebook resolution for cache-loading execution from
+  `scratch/`, preventing accidental nested `scratch/scratch` lookup paths.
+- Historical SLURM `.out`/`.err` logs were left under their original names as
+  immutable job evidence.
+
+Validation:
+
+```bash
+rg -n -P "/exports/para-lipg-hpc/mdmanurung/stablr|\bstablr\b|(?<!CO)STABLR_|(?<!co)stablr_baseline|run_stablr|slurm/stablr|cocostablr" scratch/*.ipynb scratch/scripts/*.R scratch/slurm/*.slurm
+# -> no matches
+
+bash -n scratch/slurm/costablr_*.slurm
+# -> OK
+
+conda run -n R4_51 Rscript -e 'for (p in list.files("scratch/scripts", pattern="\\.R$", full.names=TRUE)) { parse(p); cat("parse ok", p, "\n") }'
+# -> all 8 renamed scratch R scripts parse
+
+conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_groups_branch.R --help
+conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_group_protection_branch.R --help
+conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_study_protection_branch.R --help
+conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_comparisons_branch.R --help
+# -> all runner help commands print supported branches
+
+conda run -n R4_51 python -m nbconvert --to notebook --execute scratch/01_costablr_baseline_groups_test.ipynb --output-dir /tmp/costablr_notebook_exec --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=ir
+conda run -n R4_51 python -m nbconvert --to notebook --execute scratch/02_costablr_baseline_group_protection_test.ipynb --output-dir /tmp/costablr_notebook_exec --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=ir
+conda run -n R4_51 python -m nbconvert --to notebook --execute scratch/03_costablr_baseline_study_protection_test.ipynb --output-dir /tmp/costablr_notebook_exec --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=ir
+conda run -n R4_51 python -m nbconvert --to notebook --execute scratch/04_costablr_baseline_binary_comparisons.ipynb --output-dir /tmp/costablr_notebook_exec --ExecutePreprocessor.timeout=-1 --ExecutePreprocessor.kernel_name=ir
+# -> all four renamed notebooks execute to /tmp with 0 error outputs
+
+sbatch --parsable --array=0-2 --export=COSTABLR_BRANCH=visualize scratch/slurm/costablr_baseline_comparisons_branches.slurm
+# -> 24766406
+
+sacct -X -j 24766406 --format=JobID,JobName%32,State,ExitCode,Elapsed,Start,End -P
+# -> 24766406_0/1/2 COMPLETED with ExitCode 0:0
+```
+
+Job status observed during this rename:
+
+- TCGA nested-CV job `24750538` remains running.
+- Baseline study-group arrays `24757562` and `24757563` completed.
+- Binary comparison preprocessing `24758964` and model branches `24758967`
+  completed; old visualization array `24758968` failed immediately with
+  `conda: command not found`, so the renamed/hardened visualization rerun was
+  submitted as `24766406`.
+- Renamed/hardened binary comparison visualization rerun `24766406` completed
+  all three contrast tasks with exit code `0:0`; per-contrast visualize caches
+  and figure/table outputs are present under
+  `scratch/cache/costablr_baseline_binary_comparisons/` and
+  `scratch/outputs/costablr_baseline_binary_comparisons/`.
+- Focused group-protection arrays `24759581` and `24759594` completed.
+
 ### Standalone costablr Repository Move and Rename (2026-05-13)
 
 - Moved the R package into `/exports/para-lipg-hpc/mdmanurung/costablr` as a
@@ -2267,3 +2419,64 @@ Formatting note:
 - `air format .` was not run. The tool was not available in runtime preflight,
   and the escalation request was rejected because formatting the entire
   repository could rewrite files outside the audit write scope.
+
+### May 13 Audit Remediation Closure (2026-05-13)
+
+- Implemented the dependency-ordered audit remediation batch for INT-001
+  through INT-006 and IMPL-001 through IMPL-007.
+- `validate_sample_alignment()` and `.subset_outcome_by_ids()` now reject
+  duplicate predictor, outcome, group, and direct sample IDs before alignment.
+- `stabl_multiomic_train_validate()` now aligns named training/validation
+  outcomes once to canonical row order, propagates fallback feature names for
+  unnamed matrices, and returns validation late-fusion predictions when
+  validation predictors are supplied without validation outcomes.
+- `stacked_multi_omic()` now rejects binary/regression outcomes whose length
+  does not match prediction rows.
+- `get_support()` now rejects invalid user/hard-threshold overrides while still
+  accepting an FDP+-derived threshold of zero from the default sweep grid.
+- `stabl_fit()` now errors early when artificial-feature settings realise zero
+  injected columns or when `sample_fraction` floors to zero sampled rows.
+- The direct model-X helper now honors `random_state` with scoped RNG
+  restoration; the dispatcher still seeds once before generator dispatch.
+- The native MVR C++ boundary now rejects malformed non-permutation
+  `update_order` rows, matching the R wrapper guard.
+- Removed stale audit bug snapshots after converting audit tests from
+  current-bug snapshots to fixed-behavior assertions.
+- Updated docs/tooling drift: refreshed model-X helper Rd docs, removed
+  internal artificial helpers from public-facing API/pkgdown indexes, updated
+  Python-parity threshold/artificial-type text, rerendered the Python-parity
+  vignette, added the nested-CV article and reference topic to `_pkgdown.yml`,
+  and excluded repository-only sample/notebook/audit/docs assets from R source
+  builds via `.Rbuildignore`.
+
+Validation:
+
+```bash
+conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-input-validation.R'); testthat::test_file('tests/testthat/test-audit-stabl-accessors.R'); testthat::test_file('tests/testthat/test-audit-stabl-fit.R'); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R')"
+# -> all targeted correctness/validation audit tests passed
+
+conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-artificial-features.R'); testthat::test_file('tests/testthat/test-audit-mvr-boundary.R')"
+# -> model-X RNG and MVR boundary audit tests passed
+
+conda run -n R4_51 R --no-save -q -e "Sys.setenv(NOT_CRAN='true'); devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-input-validation.R'); testthat::test_file('tests/testthat/test-audit-stabl-accessors.R'); testthat::test_file('tests/testthat/test-audit-stabl-fit.R'); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R'); testthat::test_file('tests/testthat/test-audit-artificial-features.R'); testthat::test_file('tests/testthat/test-audit-mvr-boundary.R'); testthat::test_file('tests/testthat/test-audit-native-candidates.R')"
+# -> audit safety net passed; NAT-001, NAT-002, and NAT-003 skipped intentionally
+
+conda run -n R4_51 R --no-save -q -e "Sys.setenv(NOT_CRAN='true'); devtools::test('.')"
+# -> FAIL 0, WARN 2, SKIP 3, PASS 1481
+# -> warnings are the existing future package build-version warnings
+# -> skips are the three native-candidate parity placeholders
+
+conda run -n R4_51 R CMD INSTALL .
+# -> * DONE (costablr)
+
+conda run -n R4_51 R --no-save -q -e "setwd('.'); knitr::opts_chunk$set(cache.rebuild = TRUE); rmarkdown::render('vignettes/costablr-python-parity.Rmd', output_format = 'html_document', clean = FALSE, quiet = FALSE)"
+# -> completed all 42 chunks and created costablr-python-parity.html
+
+conda run -n R4_51 R --no-save -q -e "devtools::check('.', error_on = 'never')"
+# -> Status: 1 WARNING, 2 NOTEs
+# -> 0 errors; remaining warning/note items are local qpdf availability,
+#    future timestamp verification, and conda toolchain -march=nocona
+
+conda run -n R4_51 R --no-save -q -e "pkgdown::check_pkgdown()"
+# -> No problems found
+```

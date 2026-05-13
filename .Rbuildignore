@@ -4,3 +4,14 @@
 ^vignettes/.*-cache$
 ^vignettes/tcga_results$
 ^inst/analysis/cache$
+^_pkgdown[.]yml$
+^AGENTS[.]md$
+^HANDOFF[.]md$
+^PLAN[.]md$
+^PROGRESS[.]md$
+^STABL[.]md$
+^audit$
+^docs$
+^Notebook examples$
+^Sample Data$
+^scripts$

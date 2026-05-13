@@ -36,8 +36,8 @@ bundled OOL subset and skip the COVID-19 section.
 |---|---|---|
 | Base learner | `sklearn.linear_model.Lasso` | `glmnet::glmnet` (LASSO) |
 | Bootstrapping | `n_bootstraps` | `n_bootstraps` |
-| FDP control | `fdr_threshold_range = np.arange(0, 1, 0.01)` | `seq(0, 1, by = 0.01)` |
-| Artificial features | OOL: `"modelx_knockoff"`; COVID: default `"random_permutation"` | OOL: `"knockoff"` in Python; COVID: `"random_permutation"` |
+| FDP control | `fdr_threshold_range = np.arange(0, 1, 0.01)` | `seq(0, 0.99, by = 0.01)` |
+| Artificial features | OOL: `"knockoff"`; COVID: default `"random_permutation"` | OOL: `"modelx_knockoff"`; COVID: `"random_permutation"` |
 | Random state | `42` | `random_state = 42L` |
 
 **Two analyses:**
@@ -204,7 +204,7 @@ fit_prot <- stabl_fit(
   family              = "gaussian",
   n_bootstraps        = render_n_bootstraps_ool,
   artificial_type     = render_artificial_type_ool,
-  fdr_threshold_range = seq(0, 1, by = 0.01),
+  fdr_threshold_range = seq(0, 0.99, by = 0.01),
   random_state        = 42L
 )
 fit_prot

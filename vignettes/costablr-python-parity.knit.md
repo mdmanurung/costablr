@@ -27,8 +27,8 @@ bundled OOL subset and skip the COVID-19 section.
 |---|---|---|
 | Base learner | `sklearn.linear_model.Lasso` | `glmnet::glmnet` (LASSO) |
 | Bootstrapping | `n_bootstraps` | `n_bootstraps` |
-| FDP control | `fdr_threshold_range = np.arange(0, 1, 0.01)` | `seq(0, 1, by = 0.01)` |
-| Artificial features | OOL: `"knockoff"`; COVID: default `"random_permutation"` | OOL: `"knockoff"`; COVID: `"random_permutation"` |
+| FDP control | `fdr_threshold_range = np.arange(0, 1, 0.01)` | `seq(0, 0.99, by = 0.01)` |
+| Artificial features | OOL: `"knockoff"`; COVID: default `"random_permutation"` | OOL: `"modelx_knockoff"`; COVID: `"random_permutation"` |
 | Random state | `42` | `random_state = 42L` |
 
 **Two analyses:**
@@ -46,7 +46,7 @@ library(costablr)
 render_n_bootstraps_ool <- 500L
 render_n_bootstraps_covid <- 1000L
 render_n_lambda <- 10L
-render_artificial_type_ool <- "knockoff"
+render_artificial_type_ool <- "modelx_knockoff"
 render_artificial_type_covid <- "random_permutation"
 run_extended <- TRUE
 ```
@@ -202,7 +202,7 @@ fit_prot <- stabl_fit(
   family              = "gaussian",
   n_bootstraps        = render_n_bootstraps_ool,
   artificial_type     = render_artificial_type_ool,
-  fdr_threshold_range = seq(0, 1, by = 0.01),
+  fdr_threshold_range = seq(0, 0.99, by = 0.01),
   random_state        = 42L
 )
 fit_prot
@@ -211,7 +211,7 @@ fit_prot
 #>   Features selected: 2 
 #>   Min FDP+:         0.5 
 #>   FDP+ threshold:   0.98 
-#>   Artificial:       knockoff
+#>   Artificial:       modelx_knockoff
 ```
 
 
