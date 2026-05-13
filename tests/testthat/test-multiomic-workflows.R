@@ -28,6 +28,8 @@ test_that("stabl_multiomic_train_validate fits each omic and returns selected ma
   expect_s3_class(fit, "stabl_multiomic_fit")
   expect_named(fit$fits, c("omic_a", "omic_b"))
   expect_true(all(vapply(fit$fits, inherits, logical(1L), what = "stabl_fit")))
+  expect_named(fit$refits, c("omic_a", "omic_b"))
+  expect_true(all(vapply(fit$refits, function(x) inherits(x$model, "lm"), logical(1L))))
 
   expect_named(fit$selected_train, c("omic_a", "omic_b"))
   expect_equal(nrow(fit$selected_train$omic_a), n)
@@ -421,8 +423,9 @@ test_that("early_fusion = TRUE adds early_fusion field with correct structure", 
 
   expect_false(is.null(fit$early_fusion))
   ef <- fit$early_fusion
-  expect_named(ef, c("fit", "selected_features", "selected_train", "selected_valid"))
+  expect_named(ef, c("fit", "refit", "selected_features", "selected_train", "selected_valid"))
   expect_s3_class(ef$fit, "stabl_fit")
+  expect_s3_class(ef$refit$model, "lm")
   expect_true(is.character(ef$selected_features))
   # Number of columns in selected_train should equal length of selected_features
   expect_equal(ncol(ef$selected_train), length(ef$selected_features))
@@ -459,6 +462,7 @@ test_that("early_fusion = TRUE with validation populates selected_valid", {
 
   ef <- fit$early_fusion
   expect_false(is.null(ef$selected_valid))
+  expect_false(is.null(ef$refit$valid_predictions))
   expect_equal(nrow(ef$selected_valid), n_va)
   expect_equal(ncol(ef$selected_valid), ncol(ef$selected_train))
 })
@@ -680,7 +684,7 @@ test_that("default multi-omic return structure is unchanged when cooperative_fus
 
   expect_named(
     fit,
-    c("fits", "selected_features", "selected_train", "selected_valid",
+    c("fits", "refits", "selected_features", "selected_train", "selected_valid",
       "early_fusion", "late_fusion")
   )
   expect_false("cooperative_fusion" %in% names(fit))

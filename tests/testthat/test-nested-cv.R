@@ -85,6 +85,7 @@ test_that("stabl_multiomic_nested_cv returns deterministic diagnostics and predi
   expect_named(fit1$performance,
                c("accuracy", "balanced_error_rate", "per_class_recall",
                  "macro_f1", "confusion"))
+  expect_false(is.null(fit1$fold_results[[1L]]$fit$final_refit))
 
   expect_equal(fit1$outer_predictions, fit2$outer_predictions)
   expect_equal(fit1$diagnostics, fit2$diagnostics)

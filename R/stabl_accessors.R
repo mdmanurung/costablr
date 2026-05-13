@@ -352,6 +352,7 @@ print.stabl_multiomic_fit <- function(x, ...) {
     n_sel <- length(x$selected_features[[omic]])
     cat("    ", omic, ": ", n_sel, "\n", sep = "")
   }
+  cat("  Final refits:    ", if (!is.null(x$refits)) "yes" else "no", "\n")
   has_valid <- !is.null(x$selected_valid)
   cat("  Validation data: ", if (has_valid) "yes" else "no", "\n")
   cat("  Early fusion:    ", if (!is.null(x$early_fusion)) {

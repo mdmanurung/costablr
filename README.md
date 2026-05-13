@@ -11,6 +11,7 @@ The package has no Python or tidymodels runtime dependency.
 ## Feature Summary
 
 - Core STABL selector: `stabl_fit()`
+- End-to-end STABL selector plus unpenalized final refit: `stabl_refit()`
 - FDP+ thresholding with random-permutation, Gaussian model-X knockoff, or
   MVR knockoff artificial features
 - Lasso, elastic net, adaptive lasso, and optional sparse group lasso learners
@@ -37,6 +38,7 @@ Optional functionality uses optional packages:
   `artificial_type = "modelx_knockoff"`
 - `future`, `furrr`: parallel bootstrap execution
 - `sparsegl`: `base_learner = "sparse_group_lasso"`
+- `nnet`: multinomial final refit in `stabl_refit()`
 - `multiview`: cooperative multi-omic fusion
 - `mixOmics`: TCGA vignette dataset
 
@@ -84,6 +86,8 @@ fast.
 
 Use `stabl_fit()` for one feature matrix. Inputs are aligned by sample names,
 not position, so `rownames(x)` must match the names or row names of `y`.
+Use `stabl_refit()` for the end-to-end workflow: STABL feature selection
+followed by an unpenalized final model on the selected features.
 
 Important arguments:
 
@@ -102,7 +106,9 @@ Important arguments:
 Use `stabl_multiomic_train_validate()` for named omic lists with optional
 validation data. Enable `early_fusion`, `late_fusion`, and
 `cooperative_fusion` independently. Use `stabl_multiomic_cv()` when no fixed
-validation split is available.
+validation split is available. Per-omic STABL results include final refits on
+the selected features, and early-fusion results include the same final-refit
+stage when enabled.
 
 Cooperative-fusion results can be inspected with:
 
@@ -118,7 +124,7 @@ cooperative tuning is not supported for Cox models.
 
 Core fitting:
 
-- `stabl_fit()`, `auto_lambda_grid()`
+- `stabl_fit()`, `stabl_refit()`, `auto_lambda_grid()`
 - `make_glmnet_adapter()`, `make_adaptive_lasso_adapter()`, `make_sgl_adapter()`
 
 Input validation and bootstrapping:

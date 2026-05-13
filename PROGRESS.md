@@ -39,6 +39,108 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Compulsory Final Refit Workflow (2026-05-13)
+
+- Added exported `stabl_refit()` as the single-matrix end-to-end workflow:
+  run `stabl_fit()` for feature selection, then fit an unpenalized final model
+  on the selected features.
+- Final refit backends now cover `gaussian` (`stats::lm()`), `binomial`
+  (`stats::glm(..., binomial(link = "logit"))`), `multinomial`
+  (`nnet::multinom()`), `poisson` (`stats::glm(..., poisson(link = "log"))`),
+  and `cox` (`survival::coxph()`).
+- Added `predict.stabl_refit()` and `print.stabl_refit()` S3 methods, exported
+  `stabl_refit()`, added `nnet` to `Suggests`, and added Rd documentation.
+- Changed `stabl_multiomic_train_validate()` so final refits accompany results
+  by default:
+  - new `$refits` field stores per-omic final-refit objects;
+  - `$early_fusion$refit` stores the early-fusion final model when early
+    fusion is enabled;
+  - late fusion now reuses the same per-omic refits instead of owning a
+    separate downstream-model implementation.
+- Changed nested CV selected-candidate evaluation to use the shared final-refit
+  helper instead of an internal `cv.glmnet`/majority-fallback predictor.
+- Updated `STABL.md`, `README.md`, Rd docs, and workflow tests to document the
+  selector/refit boundary: `stabl_fit()` remains the low-level selector, while
+  predictive workflows include a compulsory final refit.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('R/stabl_refit.R')); invisible(parse('R/multiomic_workflows.R')); invisible(parse('R/nested_cv.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.'); testthat::test_file('tests/testthat/test-stabl-refit.R'); testthat::test_file('tests/testthat/test-multiomic-workflows.R')"
+# -> stabl-refit: FAIL 0, WARN 0, SKIP 0, PASS 17
+# -> multiomic-workflows: FAIL 0, WARN 0, SKIP 0, PASS 152
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.'); testthat::test_file('tests/testthat/test-nested-cv.R')"
+# -> FAIL 0, WARN 0, SKIP 0, PASS 30
+
+conda run -n R4_51 Rscript -e "Sys.setenv(NOT_CRAN='true'); devtools::test('.')"
+# -> FAIL 0, WARN 2, SKIP 2, PASS 1566
+# -> warnings are existing future package build-version warnings
+
+conda run -n R4_51 R CMD INSTALL .
+# -> * DONE (costablr)
+```
+
+### Multinomial OVR Cooperative Showcase Notebook (2026-05-13)
+
+- Refactored `scratch/05_costablr_baseline_groups_multinomial_ovr_test.ipynb`
+  from a copied all-view baseline notebook into a nonblocking SLURM control
+  center for only the automatic package-level
+  `family = "multinomial", cooperative_fusion = TRUE` branch.
+- Removed the copied CyTOF sanity-check, all single-view, early-fusion,
+  late-fusion, clustering/embedding, cross-view, and nested-CV notebook
+  sections.
+- Added cache-first control-center sections: dashboard, missing-output audit,
+  dry-run submission plan, guarded nonblocking `sbatch` cell
+  (`SUBMIT_JOBS <- FALSE` by default), SLURM queue/log monitoring, cache-only
+  loading, and report sections that return empty tables/messages when caches
+  are absent.
+- Added a real `cooperative_multinomial_ovr` branch to
+  `scratch/scripts/run_costablr_baseline_groups_branch.R` and
+  `scratch/scripts/costablr_baseline_groups_helpers.R`. The branch calls the
+  current public API once with the original three-class outcome and exports
+  `class_summary`, diagnostics, union features, class-specific features,
+  predictions, confusion matrix, metrics, and a prediction heatmap.
+- Added helper-side `COSTABLR_SOURCE_CACHE_DIR` support so an isolated notebook
+  cache/output namespace can reuse the original
+  `costablr_baseline_groups_test` preprocessing cache without recomputing raw
+  preprocessing.
+
+Validation:
+
+```bash
+python - <<'PY'
+import json
+from pathlib import Path
+nb = json.loads(Path('scratch/05_costablr_baseline_groups_multinomial_ovr_test.ipynb').read_text(encoding='utf-8'))
+code = '\n\n'.join(''.join(cell.get('source', [])) for cell in nb['cells'] if cell.get('cell_type') == 'code')
+Path('/tmp/costablr_multinomial_ovr_control_center_code.R').write_text(code, encoding='utf-8')
+print('json ok')
+PY
+# -> json ok
+
+conda run -n R4_51 Rscript -e "invisible(parse('/tmp/costablr_multinomial_ovr_control_center_code.R')); invisible(parse('scratch/scripts/costablr_baseline_groups_helpers.R')); invisible(parse('scratch/scripts/run_costablr_baseline_groups_branch.R')); cat('R parse ok\n')"
+# -> R parse ok
+
+conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_groups_branch.R --help
+# -> lists `cooperative_multinomial_ovr`
+
+bash -n scratch/slurm/costablr_baseline_branches.slurm scratch/slurm/costablr_baseline_preprocess.slurm
+# -> shell syntax OK
+
+conda run -n scvi python -c "import nbformat; p='scratch/05_costablr_baseline_groups_multinomial_ovr_test.ipynb'; nb=nbformat.read(p, as_version=4); nbformat.validate(nb); print('nbformat validate ok')"
+# -> nbformat validate ok
+
+conda run -n R4_51 Rscript /tmp/costablr_multinomial_ovr_control_center_code.R
+# -> non-heavy smoke passed with SUBMIT_JOBS = FALSE; source preprocessing
+#    cache loaded (38 samples, 11 views, EG=10/GA=16/TU=12); missing
+#    cooperative fit cache skipped cleanly. Existing package build-version
+#    warnings from the R4_51 environment were observed.
+```
+
 ### Automatic One-Vs-Rest Cooperative Fusion (2026-05-13)
 
 - Promoted multinomial cooperative fusion from a manual scratch-workflow

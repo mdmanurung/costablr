@@ -20,8 +20,9 @@ must remain explicit in code and tests:
   semantics: features with absolute importance `>= bootstrap_threshold` are
   counted as selected for that bootstrap/lambda.
 - Default subsampling policy is `sample_fraction = 0.5`, `replace = FALSE`.
-- Core STABL fit returns stability scores, threshold diagnostics, and support;
-   downstream predictive refit is a separate workflow stage.
+- `stabl_fit()` returns stability scores, threshold diagnostics, and support.
+  The end-to-end predictive workflow must then refit an ordinary final model
+  on the selected features; `stabl_refit()` owns that compulsory final stage.
 - Artificial-feature scaling in FDP+ uses the `(1 / pi)` factor.
 
 ## Parameter Mapping (Python to R)
@@ -131,12 +132,29 @@ must remain explicit in code and tests:
    User-supplied hard-threshold overrides must still be single, finite numeric
    values in `(0, 1]`.
 
-### Step 5: Final Feature Selection and Model Fit
-1. Core STABL outputs the final selected original-feature set using strict thresholding:
+### Step 5: Final Feature Selection and Predictive Refit
+1. Core `stabl_fit()` outputs the final selected original-feature set using
+   strict thresholding:
    $$
    \hat{S}(\theta) = \{i \in \mathcal{O} : f_i > \theta\}.
    $$
-2. In this repository, the core STABL fit stage stops at selection (scores, FDP+, and support mask). Any downstream predictive refit on selected variables is a separate pipeline step.
+2. End-to-end predictive STABL workflows then refit an unpenalized final model
+   on \(X_{\hat{S}}\), matching the Python tutorial pipeline pattern
+   (`Stabl` feature selection followed by `LogisticRegression(penalty=None)`;
+   see the fixed tutorial notebook reference:
+   https://github.com/gregbellan/Stabl/blob/1d07f85a13cfbecb4f08ce21075bf4fbb8e34678/Notebook%20examples/Tutorial%20Notebook.ipynb).
+3. In this R package, `stabl_refit()` is the canonical single-matrix
+   end-to-end API:
+   - `family = "gaussian"` refits `stats::lm()`.
+   - `family = "binomial"` refits `stats::glm(..., family = binomial(link = "logit"))`.
+   - `family = "multinomial"` refits `nnet::multinom()` with no weight decay.
+   - `family = "poisson"` refits `stats::glm(..., family = poisson(link = "log"))`.
+   - `family = "cox"` refits `survival::coxph()`.
+   If no features pass the STABL threshold, the final model is still fitted as
+   an intercept-only model so the final stage remains present and explicit.
+4. `stabl_multiomic_train_validate(late_fusion = TRUE)` uses the same
+   unpenalized final-refit helper per omic before stacking per-view
+   predictions.
 
 ### Quick Python-vs-R Differences (Implementation Notes)
 - Artificial-feature count:
@@ -155,8 +173,10 @@ must remain explicit in code and tests:
 - FDP+ threshold grid defaults:
    - Python default is `np.arange(0., 1., .01)`.
    - R default is `seq(0, 0.99, by = 0.01)`.
-- Core output contract:
-   - Both core fit paths stop at stability scores + thresholding + feature support; final predictive refit is handled downstream.
+- Core/output workflow boundary:
+   - `stabl_fit()` stops at stability scores + thresholding + feature support.
+   - `stabl_refit()` is the package-level end-to-end fit that performs the
+     compulsory final predictive refit on selected features.
 - Bootstrap selection threshold (`bootstrap_threshold`):
    - Both Python (`stabl/stabl.py:942`) and R expose
      `bootstrap_threshold`, with an effective default of `1e-5` as the
@@ -181,7 +201,8 @@ must remain explicit in code and tests:
 - Verify per-bootstrap coefficient masks use `>= bootstrap_threshold`.
 - Verify default subsample policy matches documented defaults.
 - Verify FDP+ expression includes `(1 / pi)` artificial-feature scaling.
-- Verify core fit output boundary does not include final predictive refit.
+- Verify `stabl_fit()` remains the selector boundary and `stabl_refit()`
+  performs the final unpenalized predictive refit.
 
 ### R Implementation Mapping
 
@@ -192,11 +213,13 @@ must remain explicit in code and tests:
 - Base learner adapters: `R/learner_adapters.R`
 - FDP+ and thresholding: `R/fdp_control.R`
 - Core orchestration: `R/stabl_fit.R`
+- End-to-end single-matrix refit: `R/stabl_refit.R`
 - Output API (S3/accessors): `R/stabl_accessors.R`
 
-### Non-Goals Of Core STABL Fit
+### Non-Goals Of Core `stabl_fit()`
 
-- Core fit does not perform final downstream predictive refitting.
+- Core `stabl_fit()` does not itself perform final downstream predictive
+  refitting; use `stabl_refit()` for the compulsory end-to-end final model.
 - Core fit does not own full benchmark orchestration from `Notebook examples/`.
 - Core fit does not replace higher-level multi-omic workflow composition.
 

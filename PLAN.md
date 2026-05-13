@@ -159,16 +159,21 @@ narrative rewrite, parallel render validation completed as SLURM array job
     scaffolding, and auxiliary cooperative one-vs-rest branches. The package
     workflow now exposes the same OVR strategy directly via
     `family = "multinomial", cooperative_fusion = TRUE`; native multinomial
-    cooperative optimization remains out of scope. Heavy branches
-    should run through `scratch/scripts/run_costablr_baseline_groups_branch.R`
-    and `scratch/slurm/costablr_baseline_*.slurm`; the notebook now defaults to
-    cached branch consumption (`LOAD_CACHED_RESULTS = TRUE`, heavy `RUN_*`
-    flags false) and keeps regenerated table/figure writes opt-in via
-    `WRITE_NOTEBOOK_OUTPUTS`. The latest follow-up patches harden multiclass
-    stacking label validation, CV bootstrap-strata normalization, macro-F1
-    computation for omitted predicted classes, and notebook cache loading from
-    the script/SLURM artifacts. Before treating results as biological evidence,
-    rerun with publication-scale
+    cooperative optimization remains out of scope. The copied showcase
+    notebook `scratch/05_costablr_baseline_groups_multinomial_ovr_test.ipynb`
+    is now a nonblocking SLURM control center for only the automatic
+    multinomial OVR cooperative branch: dashboard, missing-output audit,
+    dry-run submission plan, guarded `sbatch`, log tailing, cache-only load,
+    and report sections that skip when caches are absent. Heavy execution is
+    routed through the new `cooperative_multinomial_ovr` branch in
+    `scratch/scripts/run_costablr_baseline_groups_branch.R`, with the
+    notebook namespace reusing source preprocessing caches from
+    `costablr_baseline_groups_test` instead of recomputing raw preprocessing.
+    The latest follow-up patches harden multiclass stacking label validation,
+    CV bootstrap-strata normalization, macro-F1 computation for omitted
+    predicted classes, and notebook cache loading from the script/SLURM
+    artifacts. Before treating results as biological evidence, rerun with
+    publication-scale
     bootstrap/nested-CV settings and document nested-CV and sensitivity
     results in `PROGRESS.md`.
 15. For AURORA baseline binary study-group comparisons, use
@@ -597,6 +602,14 @@ Promotion criteria:
 
 ## Maintenance Notes
 
+- 2026-05-13: Predictive STABL workflows now include a compulsory
+  unpenalized final refit after selection. `stabl_fit()` remains the
+  low-level selector; `stabl_refit()` owns the single-matrix end-to-end
+  workflow; multi-omic train/validate results now carry per-omic `$refits`,
+  early fusion carries `$early_fusion$refit`, late fusion reuses the same
+  refits, and nested CV selected-candidate evaluation uses the shared refit
+  helper. Implementation evidence is logged in `PROGRESS.md`; no additional
+  roadmap gate is open.
 - 2026-05-13: The R package moved from the previous monorepo package
   subdirectory into the standalone repository
   `/exports/para-lipg-hpc/mdmanurung/costablr`, with `DESCRIPTION` at the

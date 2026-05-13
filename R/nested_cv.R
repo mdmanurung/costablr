@@ -542,15 +542,23 @@ stabl_multiomic_nested_cv <- function(
   support <- get_support(fit)
   selected <- names(support)[support]
   importances <- get_importances(fit)
-  predicted <- .predict_selected_multinomial(
-    x_train = x_train[, selected, drop = FALSE],
+  final_refit <- .fit_stabl_final_model(
+    x_train_sel = x_train[, selected, drop = FALSE],
     y_train = y_train,
-    x_valid = x_valid[, selected, drop = FALSE],
+    task_type = .stabl_refit_task_type(family),
     levels = levels(y)
+  )
+  predicted <- as.character(
+    .predict_stabl_final_model(
+      final_refit,
+      x_valid[, selected, drop = FALSE],
+      type = "class"
+    )
   )
 
   list(
     stabl_fit = fit,
+    final_refit = final_refit,
     selected_features = .split_prefixed_features(selected),
     importances = importances,
     predicted = predicted,
@@ -592,29 +600,6 @@ stabl_multiomic_nested_cv <- function(
     n_lambda = n_lambda,
     l1_ratio = l1_ratio
   )
-}
-
-.predict_selected_multinomial <- function(x_train, y_train, x_valid, levels) {
-  y_train <- factor(y_train, levels = levels)
-  if (ncol(x_train) == 0L || length(unique(y_train)) < 2L) {
-    majority <- names(which.max(table(y_train)))
-    return(rep(majority, nrow(x_valid)))
-  }
-
-  pred <- tryCatch({
-    fit <- glmnet::cv.glmnet(
-      x = x_train,
-      y = y_train,
-      family = if (length(levels) == 2L) "binomial" else "multinomial",
-      type.measure = "class"
-    )
-    as.character(stats::predict(fit, newx = x_valid, s = "lambda.min", type = "class")[, 1L])
-  }, error = function(e) {
-    majority <- names(which.max(table(y_train)))
-    rep(majority, nrow(x_valid))
-  })
-
-  pred
 }
 
 .split_prefixed_features <- function(features) {

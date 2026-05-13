@@ -77,11 +77,11 @@ grids.}
 the column-bound concatenation of all omic matrices in addition to the
 per-omic fits.  Results are returned in the \code{early_fusion} field.}
 
-\item{late_fusion}{Logical.  When \code{TRUE}, a downstream predictor is fitted
-per omic on its selected features, and \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} combines the
-per-omic predictions.  If no features are selected for an omic, late
-fusion falls back to class priors for multinomial tasks or the train-set
-mean for other tasks. The \code{task_type} (binary, regression, or multiclass)
+\item{late_fusion}{Logical.  When \code{TRUE}, a downstream unpenalized
+predictor is fitted per omic on its selected features, and
+\code{\link[=stacked_multi_omic]{stacked_multi_omic()}} combines the per-omic predictions.  If no features
+are selected for an omic, the downstream predictor is fitted as an
+intercept-only model. The \code{task_type} (binary, regression, or multiclass)
 is inferred from \code{family}.  Results are returned in the \code{late_fusion}
 field.}
 
@@ -121,13 +121,15 @@ one-vs-rest tuning metrics.}
 A named list with class \code{"stabl_multiomic_fit"} containing:
 \describe{
 \item{\code{fits}}{Named list of per-omic \code{stabl_fit} objects.}
+\item{\code{refits}}{Named list of per-omic unpenalized final-refit
+objects fitted on each omic's STABL-selected features.}
 \item{\code{selected_features}}{Named list of selected feature names.}
 \item{\code{selected_train}}{Named list of training matrices restricted to
 selected features (possibly 0-column).}
 \item{\code{selected_valid}}{Named list of validation matrices restricted to
 selected features, or \code{NULL} when no validation input is provided.}
 \item{\code{early_fusion}}{\code{NULL} when \code{early_fusion = FALSE}.  Otherwise a
-list with \code{fit}, \code{selected_features}, \code{selected_train}, and
+list with \code{fit}, \code{refit}, \code{selected_features}, \code{selected_train}, and
 \code{selected_valid} for the concatenated single-STABL run.}
 \item{\code{late_fusion}}{\code{NULL} when \code{late_fusion = FALSE}.  Otherwise a
 list with \code{weights} (data.frame), \code{train_predictions} (data.frame),

@@ -35,11 +35,11 @@
 #' @param early_fusion Logical.  When `TRUE`, a single [stabl_fit()] is run on
 #'   the column-bound concatenation of all omic matrices in addition to the
 #'   per-omic fits.  Results are returned in the `early_fusion` field.
-#' @param late_fusion Logical.  When `TRUE`, a downstream predictor is fitted
-#'   per omic on its selected features, and [stacked_multi_omic()] combines the
-#'   per-omic predictions.  If no features are selected for an omic, late
-#'   fusion falls back to class priors for multinomial tasks or the train-set
-#'   mean for other tasks. The `task_type` (binary, regression, or multiclass)
+#' @param late_fusion Logical.  When `TRUE`, a downstream unpenalized
+#'   predictor is fitted per omic on its selected features, and
+#'   [stacked_multi_omic()] combines the per-omic predictions.  If no features
+#'   are selected for an omic, the downstream predictor is fitted as an
+#'   intercept-only model. The `task_type` (binary, regression, or multiclass)
 #'   is inferred from `family`.  Results are returned in the `late_fusion`
 #'   field.
 #' @param n_iter_lf Number of random weight draws passed to
@@ -69,13 +69,15 @@
 #' @return A named list with class `"stabl_multiomic_fit"` containing:
 #'   \describe{
 #'     \item{`fits`}{Named list of per-omic `stabl_fit` objects.}
+#'     \item{`refits`}{Named list of per-omic unpenalized final-refit
+#'       objects fitted on each omic's STABL-selected features.}
 #'     \item{`selected_features`}{Named list of selected feature names.}
 #'     \item{`selected_train`}{Named list of training matrices restricted to
 #'       selected features (possibly 0-column).}
 #'     \item{`selected_valid`}{Named list of validation matrices restricted to
 #'       selected features, or `NULL` when no validation input is provided.}
 #'     \item{`early_fusion`}{`NULL` when `early_fusion = FALSE`.  Otherwise a
-#'       list with `fit`, `selected_features`, `selected_train`, and
+#'       list with `fit`, `refit`, `selected_features`, `selected_train`, and
 #'       `selected_valid` for the concatenated single-STABL run.}
 #'     \item{`late_fusion`}{`NULL` when `late_fusion = FALSE`.  Otherwise a
 #'       list with `weights` (data.frame), `train_predictions` (data.frame),
@@ -170,6 +172,15 @@ stabl_multiomic_train_validate <- function(
   selected_features <- vector("list", length(omic_names))
   names(selected_features) <- omic_names
 
+  refit_task_type <- .stabl_refit_task_type(family)
+  refit_levels <- if (identical(refit_task_type, "multiclass")) {
+    levels(factor(y_train))
+  } else {
+    NULL
+  }
+  refits <- vector("list", length(omic_names))
+  names(refits) <- omic_names
+
   selected_train <- vector("list", length(omic_names))
   names(selected_train) <- omic_names
 
@@ -232,6 +243,22 @@ stabl_multiomic_train_validate <- function(
     if (!is.null(x_valid_list)) {
       selected_valid[[omic]] <- .subset_selected_matrix(x_valid_list[[omic]], sel)
     }
+
+    refits[[omic]] <- .fit_stabl_final_model(
+      x_train_sel = selected_train[[omic]],
+      y_train = y_train,
+      task_type = refit_task_type,
+      levels = refit_levels
+    )
+    refits[[omic]]$valid_predictions <- if (!is.null(x_valid_list)) {
+      .predict_stabl_final_model(
+        refits[[omic]],
+        selected_valid[[omic]],
+        type = "response"
+      )
+    } else {
+      NULL
+    }
   }
 
   # ---- Early fusion --------------------------------------------------------
@@ -263,20 +290,33 @@ stabl_multiomic_train_validate <- function(
     )
 
     ef_sel        <- get_feature_names_out(ef_fit)
-    ef_train_mat  <- .subset_selected_matrix(as.data.frame(x_all_train), ef_sel)
+    ef_train_mat  <- .stabl_subset_selected_matrix(x_all_train, ef_sel)
 
     ef_valid_mat <- if (!is.null(x_valid_list)) {
       x_all_valid <- do.call(cbind, lapply(omic_names, function(omic) {
         x <- x_valid_list[[omic]]
         if (is.data.frame(x)) as.matrix(x) else x
       }))
-      .subset_selected_matrix(as.data.frame(x_all_valid), ef_sel)
+      .stabl_subset_selected_matrix(x_all_valid, ef_sel)
+    } else {
+      NULL
+    }
+
+    ef_refit <- .fit_stabl_final_model(
+      x_train_sel = ef_train_mat,
+      y_train = y_train,
+      task_type = refit_task_type,
+      levels = refit_levels
+    )
+    ef_refit$valid_predictions <- if (!is.null(ef_valid_mat)) {
+      .predict_stabl_final_model(ef_refit, ef_valid_mat, type = "response")
     } else {
       NULL
     }
 
     ef_result <- list(
       fit               = ef_fit,
+      refit             = ef_refit,
       selected_features = ef_sel,
       selected_train    = ef_train_mat,
       selected_valid    = ef_valid_mat
@@ -286,12 +326,11 @@ stabl_multiomic_train_validate <- function(
   # ---- Late fusion ---------------------------------------------------------
   lf_result <- NULL
   if (isTRUE(late_fusion)) {
-    task_type    <- .family_to_task_type(family)
-    y_train_mean <- if (identical(task_type, "regression")) {
-      mean(unname(y_train))
-    } else {
-      NA_real_
+    if (identical(family, "cox")) {
+      stop("`late_fusion = TRUE` does not support `family = 'cox'`.",
+           call. = FALSE)
     }
+    task_type    <- .family_to_task_type(family)
 
     if (identical(task_type, "multiclass")) {
       train_preds <- vector("list", length(omic_names))
@@ -322,30 +361,17 @@ stabl_multiomic_train_validate <- function(
       }
     }
 
-    y_levels <- if (identical(task_type, "multiclass")) {
-      levels(factor(y_train))
-    } else {
-      NULL
-    }
-
     for (omic in omic_names) {
-      omic_result <- .late_fusion_fit_omic(
-        x_train_sel  = selected_train[[omic]],
-        y_train      = y_train,
-        x_valid_sel  = if (!is.null(x_valid_list)) selected_valid[[omic]] else NULL,
-        y_train_mean = y_train_mean,
-        task_type    = task_type,
-        levels       = y_levels
-      )
+      omic_result <- refits[[omic]]
       if (identical(task_type, "multiclass")) {
-        train_preds[[omic]] <- omic_result$train_preds
+        train_preds[[omic]] <- omic_result$training_predictions
         if (!is.null(valid_preds)) {
-          valid_preds[[omic]] <- omic_result$valid_preds
+          valid_preds[[omic]] <- omic_result$valid_predictions
         }
       } else {
-        train_preds[, omic] <- omic_result$train_preds
+        train_preds[, omic] <- omic_result$training_predictions
         if (!is.null(valid_preds)) {
-          valid_preds[, omic] <- omic_result$valid_preds
+          valid_preds[, omic] <- omic_result$valid_predictions
         }
       }
     }
@@ -414,6 +440,7 @@ stabl_multiomic_train_validate <- function(
 
   out <- list(
     fits              = fits,
+    refits            = refits,
     selected_features = selected_features,
     selected_train    = selected_train,
     selected_valid    = selected_valid,
@@ -1840,109 +1867,4 @@ stacked_multi_omic <- function(
   } else {
     "regression"
   }
-}
-
-# Fit a downstream predictor on selected features for one omic.
-# Returns a list(train_preds, valid_preds, model) where valid_preds may be NULL.
-.late_fusion_fit_omic <- function(x_train_sel, y_train,
-                                  x_valid_sel = NULL, y_train_mean,
-                                  task_type,
-                                  levels = NULL) {
-  n_sel <- ncol(x_train_sel)
-
-  if (identical(task_type, "multiclass")) {
-    levels <- levels %||% levels(factor(y_train))
-    y_train <- factor(y_train, levels = levels)
-    priors <- as.numeric(table(y_train) / length(y_train))
-    names(priors) <- levels
-    fallback_matrix <- function(n, row_names) {
-      out <- matrix(
-        rep(priors, each = n),
-        nrow = n,
-        ncol = length(priors),
-        dimnames = list(row_names, names(priors))
-      )
-      out
-    }
-    if (n_sel == 0L) {
-      train_preds <- fallback_matrix(nrow(x_train_sel), rownames(x_train_sel))
-      valid_preds <- if (!is.null(x_valid_sel)) {
-        fallback_matrix(nrow(x_valid_sel), rownames(x_valid_sel))
-      } else {
-        NULL
-      }
-      return(list(train_preds = train_preds, valid_preds = valid_preds, model = NULL))
-    }
-
-    model_fit <- tryCatch({
-      glmnet::cv.glmnet(
-        x = as.matrix(x_train_sel),
-        y = y_train,
-        family = "multinomial",
-        type.measure = "class",
-        nfolds = min(5L, min(table(y_train)))
-      )
-    }, error = function(e) NULL)
-
-    if (is.null(model_fit)) {
-      train_preds <- fallback_matrix(nrow(x_train_sel), rownames(x_train_sel))
-      valid_preds <- if (!is.null(x_valid_sel)) {
-        fallback_matrix(nrow(x_valid_sel), rownames(x_valid_sel))
-      } else {
-        NULL
-      }
-      return(list(train_preds = train_preds, valid_preds = valid_preds, model = NULL))
-    }
-
-    coerce_prob <- function(pred, row_names) {
-      pred <- as.matrix(pred[, , 1L])
-      pred <- pred[, levels, drop = FALSE]
-      rownames(pred) <- row_names
-      pred
-    }
-
-    train_preds <- coerce_prob(
-      stats::predict(model_fit, newx = as.matrix(x_train_sel),
-                     s = "lambda.min", type = "response"),
-      rownames(x_train_sel)
-    )
-    valid_preds <- if (!is.null(x_valid_sel)) {
-      coerce_prob(
-        stats::predict(model_fit, newx = as.matrix(x_valid_sel),
-                       s = "lambda.min", type = "response"),
-        rownames(x_valid_sel)
-      )
-    } else {
-      NULL
-    }
-    return(list(train_preds = train_preds, valid_preds = valid_preds, model = model_fit))
-  }
-
-  if (n_sel == 0L) {
-    fallback <- if (task_type == "binary") 0.5 else y_train_mean
-    train_preds <- rep(fallback, nrow(x_train_sel))
-    valid_preds <- if (!is.null(x_valid_sel)) rep(fallback, nrow(x_valid_sel)) else NULL
-    return(list(train_preds = train_preds, valid_preds = valid_preds, model = NULL))
-  }
-
-  train_df      <- as.data.frame(x_train_sel)
-  train_df$.y   <- unname(y_train)
-
-  if (task_type == "binary") {
-    m           <- stats::glm(.y ~ ., data = train_df,
-                              family = stats::binomial(link = "logit"))
-    train_preds <- unname(stats::predict(m, newdata = train_df, type = "response"))
-    valid_preds <- if (!is.null(x_valid_sel)) {
-      unname(stats::predict(m, newdata = as.data.frame(x_valid_sel),
-                            type = "response"))
-    } else NULL
-  } else {
-    m           <- stats::lm(.y ~ ., data = train_df)
-    train_preds <- unname(stats::predict(m, newdata = train_df))
-    valid_preds <- if (!is.null(x_valid_sel)) {
-      unname(stats::predict(m, newdata = as.data.frame(x_valid_sel)))
-    } else NULL
-  }
-
-  list(train_preds = train_preds, valid_preds = valid_preds, model = m)
 }
