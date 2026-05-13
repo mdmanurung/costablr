@@ -2182,3 +2182,42 @@ Validation:
 - `git diff --check -- <task-touched files>` passed. A full `git diff --check`
   is currently blocked by pre-existing/generated scratch SLURM output changes
   outside this task.
+
+### MVR Knockoff RcppArmadillo Solver (2026-05-13)
+
+- Added a native RcppArmadillo implementation of the ungrouped MVR
+  coordinate-descent S-matrix solver in `src/mvr_knockoff.cpp`, with generated
+  Rcpp registration in `R/RcppExports.R` and `src/RcppExports.cpp`.
+- Added `Rcpp` / `RcppArmadillo` package metadata and DLL registration while
+  keeping the existing Gaussian sampler and random-permutation fallback schema.
+- Updated `.solve_mvr()` to use the native solver by default, retain the
+  pure-R solver as `use_cpp = FALSE`, and accept an internal fixed
+  `update_order` for deterministic reference comparisons.
+- Added targeted tests that compare the native solver against both the pure-R
+  reference and installed `knockpy` 1.3.5 on the same fixed coordinate-update
+  path. The comparison target is the deterministic MVR S matrix; sampled
+  knockoff columns still use the R RNG stream.
+- Updated current docs and handoff notes so MVR is described as
+  RcppArmadillo-backed instead of pure-R.
+
+Validation:
+
+- `conda run -n R4_51 R --no-save -q -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-mvr-knockoff.R')"`
+  passed: 15 expectations, 0 failures, 0 warnings, 0 skips. The `knockpy`
+  parity test ran against the `R4_51` Python executable.
+- `conda run -n R4_51 R CMD INSTALL .` completed successfully and compiled the
+  native shared library.
+- `conda run -n R4_51 R --no-save -q -e "devtools::test('.', reporter = 'summary')"`
+  completed with zero failures. The only warnings were the existing
+  package-build-version warnings from `future` in `test-rng-determinism.R`.
+- Installed-package smoke:
+  `conda run -n R4_51 R --no-save -q -e "library(costablr); p <- 6L; Sigma <- 0.5^abs(outer(seq_len(p), seq_len(p), '-')); S <- costablr:::.solve_mvr(Sigma, num_iter = 3L); stopifnot(costablr:::.calc_mineig(S) > -1e-6, costablr:::.calc_mineig(2 * Sigma - S) > -1e-6); cat('installed mvr smoke ok\n')"`
+  passed.
+- `conda run -n R4_51 R CMD build --no-build-vignettes /exports/para-lipg-hpc/mdmanurung/costablr`
+  completed successfully in `/tmp`.
+- `conda run -n R4_51 R CMD check --no-manual /tmp/costablr_0.0.0.9000.tar.gz`
+  compiled the native code, loaded the namespace, ran examples, and ran tests
+  successfully, but the overall check status remained `1 ERROR, 3 WARNINGs`
+  due to pre-existing package-structure issues: non-portable file names under
+  `Sample Data` / `Notebook examples` and missing built `inst/doc` vignette
+  outputs.

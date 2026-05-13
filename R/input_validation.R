@@ -1,6 +1,6 @@
 #' costablr: Sparse and Reliable Biomarker Discovery in R
 #'
-#' `costablr` is a pure-R implementation of STABL for sparse, stable biomarker
+#' `costablr` is an R implementation of STABL for sparse, stable biomarker
 #' selection in high-dimensional clinical and omic datasets.  The package
 #' provides a core bootstrap stability-selection engine, FDP+ threshold
 #' calibration with artificial features, glmnet-family learner adapters, and
@@ -31,6 +31,8 @@
 #' @seealso [stabl_fit()], [stabl_multiomic_train_validate()],
 #'   [get_support()], [get_importances()], [plot_stabl_path()]
 #'
+#' @useDynLib costablr, .registration = TRUE
+#' @importFrom Rcpp evalCpp
 #' @keywords internal
 "_PACKAGE"
 

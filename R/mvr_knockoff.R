@@ -1,7 +1,7 @@
 # Minimum variance-based reconstructability (MVR) Gaussian knockoffs.
 # The coordinate update formulas follow knockpy's ungrouped MVR S-matrix
-# solver, but this first R implementation recomputes Cholesky factors and is
-# therefore intentionally limited to small covariance blocks.
+# solver. The default path uses the RcppArmadillo implementation in src/;
+# the pure-R solver is retained as a reference fallback.
 
 .calc_mineig <- function(M) {
   M <- (M + t(M)) / 2
@@ -60,9 +60,36 @@ mvr_loss <- function(Sigma, S, smoothing = 0) {
   feasible[which.min(losses)]
 }
 
+.validate_mvr_update_order <- function(update_order, num_iter, p) {
+  if (is.null(update_order)) return(NULL)
+
+  update_order <- as.matrix(update_order)
+  storage.mode(update_order) <- "integer"
+  if (nrow(update_order) < num_iter || ncol(update_order) != p) {
+    stop(
+      "`update_order` must have at least `num_iter` rows and one column per ",
+      "feature.",
+      call. = FALSE
+    )
+  }
+
+  expected <- seq_len(p)
+  for (i in seq_len(num_iter)) {
+    if (!identical(sort(update_order[i, ]), expected)) {
+      stop(
+        "Each `update_order` row must be a permutation of 1:p.",
+        call. = FALSE
+      )
+    }
+  }
+
+  update_order
+}
+
 .solve_mvr_ungrouped_r <- function(Sigma, num_iter = 50L, smoothing = 0,
                                    converge_tol = 1e-3,
-                                   verbose = FALSE) {
+                                   verbose = FALSE,
+                                   update_order = NULL) {
   p <- nrow(Sigma)
   S <- .calc_mineig(Sigma) * diag(p)
   loss <- Inf
@@ -70,7 +97,12 @@ mvr_loss <- function(Sigma, S, smoothing = 0) {
   I <- diag(p)
 
   for (iter in seq_len(num_iter)) {
-    for (j in sample.int(p)) {
+    coord_order <- if (is.null(update_order)) {
+      sample.int(p)
+    } else {
+      update_order[iter, ]
+    }
+    for (j in coord_order) {
       L <- chol(2 * Sigma - S + smoothing * I)
       ej <- numeric(p)
       ej[j] <- 1
@@ -105,26 +137,45 @@ mvr_loss <- function(Sigma, S, smoothing = 0) {
 
 .solve_mvr <- function(Sigma, tol = 1e-5, num_iter = 50L, smoothing = 0,
                        converge_tol = 1e-3, verbose = FALSE,
-                       max_p_r = 300L) {
+                       max_p_r = Inf, use_cpp = TRUE,
+                       update_order = NULL) {
   if (!is.matrix(Sigma) || nrow(Sigma) != ncol(Sigma)) {
     stop("`Sigma` must be a square matrix.", call. = FALSE)
   }
-  if (nrow(Sigma) > max_p_r) {
+  if (is.finite(max_p_r) && nrow(Sigma) > max_p_r) {
     stop(
-      "R MVR solver is limited to p <= ", max_p_r,
-      "; use chunking or the future Rcpp solver.",
+      "MVR solver is limited to p <= ", max_p_r,
+      " by `max_p_r`.",
       call. = FALSE
     )
   }
 
   Sigma <- (Sigma + t(Sigma)) / 2
-  S <- .solve_mvr_ungrouped_r(
-    Sigma = Sigma,
+  update_order <- .validate_mvr_update_order(
+    update_order = update_order,
     num_iter = num_iter,
-    smoothing = smoothing,
-    converge_tol = converge_tol,
-    verbose = verbose
+    p = nrow(Sigma)
   )
+
+  if (isTRUE(use_cpp) && exists("mvr_solve_ungrouped_cpp", mode = "function")) {
+    S <- mvr_solve_ungrouped_cpp(
+      Sigma = Sigma,
+      num_iter = as.integer(num_iter),
+      smoothing = smoothing,
+      converge_tol = converge_tol,
+      verbose = verbose,
+      update_order = update_order
+    )
+  } else {
+    S <- .solve_mvr_ungrouped_r(
+      Sigma = Sigma,
+      num_iter = num_iter,
+      smoothing = smoothing,
+      converge_tol = converge_tol,
+      verbose = verbose,
+      update_order = update_order
+    )
+  }
   S <- .shift_until_psd(S, tol = tol)
   .scale_until_psd(Sigma, S, tol = tol, num_iter = 10L)
 }

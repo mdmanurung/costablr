@@ -12,6 +12,103 @@ test_that("solve_mvr S-matrix is PSD and feasible", {
   expect_true(costablr:::.calc_mineig(2 * Sigma - S) > -1e-6)
 })
 
+test_that("Rcpp solve_mvr matches the pure-R reference for fixed updates", {
+  p <- 8L
+  rho <- 0.45
+  Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
+  update_order <- rbind(
+    c(1L, 3L, 5L, 7L, 2L, 4L, 6L, 8L),
+    c(8L, 6L, 4L, 2L, 7L, 5L, 3L, 1L),
+    c(2L, 1L, 4L, 3L, 6L, 5L, 8L, 7L)
+  )
+
+  S_cpp <- costablr:::.solve_mvr(
+    Sigma,
+    num_iter = nrow(update_order),
+    converge_tol = -1e100,
+    use_cpp = TRUE,
+    update_order = update_order
+  )
+  S_r <- costablr:::.solve_mvr(
+    Sigma,
+    num_iter = nrow(update_order),
+    converge_tol = -1e100,
+    use_cpp = FALSE,
+    update_order = update_order
+  )
+
+  expect_equal(S_cpp, S_r, tolerance = 1e-8, ignore_attr = TRUE)
+})
+
+test_that("Rcpp solve_mvr matches knockpy for fixed coordinate updates", {
+  py <- Sys.which("python")
+  skip_if(py == "", "Python is unavailable")
+  probe <- suppressWarnings(system2(
+    py,
+    c("-c", shQuote("import knockpy")),
+    stdout = TRUE,
+    stderr = TRUE
+  ))
+  skip_if(
+    !is.null(attr(probe, "status")) && attr(probe, "status") != 0,
+    "Python knockpy is unavailable"
+  )
+
+  p <- 6L
+  rho <- 0.35
+  Sigma <- rho^abs(outer(seq_len(p), seq_len(p), "-"))
+  update_order <- rbind(
+    c(1L, 4L, 2L, 5L, 3L, 6L),
+    c(6L, 3L, 5L, 2L, 4L, 1L),
+    c(2L, 5L, 1L, 6L, 4L, 3L),
+    c(3L, 1L, 6L, 4L, 2L, 5L)
+  )
+
+  sigma_file <- tempfile(fileext = ".csv")
+  order_file <- tempfile(fileext = ".csv")
+  out_file <- tempfile(fileext = ".csv")
+  write.table(Sigma, sigma_file, sep = ",", row.names = FALSE,
+              col.names = FALSE)
+  write.table(update_order, order_file, sep = ",", row.names = FALSE,
+              col.names = FALSE)
+
+  python_code <- paste(
+    "import sys, numpy as np",
+    "from knockpy import mrc",
+    "Sigma = np.loadtxt(sys.argv[1], delimiter=',')",
+    "orders = np.loadtxt(sys.argv[2], delimiter=',', dtype=int)",
+    "orders = np.atleast_2d(orders)",
+    "state = {'i': 0}",
+    "def fixed_shuffle(a):\n    a[:] = orders[state['i']] - 1\n    state['i'] += 1",
+    "np.random.shuffle = fixed_shuffle",
+    "S = mrc.solve_mvr(Sigma=Sigma, num_iter=orders.shape[0], smoothing=0, converge_tol=-1e100, choldate_warning=False)",
+    "np.savetxt(sys.argv[3], S, delimiter=',', fmt='%.17g')",
+    sep = "\n"
+  )
+  py_out <- suppressWarnings(system2(
+    py,
+    c("-c", shQuote(python_code), shQuote(sigma_file),
+      shQuote(order_file), shQuote(out_file)),
+    stdout = TRUE,
+    stderr = TRUE
+  ))
+  expect_true(
+    is.null(attr(py_out, "status")) || attr(py_out, "status") == 0,
+    info = paste(py_out, collapse = "\n")
+  )
+
+  S_cpp <- costablr:::.solve_mvr(
+    Sigma,
+    num_iter = nrow(update_order),
+    converge_tol = -1e100,
+    use_cpp = TRUE,
+    update_order = update_order
+  )
+  S_py <- as.matrix(utils::read.csv(out_file, header = FALSE))
+
+  expect_equal(S_cpp, S_py, tolerance = 1e-7, ignore_attr = TRUE)
+})
+
 test_that("make_artificial_features supports mvr_knockoff", {
   withr::local_seed(42)
   n <- 60L

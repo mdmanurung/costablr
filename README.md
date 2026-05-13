@@ -1,6 +1,6 @@
 # costablr: Sparse and Reliable Biomarker Discovery in R
 
-`costablr` is a pure-R implementation of STABL for sparse, stable biomarker
+`costablr` is an R implementation of STABL for sparse, stable biomarker
 selection in high-dimensional clinical and omic data. It ports the
 parity-critical STABL semantics from the Python implementation while exposing
 R-native S3 objects, `glmnet`-ecosystem learners, multi-omic workflows,
@@ -39,6 +39,9 @@ Optional functionality uses optional packages:
 - `sparsegl`: `base_learner = "sparse_group_lasso"`
 - `multiview`: cooperative multi-omic fusion
 - `mixOmics`: TCGA vignette dataset
+
+The MVR knockoff solver uses compiled RcppArmadillo code through the package
+build, not a Python runtime.
 
 ## Quick Start
 

@@ -61,10 +61,11 @@ must remain explicit in code and tests:
    In the R implementation, model-X artificial features are generated with
    `knockoff::create.gaussian(..., method = "equi")` from Gaussian moments
    estimated on the current feature block.  MVR knockoffs use an internal
-   diagonal S-matrix solver and Gaussian model-X sampler.  Covariance estimates
-   are symmetrized and diagonally shrunk until positive definite before
-   construction; if valid knockoffs cannot be sampled for a block, that block
-   falls back to random-permutation artificial features with a warning.
+   RcppArmadillo diagonal S-matrix solver and Gaussian model-X sampler.
+   Covariance estimates are symmetrized and diagonally shrunk until positive
+   definite before construction; if valid knockoffs cannot be sampled for a
+   block, that block falls back to random-permutation artificial features with
+   a warning.
 3. Concatenate original and artificial blocks:
    $\mathbb{X} = [X | \tilde{X}] \in \mathbb{R}^{n \times (p+q)}$.
 4. Define index sets:

@@ -204,13 +204,13 @@ narrative rewrite, parallel render validation completed as SLURM array job
 18. ~~Add MVR knockoffs and rename the model-X artificial-feature option.~~
     **CLOSED 2026-05-13.** The old `"knockoff"` option was intentionally
     removed for pre-release costablr and replaced by `"modelx_knockoff"`;
-    `"mvr_knockoff"` now provides a small-p pure-R MVR Gaussian knockoff path.
+    `"mvr_knockoff"` now provides a RcppArmadillo-backed MVR Gaussian
+    knockoff path with a pure-R reference fallback.
     Acceptance criteria: old option errors with valid choices, model-X path
     still uses optional `knockoff`, MVR S matrices satisfy PSD feasibility, MVR
     artificial features preserve the `x_augmented`/`noise_col_indices` schema,
-    and targeted artificial-feature tests pass. Future acceleration remains a
-    separate RcppArmadillo work item; do not add native-code dependencies until
-    implementing the fast Cholesky rank-update solver.
+    targeted artificial-feature tests pass, and the native solver matches the
+    installed `knockpy` reference on a fixed coordinate-update path.
 
 ## Remediation Audit Execution Status (2026-05-08)
 
@@ -572,9 +572,9 @@ Promotion criteria:
   logged in `PROGRESS.md`; no roadmap or acceptance-gate change is required.
 - 2026-05-13: Public artificial-feature option names are now
   `"random_permutation"`, `"modelx_knockoff"`, and `"mvr_knockoff"`. The old
-  `"knockoff"` option was removed while costablr remains pre-release. The first
-  MVR implementation is a conservative pure-R reference path; RcppArmadillo
-  acceleration is future work.
+  `"knockoff"` option was removed while costablr remains pre-release. The MVR
+  implementation now uses a RcppArmadillo solver by default and retains the
+  pure-R solver as a reference fallback.
 - 2026-05-12: `costablr-multiomic.Rmd` now explicitly states that it is a bounded
   OOL package example rather than a full reproduction of the Python tutorial
   notebook. Tutorial-dataset parity remains owned by `costablr-python-parity.Rmd`;

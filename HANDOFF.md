@@ -78,9 +78,10 @@ For details that must not be duplicated here:
   FDP target line by default at `fdr_target = 0.05`; local source was
   reinstalled into the default `R4_51` library after the fix.
 - Latest artificial-feature signal: the old `"knockoff"` option was removed
-  and replaced by `"modelx_knockoff"`; `"mvr_knockoff"` adds pure-R Gaussian
-  MVR knockoffs. Roxygen docs were regenerated, targeted artificial-feature
-  tests pass, and the full package suite remains green.
+  and replaced by `"modelx_knockoff"`; `"mvr_knockoff"` uses a
+  RcppArmadillo-backed Gaussian MVR solver with a pure-R reference fallback.
+  Roxygen docs were regenerated, targeted artificial-feature tests pass, and
+  the full package suite remains green.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
 - Cooperative fusion: promoted workflow-layer extension (non-parity-blocking). Hardening milestone CLOSED 2026-05-08 (M12); promotion accessor milestone CLOSED 2026-05-10. Public inspection surface now includes `get_cooperative_features()` and `get_cooperative_diagnostics()`.
 - Latest verified full-suite signal: `PASS 1455`, `FAIL 0`, `WARN 2`, `SKIP 0` (see `PROGRESS.md` for command trail).
@@ -365,10 +366,10 @@ conda run -n R4_51 R CMD INSTALL multiview
 - Cox remains non-applicable for Python-frozen parity anchors and is maintained through R-native hardening gates only.
 - Cooperative fusion remains `costablr`-native, optional, and non-parity-blocking; it now has a promoted public inspection surface.
 - Artificial-feature generation supports random permutation, model-X
-  knockoffs via `knockoff::create.gaussian()`, and pure-R MVR Gaussian
-  knockoffs. The legacy `"knockoff"` option name is intentionally removed in
-  favor of `"modelx_knockoff"` while costablr is pre-release; evidence is in
-  `PROGRESS.md`.
+  knockoffs via `knockoff::create.gaussian()`, and RcppArmadillo-backed MVR
+  Gaussian knockoffs. The legacy `"knockoff"` option name is intentionally
+  removed in favor of `"modelx_knockoff"` while costablr is pre-release;
+  evidence is in `PROGRESS.md`.
 - The multiomic vignette is a bounded OOL package workflow, not the Python
   tutorial parity workflow. For the tutorial datasets and preprocessing
   contract, use `costablr-python-parity.Rmd`; the multiomic vignette now states

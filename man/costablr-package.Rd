@@ -6,7 +6,7 @@
 \alias{costablr-package}
 \title{costablr: Sparse and Reliable Biomarker Discovery in R}
 \description{
-\code{costablr} is a pure-R implementation of STABL for sparse, stable biomarker
+\code{costablr} is an R implementation of STABL for sparse, stable biomarker
 selection in high-dimensional clinical and omic datasets.  The package
 provides a core bootstrap stability-selection engine, FDP+ threshold
 calibration with artificial features, glmnet-family learner adapters, and
