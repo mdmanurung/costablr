@@ -1,0 +1,197 @@
+---
+title: "TCGA Breast Cancer Nested-CV Head-to-Head: costablr vs DIABLO"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{TCGA Breast Cancer Nested-CV Head-to-Head: costablr vs DIABLO}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 7,
+  fig.height = 4,
+  cache = FALSE
+)
+```
+
+## Overview
+
+The compact TCGA vignette shows the workflow.  This vignette asks for evidence.
+It compares `costablr` and mixOmics DIABLO on the same three-class PAM50 breast
+cancer task: Basal, Her2, and LumA.
+
+The design is nested cross-validation.  Outer folds estimate generalisation.
+Inner folds tune the models.  Feature selection is repeated inside each
+training split, rather than performed once on the full dataset before
+validation.  That distinction is the difference between a benchmark and an
+optimistic story.
+
+The head-to-head uses mRNA and miRNA only.  The protein block in
+`mixOmics::breast.TCGA` is available only for the original training samples,
+while all 220 samples have mRNA and miRNA.  Excluding protein keeps both
+methods on the same samples and blocks.
+
+The heavy computation is not run while rendering this vignette.  It is executed
+through SLURM and cached as an RDS file.
+
+## Methodological Audit
+
+This workflow was checked against the `nestedcv` vignette guidance for p >> n
+biomedical prediction.  No filter or feature-selection result is computed on
+the full dataset before cross-validation.  STABL selection, downstream
+multinomial refitting, DIABLO component tuning, and DIABLO `keepX` tuning all
+occur inside the relevant training split before a held-out outer fold is
+predicted.
+
+The design also follows p >> n variable-selection practice:
+
+- predictors are passed as numeric matrices and model scaling is left inside the
+  fitting procedures rather than learned globally before CV;
+- the outer loop estimates performance, while the inner loop selects candidates
+  and tuning parameters;
+- costablr uses model-X knockoff artificial features for FDP-aware stability selection;
+- the deliverable is a recurrence profile over outer folds, not a single
+  definitive biomarker list;
+- no naive post-selection p-values are reported.
+
+The benchmark is still exploratory.  Confirmatory extensions would include
+external cohort validation and refitting unpenalised subtype models on only the
+most recurrent features, with explicit post-selection qualification.
+
+## Run on SLURM
+
+```{r cache-setup}
+analysis_script <- file.path("..", "inst", "analysis", "run_tcga_nestedcv.R")
+if (!file.exists(analysis_script)) {
+  analysis_script <- file.path("inst", "analysis", "run_tcga_nestedcv.R")
+}
+source(analysis_script)
+
+cache_path <- file.path("..", "inst", "analysis", "cache", "tcga_nestedcv_results.rds")
+if (!file.exists(cache_path)) {
+  cache_path <- file.path("inst", "analysis", "cache", "tcga_nestedcv_results.rds")
+}
+
+slurm_cmd <- "sbatch inst/analysis/tcga_nestedcv.slurm"
+cat("Expected cache:", cache_path, "\n")
+cat("Submit command:", slurm_cmd, "\n")
+```
+
+```{r cache-status}
+has_results <- tcga_cache_complete(cache_path)
+if (!has_results) {
+  cat(
+    "Nested-CV cache is not available yet.\n",
+    "Submit the SLURM job above, then render this notebook again.\n",
+    sep = ""
+  )
+}
+```
+
+## Analysis Design
+
+The cache records the exact settings used by the SLURM runner:
+
+```{r design-summary, eval = has_results}
+res <- readRDS(cache_path)
+str(res$settings)
+```
+
+`costablr` uses multinomial stability selection with model-X knockoff artificial
+features.  The candidate workflows are mRNA-only, miRNA-only, and early fusion
+across mRNA and miRNA.  Candidate choice is based on inner-CV balanced error
+rate.
+
+DIABLO uses the mixOmics multiblock sPLS-DA workflow: `block.plsda()` and
+`perf()` choose the number of components, `tune.block.splsda()` tunes `keepX`,
+and the locked outer-fold model is evaluated with weighted-vote
+`centroids.dist` predictions.
+
+## Predictive Performance
+
+The performance table is the first readout.  The confusion matrices show where
+the methods make their mistakes, which is often more informative than a single
+accuracy number.
+
+```{r performance, eval = has_results}
+res$performance
+```
+
+```{r confusion, eval = has_results}
+stabl_conf <- table(
+  Truth = res$costablr$outer_predictions$truth,
+  Predicted = res$costablr$outer_predictions$predicted
+)
+diablo_conf <- table(
+  Truth = res$diablo$outer_predictions$truth,
+  Predicted = res$diablo$outer_predictions$predicted
+)
+
+cat("costablr confusion matrix:\n")
+print(stabl_conf)
+cat("\nDIABLO confusion matrix:\n")
+print(diablo_conf)
+```
+
+```{r paired-fold-performance, eval = has_results}
+fold_metric <- function(pred) {
+  by_fold <- split(pred, pred$fold_id)
+  do.call(rbind, lapply(names(by_fold), function(id) {
+    m <- tcga_metrics(by_fold[[id]]$truth, by_fold[[id]]$predicted)
+    data.frame(fold_id = id, m, stringsAsFactors = FALSE)
+  }))
+}
+
+stabl_fold <- fold_metric(res$costablr$outer_predictions)
+diablo_fold <- fold_metric(res$diablo$outer_predictions)
+paired <- merge(stabl_fold, diablo_fold, by = "fold_id",
+                suffixes = c("_costablr", "_DIABLO"))
+paired$delta_BER <- paired$balanced_error_rate_costablr -
+  paired$balanced_error_rate_DIABLO
+paired$delta_accuracy <- paired$accuracy_costablr - paired$accuracy_DIABLO
+summary(paired[, c("delta_BER", "delta_accuracy")])
+```
+
+## Feature Comparison
+
+Feature recurrence is the biomarker-side counterpart to predictive
+performance.  A recurrent feature is not merely selected once; it survives
+across many outer training splits.
+
+```{r feature-overlap, eval = has_results}
+res$feature_comparison$overlap
+```
+
+```{r feature-recurrence, eval = has_results}
+recurrence <- res$feature_comparison$recurrence
+head(recurrence[order(recurrence$block, -recurrence$recurrence), ], 30)
+```
+
+```{r shared-features, eval = has_results}
+shared <- do.call(rbind, lapply(split(recurrence, recurrence$block), function(tab) {
+  stabl_feats <- tab$feature[tab$method == "costablr"]
+  diablo_feats <- tab$feature[tab$method == "DIABLO"]
+  tab[tab$feature %in% intersect(stabl_feats, diablo_feats), ]
+}))
+shared[order(shared$block, shared$feature, shared$method), ]
+```
+
+## Exported Artifacts
+
+The SLURM runner writes these files next to the cache:
+
+```{r exported-files, eval = has_results}
+list.files(dirname(cache_path), pattern = "tcga_nestedcv", full.names = TRUE)
+```
+
+The CSV files are intended for manuscript tables and supplement material:
+performance, feature recurrence, and feature overlap by omic block.
+
+## Session Info
+
+```{r session-info, eval = has_results}
+res$session_info
+```

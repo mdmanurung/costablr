@@ -1,0 +1,14 @@
+/doc/
+/Meta/
+/vignettes/*.html
+/vignettes/*-cache/
+/vignettes/tcga_results/
+/inst/analysis/cache/
+.DS_Store
+.ipynb_checkpoints/
+**/.ipynb_checkpoints/
+*.Rcheck/
+*.tar.gz
+
+Sample Data/
+Notebook examples/

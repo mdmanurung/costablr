@@ -1,0 +1,121 @@
+url: https://gregbellan.github.io/Stabl/costablr/
+
+destination: docs/pkgdown
+
+template:
+  bootstrap: 5
+
+home:
+  title: costablr
+  description: >
+    Pure-R STABL implementation for sparse, reliable single-omic and
+    multi-omic biomarker discovery.
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [search, github]
+  components:
+    intro:
+      text: Get started
+      href: articles/costablr-intro.html
+    articles:
+      text: Vignettes
+      menu:
+      - text: Quick start
+        href: articles/costablr-intro.html
+      - text: Multi-omic OOL workflow
+        href: articles/costablr-multiomic.html
+      - text: Python-to-R workflow mapping
+        href: articles/costablr-python-parity.html
+      - text: TCGA Breast Cancer workflow
+        href: articles/costablr-tcga.html
+      - text: Cooperative fusion
+        href: articles/costablr-cooperative.html
+    github:
+      icon: fa-github
+      href: https://github.com/gregbellan/Stabl
+      aria-label: GitHub
+
+reference:
+- title: Core STABL Engine
+  desc: Fit single-matrix STABL selectors and compute FDP+ thresholds.
+  contents:
+  - stabl_fit
+  - auto_lambda_grid
+  - compute_fdp_plus
+
+- title: Learner Adapters
+  desc: Public learner factories for glmnet-family and sparse-group backends.
+  contents:
+  - make_glmnet_adapter
+  - make_adaptive_lasso_adapter
+  - make_sgl_adapter
+
+- title: Artificial Features
+  desc: Decoy-feature generation for FDP+ calibration.
+  contents:
+  - make_artificial_features
+  - make_rp_features
+  - make_modelx_knockoff_features
+
+- title: Input Validation and Bootstrapping
+  contents:
+  - validate_sample_alignment
+  - validate_multiomic_inputs
+  - classic_bootstrap_indices
+  - group_bootstrap_indices
+
+- title: Accessors
+  contents:
+  - get_support
+  - get_feature_names_out
+  - get_stabl_scores
+  - get_importances
+  - get_cooperative_features
+  - get_cooperative_diagnostics
+
+- title: Multi-Omic Workflows
+  contents:
+  - stabl_multiomic_train_validate
+  - stabl_multiomic_cv
+  - stacked_multi_omic
+  - load_ool_data
+
+- title: Visualization
+  contents:
+  - plot_stabl_path
+  - plot_fdr_graph
+  - plot_roc
+  - plot_prc
+  - boxplot_features
+  - scatterplot_features
+
+- title: Export
+  contents:
+  - export_stabl_to_csv
+  - save_stabl_results
+
+- title: Selection Similarity Metrics
+  contents:
+  - jaccard_similarity
+  - jaccard_matrix
+  - adjusted_similarity
+  - adjusted_similarity_values
+  - adjusted_similarity_measure
+  - pearson_similarity
+  - pearson_similarity_values
+  - pearson_similarity_measure
+  - fdr_similarity
+  - tpr_similarity
+  - fscore_similarity
+
+articles:
+- title: Workflows
+  navbar: ~
+  contents:
+  - costablr-intro
+  - costablr-multiomic
+  - costablr-python-parity
+  - costablr-tcga
+  - costablr-cooperative

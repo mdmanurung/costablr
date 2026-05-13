@@ -1,0 +1,273 @@
+---
+title: "TCGA Breast Cancer: Multi-Omic Biomarker Discovery with costablr"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{TCGA Breast Cancer: Multi-Omic Biomarker Discovery with costablr}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse  = TRUE,
+  comment   = "#>",
+  fig.width  = 6,
+  fig.height = 4,
+  cache      = FALSE,
+  cache.path = "costablr-tcga-cache/"
+)
+```
+
+## Overview
+
+Breast cancer subtype is a molecular label, but it is also a test of
+integration.  The same tumour is measured by mRNA and miRNA assays.  Some
+signals should be visible in one view, some in the other, and some only when the
+views are allowed to compete or cooperate.
+
+This vignette translates the **mixOmics N-Integration Chapter 6** case study
+into the `costablr` idiom.  The original mixOmics workflow uses sparse
+multi-block Discriminant Analysis (sgccaDA) to classify breast cancer subtypes.
+Here we ask a narrower question: which mRNA and miRNA features robustly
+distinguish Basal-like tumours from all other subtypes?
+
+The analysis uses the real `breast.TCGA` train/test split from `mixOmics`, with
+compact STABL settings so the vignette stays practical.  Increase the bootstrap
+count and lambda-grid size before treating the result as publication evidence.
+
+**Dataset:** `breast.TCGA` from the `mixOmics` package.
+
+- Training: mRNA and miRNA measurements on the same tumour samples.
+- Test: held-out mRNA and miRNA measurements with matching feature sets.
+- Outcome: PAM50 subtype binarised to **Basal vs. non-Basal**.
+- Protein data is excluded to match the two-omic scope used here.
+
+## Prerequisites
+
+```{r prerequisites}
+if (!requireNamespace("mixOmics", quietly = TRUE)) {
+  stop(
+    "This vignette requires mixOmics (Bioconductor). ",
+    "Install with: BiocManager::install('mixOmics')"
+  )
+}
+library(costablr)
+library(mixOmics)
+```
+
+## 1. Load and prepare data
+
+The train and test matrices are already aligned within the `mixOmics` object.
+We extract mRNA and miRNA, then turn the PAM50 subtype into a binary Basal vs
+non-Basal outcome.
+
+```{r load-data}
+data(breast.TCGA)
+
+X_train_mrna  <- breast.TCGA$data.train$mrna
+X_train_mirna <- breast.TCGA$data.train$mirna
+X_test_mrna   <- breast.TCGA$data.test$mrna
+X_test_mirna  <- breast.TCGA$data.test$mirna
+
+cat("Training mRNA:  ", nrow(X_train_mrna),  "x", ncol(X_train_mrna),  "\n")
+cat("Training miRNA: ", nrow(X_train_mirna), "x", ncol(X_train_mirna), "\n")
+cat("Test mRNA:      ", nrow(X_test_mrna),   "x", ncol(X_test_mrna),   "\n")
+cat("Test miRNA:     ", nrow(X_test_mirna),  "x", ncol(X_test_mirna),  "\n")
+```
+
+```{r outcome}
+subtype_train <- breast.TCGA$data.train$subtype
+subtype_test  <- breast.TCGA$data.test$subtype
+
+y_train <- as.integer(subtype_train == "Basal")
+y_test  <- as.integer(subtype_test  == "Basal")
+
+names(y_train) <- rownames(X_train_mrna)
+names(y_test)  <- rownames(X_test_mrna)
+
+cat("Training: ", sum(y_train), "Basal /", sum(y_train == 0), "non-Basal\n")
+cat("Test:     ", sum(y_test),  "Basal /", sum(y_test == 0),  "non-Basal\n")
+```
+
+## 2. Per-omic STABL
+
+The first pass treats each assay as its own experiment.  This tells us whether
+mRNA and miRNA each contain stable Basal signal before the integrated model is
+allowed to mix them.  The vignette uses 30 bootstraps and 12 lambda values to
+keep runtime bounded; use 500-1000 bootstraps for final reporting.
+
+```{r mrna-fit}
+lambda_mrna <- auto_lambda_grid(
+  X_train_mrna, y_train,
+  family   = "binomial",
+  n_lambda = 12
+)
+
+fit_mrna <- stabl_fit(
+  x               = X_train_mrna,
+  y               = y_train,
+  lambda_grid     = lambda_mrna,
+  family          = "binomial",
+  n_bootstraps    = 30L,
+  artificial_type = "random_permutation",
+  random_state    = 42L
+)
+fit_mrna
+```
+
+```{r mirna-fit}
+lambda_mirna <- auto_lambda_grid(
+  X_train_mirna, y_train,
+  family   = "binomial",
+  n_lambda = 12
+)
+
+fit_mirna <- stabl_fit(
+  x               = X_train_mirna,
+  y               = y_train,
+  lambda_grid     = lambda_mirna,
+  family          = "binomial",
+  n_bootstraps    = 30L,
+  artificial_type = "random_permutation",
+  random_state    = 42L
+)
+fit_mirna
+```
+
+```{r selected-per-omic}
+cat("mRNA selected features:\n")
+print(get_support(fit_mrna))
+
+cat("\nmiRNA selected features:\n")
+print(get_support(fit_mirna))
+```
+
+```{r stability-paths, fig.alt = "mRNA and miRNA stability paths"}
+print(plot_stabl_path(fit_mrna,  title = "mRNA - stability path"))
+print(plot_stabl_path(fit_mirna, title = "miRNA - stability path"))
+```
+
+## 3. Integrated multi-omic pipeline
+
+The integrated workflow repeats the per-omic fits inside a common pipeline,
+adds early fusion on the concatenated matrix, and learns a late-fusion
+validation predictor.  In other words, it asks three related questions:
+what is stable in each view, what is stable when all features compete, and how
+much does each view help prediction on held-out tumours?
+
+```{r integrated-fit}
+lambda_list <- list(
+  mrna  = lambda_mrna,
+  mirna = lambda_mirna
+)
+
+multi_fit <- stabl_multiomic_train_validate(
+  x_train_list    = list(mrna = X_train_mrna,  mirna = X_train_mirna),
+  x_valid_list    = list(mrna = X_test_mrna,   mirna = X_test_mirna),
+  y_train         = y_train,
+  y_valid         = y_test,
+  lambda_grid     = lambda_list,
+  family          = "binomial",
+  n_bootstraps    = 30L,
+  artificial_type = "random_permutation",
+  random_state    = 42L,
+  early_fusion    = TRUE,
+  late_fusion     = TRUE,
+  n_iter_lf       = 500L
+)
+multi_fit
+```
+
+```{r integrated-results}
+cat("mRNA (integrated):\n")
+print(get_support(multi_fit$fits$mrna))
+
+cat("\nmiRNA (integrated):\n")
+print(get_support(multi_fit$fits$mirna))
+
+cat("\nEarly fusion selected features:\n")
+print(get_support(multi_fit$early_fusion$fit))
+
+cat("\nLate fusion omic weights:\n")
+print(multi_fit$late_fusion$weights)
+```
+
+```{r integrated-paths, fig.alt = "Integrated mRNA and miRNA stability paths"}
+print(plot_stabl_path(multi_fit$fits$mrna,  title = "Integrated - mRNA"))
+print(plot_stabl_path(multi_fit$fits$mirna, title = "Integrated - miRNA"))
+```
+
+## 4. Validation performance
+
+Feature stability is only one axis of evidence.  The held-out test set asks
+whether the selected features and fusion weights carry predictive information
+outside the training data.
+
+```{r validation-performance}
+lf_preds <- multi_fit$late_fusion$valid_predictions
+
+plot_roc(y_true = y_test, y_preds = lf_preds,
+         title = "Late fusion - ROC curve (test set)")
+plot_prc(y_true = y_test, y_preds = lf_preds,
+         title = "Late fusion - PRC curve (test set)")
+
+pred_class <- as.integer(lf_preds >= 0.5)
+conf_mat   <- table(Predicted = pred_class, Actual = y_test)
+print(conf_mat)
+
+sensitivity <- conf_mat["1", "1"] / sum(conf_mat[, "1"])
+specificity <- conf_mat["0", "0"] / sum(conf_mat[, "0"])
+ber <- 1 - (sensitivity + specificity) / 2
+
+cat(sprintf("\nSensitivity (Basal):     %.3f\n", sensitivity))
+cat(sprintf("Specificity (non-Basal): %.3f\n", specificity))
+cat(sprintf("Balanced Error Rate:     %.3f\n", ber))
+```
+
+```{r feature-boxplots, fig.alt = "Distribution of selected mRNA features"}
+mrna_feats <- names(which(get_support(multi_fit$fits$mrna)))
+if (length(mrna_feats) > 0) {
+  boxplot_features(
+    features = mrna_feats,
+    x        = X_train_mrna,
+    y        = y_train,
+    title    = "Top mRNA features - training set",
+    ncol     = min(3L, length(mrna_feats))
+  )
+}
+```
+
+## 5. Export results
+
+For a vignette, exports go to `tempdir()` so rendering does not leave generated
+files in the package source tree.  In a real analysis, these CSVs are the
+bridge to notebooks, review tables, and downstream biological interpretation.
+
+```{r export-results}
+tcga_out_dir <- file.path(tempdir(), "costablr_tcga_results")
+export_stabl_to_csv(multi_fit$fits$mrna,  path = file.path(tcga_out_dir, "mrna"))
+export_stabl_to_csv(multi_fit$fits$mirna, path = file.path(tcga_out_dir, "mirna"))
+list.files(tcga_out_dir, recursive = TRUE)
+```
+
+## 6. Comparison with mixOmics
+
+The two toolchains ask related but not identical questions.  mixOmics builds
+latent components for discrimination.  `costablr` centers the feature list and
+calibrates selection stability against decoys.
+
+| Aspect | mixOmics (sgccaDA) | costablr |
+|---|---|---|
+| Method | Sparse CCA + LDA | Bootstrap-stability lasso |
+| Feature selection | L1 penalty tuned by CV | FDP-controlled stability threshold |
+| Integration | Joint latent-space optimisation | Early or late fusion |
+| Primary metric | BER on test set | FDP+ stability score |
+| Output | Components + loadings | Feature names + stability scores |
+
+Both approaches target compact mRNA and miRNA biomarker sets for the Basal
+subtype.  STABL's advantage is explicit FDP control with no assumption that the
+omics must share a latent space.
+
+```{r session-info}
+sessionInfo()
+```
