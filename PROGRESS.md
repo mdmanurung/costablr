@@ -39,6 +39,89 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### STABL Upstream Parity Source Audit (2026-05-13)
+
+- Audited `STABL.md` against pinned upstream Python commit
+  `1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`, including core
+  `stabl/stabl.py`, metrics, lambda-grid helper, adaptive learners, and
+  multi-omic workflow files.
+- Confirmed the core parity contract remains aligned for the documented
+  defaults (`sample_fraction = 0.5`, `replace = FALSE`,
+  `bootstrap_threshold = 1e-5`), floor subsampling, strict `>` FDP+/support
+  thresholding, sklearn-style per-bootstrap `>=` coefficient selection,
+  FDP+ `(1 / pi)` scaling, and selector-versus-final-refit boundary.
+- Updated `STABL.md` to correct stale upstream line references for
+  random-permutation artificial-feature sampling and FDP+ scaling, document
+  that Python `"knockoff"` maps to R `"modelx_knockoff"`, and record the
+  intentional R `explore = TRUE` tie-handling hardening difference.
+- Observed non-core metrics caveat: R metric helpers match upstream Python
+  behavior for set-like selected-feature vectors. Inputs containing duplicate
+  feature identifiers can differ because the R helpers de-duplicate while
+  some upstream denominator calculations use original list lengths.
+
+Validation:
+
+```bash
+curl -L -s -o /tmp/stabl_upstream_stabl.py https://raw.githubusercontent.com/gregbellan/Stabl/1d07f85a13cfbecb4f08ce21075bf4fbb8e34678/stabl/stabl.py
+curl -L -s -o /tmp/stabl_upstream_metrics.py https://raw.githubusercontent.com/gregbellan/Stabl/1d07f85a13cfbecb4f08ce21075bf4fbb8e34678/stabl/metrics.py
+curl -L -s -o /tmp/stabl_upstream_utils.py https://raw.githubusercontent.com/gregbellan/Stabl/1d07f85a13cfbecb4f08ce21075bf4fbb8e34678/stabl/utils.py
+curl -L -s -o /tmp/stabl_upstream_multi_omic_pipelines.py https://raw.githubusercontent.com/gregbellan/Stabl/1d07f85a13cfbecb4f08ce21075bf4fbb8e34678/stabl/multi_omic_pipelines.py
+curl -L -s -o /tmp/stabl_upstream_stacked_generalization.py https://raw.githubusercontent.com/gregbellan/Stabl/1d07f85a13cfbecb4f08ce21075bf4fbb8e34678/stabl/stacked_generalization.py
+curl -L -s -o /tmp/stabl_upstream_adaptive.py https://raw.githubusercontent.com/gregbellan/Stabl/1d07f85a13cfbecb4f08ce21075bf4fbb8e34678/stabl/adaptive.py
+```
+
+- Source inspection only; no R tests were run because the change is
+  documentation-only.
+
+### AURORA Baseline SLURM Control Center Rerun (2026-05-13)
+
+- Refactored `scratch/01_costablr_baseline_groups_test.ipynb` into the full
+  AURORA baseline SLURM control center. The notebook now provides dashboard,
+  missing-output audit, submission plan, guarded nonblocking `sbatch`, queue
+  monitoring, bounded log tailing, cache-only loading, and report sections
+  that skip cleanly when caches are absent.
+- Removed notebook-side heavy execution from `01`; STABL, late-fusion,
+  cooperative, nested-CV, preprocessing, and visualization work is routed
+  through `scratch/scripts/run_costablr_baseline_groups_branch.R` and the
+  paired SLURM wrappers.
+- Updated `scratch/slurm/costablr_baseline_branches.slurm` so the main branch
+  array now includes `cooperative_multinomial_ovr` (`--array=0-18`), covering
+  the current public `family = "multinomial", cooperative_fusion = TRUE`
+  package API.
+- Made the shared single-view/early-fusion `stabl_fit()` helper pass
+  `stratify_bootstrap = TRUE` explicitly. All baseline fit paths now use
+  stratified bootstraps with study-group bootstrap strata; manual one-vs-rest
+  branches also include outcome strata.
+- Submitted a fresh nonblocking rerun using the current notebook controls
+  (`mvr_knockoff`, 500 bootstraps, 20 lambdas, sample fraction 0.8):
+  preprocessing job `24766504`, dependent main branch array `24766506`, and
+  dependent visualization job `24766507`. Follow-up `squeue` showed the main
+  branch array running and visualization still pending on dependency.
+
+Validation:
+
+```bash
+python - <<'PY'
+# JSON load and code extraction for scratch/01_costablr_baseline_groups_test.ipynb
+# -> json ok; cells=33; code_lines=696
+PY
+
+conda run -n R4_51 Rscript -e "invisible(parse('/tmp/costablr_baseline_control_center_code.R')); invisible(parse('scratch/scripts/costablr_baseline_groups_helpers.R')); invisible(parse('scratch/scripts/run_costablr_baseline_groups_branch.R')); cat('R parse ok\n')"
+# -> R parse ok
+
+conda run -n scvi python -c "import nbformat; p='scratch/01_costablr_baseline_groups_test.ipynb'; nb=nbformat.read(p, as_version=4); nbformat.validate(nb); print('nbformat validate ok')"
+# -> nbformat validate ok
+
+bash -n scratch/slurm/costablr_baseline_preprocess.slurm scratch/slurm/costablr_baseline_branches.slurm
+# -> shell syntax OK
+
+COSTABLR_JOB_IDS=__none__ conda run -n R4_51 Rscript /tmp/costablr_baseline_control_center_code.R
+# -> non-heavy smoke passed with submit disabled; loaded existing preprocessing,
+#    18/19 main branch
+#    caches, late fusion, manual cooperative OVR, nested CV, and visualization;
+#    automatic multinomial OVR cache was absent and skipped cleanly.
+```
+
 ### Compulsory Final Refit Workflow (2026-05-13)
 
 - Added exported `stabl_refit()` as the single-matrix end-to-end workflow:

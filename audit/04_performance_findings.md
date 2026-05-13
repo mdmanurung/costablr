@@ -6,6 +6,14 @@ PERF-007, and PERF-008 remain DEFERRED low-severity optimization
 opportunities. Validation used `scripts/profile_audit_performance.R` with
 old-reference parity helpers and a strict 10% runtime-or-allocation gate.
 
+> **Re-review note (2026-05-13 evening).** Line numbers below are sealed-audit
+> offsets. Commit `ed84166` (multinomial cooperative fusion) grew
+> `R/multiomic_workflows.R` from ~1430 to ~1870 lines, so the PERF-001 and
+> PERF-002 anchors (formerly around `:1230`–`:1421`) have shifted; the
+> optimized helpers themselves are unchanged. The multinomial OvR branch
+> uses its own per-class scoring and is **not covered** by the PERF-001 /
+> PERF-002 vectorized stacking work or its parity tests.
+
 ## Finding PERF-001: Binary/regression stacking reallocates loop invariants
 
 - Status: FIXED 2026-05-13. The loop now precomputes missingness and
@@ -152,6 +160,40 @@ old-reference parity helpers and a strict 10% runtime-or-allocation gate.
   universe-size validation.
 - Pure-R suggestion: build a logical incidence matrix once, then use
   `tcrossprod()` to compute intersections.
+- Native needed: no.
+
+## Post-audit performance drift (NOT YET FILED AS NUMBERED FINDINGS)
+
+### PERF-CAND-A: Multinomial cooperative OvR fits N binomial cooperative models serially
+
+- Severity: LOW (constant-factor, scales with number of classes K).
+- Location: `R/multiomic_workflows.R` (one-vs-rest cooperative path, see the
+  multinomial dispatch starting near the post-`ed84166` lines flagged by
+  grep markers `if (identical(family, "multinomial"))` and
+  `"One-vs-rest cooperative fusion for ..."`).
+- Observation: each class fit is independent and could be parallelized with
+  `furrr::future_map()` under the existing `future` plan, but currently runs
+  serially.
+- Risk: linear K-fold cost on top of the cooperative tuning loop.
+- Expected win: K-fold constant factor when `future` workers are available.
+- Implementation risk: MEDIUM around deterministic RNG across `future`
+  workers; existing test `test-rng-determinism.R` already exercises this
+  invariant for the non-multinomial paths.
+- Native needed: no.
+
+### PERF-CAND-B: `stabl_refit()` rebuilds `data.frame` for both train and predict
+
+- Severity: LOW.
+- Location: `R/stabl_refit.R:201`, `R/stabl_refit.R:361` (both call
+  `.stabl_predictor_frame()`).
+- Observation: the helper coerces matrix → data.frame on every fit and
+  every `predict()` call. For tight nested-CV loops calling `stabl_refit()`
+  per fold (`R/nested_cv.R:548`), this allocation is repeated K_outer
+  × K_inner × n_repeats times.
+- Risk: allocation-bound overhead in deep CV. Not validated.
+- Expected win: constant-factor allocation reduction by caching the data.frame
+  on the `stabl_refit` object and reusing it during `predict()` with
+  `newdata = NULL`.
 - Native needed: no.
 
 ## Finding PERF-008: FDP+ threshold counts allocate dense logical `outer()` matrices

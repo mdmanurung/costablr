@@ -71,7 +71,8 @@ must remain explicit in code and tests:
      artificial block.
 2. Generate artificial features $\tilde{X} \in \mathbb{R}^{n \times q}$ using:
    - random permutation of selected original columns (`"random_permutation"`),
-   - equicorrelated Gaussian model-X knockoffs (`"modelx_knockoff"`), or
+   - equicorrelated Gaussian model-X knockoffs (Python
+     `artificial_type = "knockoff"`; R `artificial_type = "modelx_knockoff"`), or
    - Gaussian MVR knockoffs (`"mvr_knockoff"`).
    In the R implementation, model-X artificial features are generated with
    `knockoff::create.gaussian(..., method = "equi")` from Gaussian moments
@@ -160,6 +161,11 @@ must remain explicit in code and tests:
 - Artificial-feature count:
    - Python uses $q = \lfloor p\pi \rfloor$.
    - R uses $q = \mathrm{round}(p\pi)$.
+- Artificial-feature type labels:
+   - Python supports `"random_permutation"` and `"knockoff"`.
+   - R supports `"random_permutation"`, `"modelx_knockoff"`, and
+     `"mvr_knockoff"`; R `"modelx_knockoff"` is the semantic counterpart of
+     Python `"knockoff"`, while `"mvr_knockoff"` is R-only.
 - Bootstrap implementation details:
    - Both support grouped and ungrouped sampling, same default policy ($s=0.5$, `replace=FALSE`).
    - Grouped bootstrap internals differ but target the same leakage-prevention intent.
@@ -186,9 +192,18 @@ must remain explicit in code and tests:
      forms such as `"1.25*mean"` to mirror sklearn `SelectFromModel`
      threshold syntax.
 - Artificial-feature column-source sampling (random permutation):
-   - Both Python (`stabl/stabl.py:1428`) and R draw the source column for each artificial feature with `replace = FALSE`.
+   - Both Python (`stabl/stabl.py:1382-1383`) and R draw the source column
+     for each artificial feature with `replace = FALSE`.
 - Artificial-feature realised count:
-   - Both Python (`stabl/stabl.py:1474`) and R pass the requested `artificial_proportion` directly to the FDP+ scaling factor `1/π` (no realised-vs-requested correction).
+   - Both Python (`stabl/stabl.py:1426` and `stabl/stabl.py:1431-1433`)
+     and R pass the requested `artificial_proportion` directly to the FDP+
+     scaling factor `1/π` (no realised-vs-requested correction).
+- Explore fallback when no feature passes the stability threshold:
+   - Python lowers the cutoff to the `n_explore`-th largest score minus `0.01`,
+     so tied scores can select more than `n_explore` features.
+   - R selects exactly the top `n_explore` features by score order. This is an
+     intentional R hardening difference and does not affect default parity
+     because `explore = FALSE`.
 - Direct model-X helper seeding:
    - `make_modelx_knockoff_features(random_state = ...)` uses a scoped RNG
      state and restores the caller's RNG on exit.  The higher-level

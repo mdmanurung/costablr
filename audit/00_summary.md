@@ -3,6 +3,36 @@
 Audit status: complete through Phase 7. The original read-only audit did not
 modify functional code in `R/` or `src/`.
 
+## Drift since audit closure (re-reviewed 2026-05-13 evening)
+
+Three commits landed after the audit safety net was sealed at `59d53ad`. Each
+introduces functionality that the audit findings do not yet cover. The audit
+findings above remain technically valid for the code paths they cite, but
+their line numbers and call-graph snippets in `01_package_map.md` and the
+finding bodies are now stale in places. Concrete drift:
+
+- `6207d6a` (performance tranche, in-scope): expected and audited — line shifts
+  in `R/multiomic_workflows.R`, `R/bootstrap_helpers.R`, `R/learner_adapters.R`,
+  and `R/stabl_fit.R` reflect the PERF fixes already documented below. New
+  native source `src/corr_groups.cpp` registered.
+- `ed84166` (multinomial cooperative fusion, new feature): adds a one-vs-rest
+  cooperative branch in `stabl_multiomic_train_validate()` and grows
+  `R/multiomic_workflows.R` to ~1870 lines. Audit line refs for INT-003,
+  PERF-001, PERF-002, and the cooperative call-site inference (formerly at
+  `multiomic_workflows.R:991`, `:1047`) have shifted; see per-file notes.
+  Audit dynamic verification for the cooperative branch was never performed
+  and the multinomial path expands that gap.
+- `5c11faa` (new `stabl_refit()` public API): adds `R/stabl_refit.R` (~505
+  lines), exports `stabl_refit()`, registers `predict.stabl_refit` and
+  `print.stabl_refit` S3 methods, and pulls `nnet` into Suggests. Used
+  internally from `R/multiomic_workflows.R:175` and `R/nested_cv.R:548` via
+  `.stabl_refit_task_type()`. Not present in `_pkgdown.yml` — recurrence of
+  the IMPL-007 pkgdown drift pattern. Not covered by any audit safety-net
+  test.
+
+Treat the drift items above as new candidate findings that have not been put
+through the audit's dynamic-verification or remediation pipeline.
+
 Remediation status: implemented 2026-05-13 for INT-001 through INT-006,
 IMPL-001 through IMPL-007, and the medium-severity performance tranche
 PERF-001, PERF-002, PERF-003, PERF-005, and PERF-006. NAT-002 is fixed by the
@@ -170,6 +200,15 @@ metrics before simpler pure-R improvements are attempted.
 - No external Python parity reruns were performed.
 - Heavy vignettes and SLURM workflows were not executed beyond the requested
   `devtools::check()` and pkgdown diagnostics.
+- Post-audit additions are explicitly NOT audited:
+  - `stabl_refit()` end-to-end refit API (commit `5c11faa`). No interface or
+    intent finding examines its scalar-validation contracts, factor-level
+    handling for binomial/multinomial, or `predict.stabl_refit()` newdata
+    column-checking. Its sole guard is `tests/testthat/test-stabl-refit.R`,
+    which only covers happy-path gaussian/binomial/empty-support cases.
+  - Multinomial cooperative fusion one-vs-rest branch (commit `ed84166`).
+    Audit INT-003 still flags this as a positional-alignment risk but did
+    not dynamically verify it for any family.
 
 ## Gate
 

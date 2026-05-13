@@ -13,9 +13,16 @@ Existing native toolchain:
 - `NAMESPACE` already has `useDynLib(costablr, .registration=TRUE)` and
   `importFrom(Rcpp, evalCpp)`.
 - Registered native routines:
-  `_costablr_corr_groups_from_corr_cpp` in `src/RcppExports.cpp`.
-  `_costablr_mvr_solve_ungrouped_cpp` in `src/RcppExports.cpp`.
+  `_costablr_corr_groups_from_corr_cpp` in `src/RcppExports.cpp`
+  (implementation in `src/corr_groups.cpp`, ~55 lines, header-only Rcpp).
+  `_costablr_mvr_solve_ungrouped_cpp` in `src/RcppExports.cpp`
+  (implementation in `src/mvr_knockoff.cpp`, RcppArmadillo).
 - No `src/Makevars` was observed.
+- POST-AUDIT NOTE 2026-05-13: the NAT-002 native helper is a small union-find
+  with `std::vector<int>` parent pointers and `std::map<int,int>` for root →
+  group-id renumbering. It does not link RcppArmadillo (good — keeps build
+  surface area minimal). The pure-R fallback in `R/stabl_fit.R` is still
+  callable when the registered routine cannot be reached.
 
 ## Candidate NAT-001: Stack-weight scoring loops
 

@@ -100,6 +100,11 @@ For details that must not be duplicated here:
   learner adapters use sklearn-style `>=` per-bootstrap coefficient
   thresholding and accept `NULL`, numeric thresholds, `"mean"`, `"median"`,
   and scaled forms such as `"1.25*mean"`.  Focused `test-stabl-fit.R` passes.
+- Latest STABL parity-audit signal: `STABL.md` was checked against upstream
+  Python commit `1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`. The audit
+  confirmed core selector/FDP+ parity and refreshed documentation for stale
+  upstream line anchors, Python `"knockoff"` versus R `"modelx_knockoff"`,
+  and the intentional R `explore = TRUE` tie-handling hardening difference.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
 - Cooperative fusion: promoted workflow-layer extension (non-parity-blocking). Hardening milestone CLOSED 2026-05-08 (M12); promotion accessor milestone CLOSED 2026-05-10. Public inspection surface now includes `get_cooperative_features()` and `get_cooperative_diagnostics()`.
 - Latest verified full-suite signal after the automatic OVR cooperative-fusion update:
@@ -154,31 +159,31 @@ For details that must not be duplicated here:
   warnings are package build-version warnings and the known small-class glmnet
   bootstrap warnings.
 - Latest guided all-view scratch notebook:
-  `scratch/01_costablr_baseline_groups_test.ipynb` is now the active guided
-  AURORA baseline study-group notebook. It uses all 11 RaJIVE-style
-  preprocessed immune views, predicts `EG`, `GA`, and `TU`, keeps P/NP as
-  descriptive QC only, can write artifacts through branch-aware helpers under
-  `scratch/cache/costablr_baseline_groups_test/` and
-  `scratch/outputs/costablr_baseline_groups_test/`, and includes reader guidance
-  under every major section heading. The notebook now defaults to cached
-  branch consumption (`LOAD_CACHED_RESULTS <- TRUE`) with heavy local refit
-  flags set to `FALSE`; generated table/figure writes are opt-in through
-  `WRITE_NOTEBOOK_OUTPUTS <- TRUE`. The notebook adds CyTOF sanity-check
-  STABL, per-view STABL, all-view early fusion, true multiclass late-fusion,
-  auxiliary cooperative one-vs-rest branches,
-  top-5-per-study-group predictor tables, beta/stability interpretation,
-  feature-value plots, selected-feature heatmaps, cluster-purity summaries,
-  PCA/UMAP companions, feature-overlap plots, cross-view contribution
-  summaries, and disabled-by-default publication nested-CV scaffolding.
-  Heavy branches can be run with
-  `scratch/scripts/run_costablr_baseline_groups_branch.R` or the paired SLURM
-  scripts in `scratch/slurm/` (128 GB, 8 CPUs, 24H per task). Validation
-  passed in `R4_51`: nbformat OK, R parse OK, SLURM `bash -n` OK,
-  preprocessing OK with 11 views and 38 baseline samples (`EG=10`, `GA=16`,
-  `TU=12`, missing=0), isolated reduced CyTOF branch smoke OK, heatmap export
-  smoke OK, and a full cache-loading notebook smoke that loaded preprocessing,
-  CyTOF, all 11 single-view branches, early fusion, late fusion, cooperative
-  OVR `EG/GA/TU`, visualization artifacts, and nested CV without refitting.
+  `scratch/01_costablr_baseline_groups_test.ipynb` is now the active
+  nonblocking SLURM control center for the full AURORA baseline study-group
+  workflow. It no longer runs heavy STABL, late-fusion, cooperative,
+  nested-CV, preprocessing, or visualization work in the notebook kernel.
+  Instead it provides dashboard, missing-output audit, guarded `sbatch`,
+  queue/log monitoring, cache-only loading, and reports that skip cleanly when
+  caches are absent. Heavy execution is centralized in
+  `scratch/scripts/run_costablr_baseline_groups_branch.R` plus
+  `scratch/slurm/costablr_baseline_preprocess.slurm` and
+  `scratch/slurm/costablr_baseline_branches.slurm`.
+  The branch array now has 19 tasks (`--array=0-18`) and includes the current
+  package-level automatic multinomial OVR cooperative branch
+  (`cooperative_multinomial_ovr`) in addition to CyTOF, all 11 single-view
+  branches, early fusion, late fusion, manual cooperative OVR for `EG/GA/TU`,
+  and nested CV. The shared baseline helper now passes
+  `stratify_bootstrap = TRUE` explicitly for single-view and early-fusion
+  `stabl_fit()` calls; all baseline fit paths use study-group bootstrap
+  strata, with one-vs-rest branches also carrying outcome strata.
+  Fresh rerun submitted with `mvr_knockoff`, 500 bootstraps, 20 lambdas, and
+  sample fraction 0.8: preprocessing job `24766504`, dependent main branch
+  array `24766506`, and dependent visualization job `24766507`. Latest queue
+  check showed the main branch array running and visualization pending on
+  dependency. Latest validation: notebook JSON OK, nbformat OK, extracted R
+  parse OK, helper and runner parse OK, SLURM `bash -n` OK, and a non-heavy
+  cache-loading smoke passed with submit disabled.
 - Latest baseline binary comparison notebook:
   `scratch/04_costablr_baseline_binary_comparisons.ipynb` is the SLURM-cached
   companion for explicit binomial contrasts. It evaluates `EG_vs_GA_TU`

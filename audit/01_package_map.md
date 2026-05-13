@@ -6,6 +6,11 @@ Status reviewed: 2026-05-13. This document is an inventory and baseline
 diagnostic map, not a defect list. The two actionable baseline diagnostics
 recorded here are fixed in the post-remediation state:
 
+> **Re-review note (2026-05-13 evening).** This inventory was sealed before
+> commits `ed84166` (multinomial cooperative fusion) and `5c11faa` (new
+> `stabl_refit()` API) landed. The inline addenda below mark items that have
+> drifted. See `00_summary.md` "Drift since audit closure" for the full list.
+
 - `devtools::check('.', error_on = 'never')`: FIXED relative to the baseline
   vignette-build failure. Current recorded closure is `0 errors`, with only
   local `qpdf`, timestamp, and conda toolchain warning/note items.
@@ -23,6 +28,9 @@ recorded here are fixed in the post-remediation state:
 - Suggests: `furrr`, `future`, `ggplot2`, `knockoff`, `knitr`,
   `mixOmics`, `multiview`, `pkgdown`, `rmarkdown`, `sparsegl`, `survival`,
   `testthat (>= 3.0.0)`, `withr`
+  - DRIFT 2026-05-13: `nnet` was added to `Suggests` by commit `5c11faa` for
+    the multinomial branch of `stabl_refit()`. `DESCRIPTION` now lists 13
+    suggested packages.
 - Encoding: UTF-8
 - testthat edition: `3`
 
@@ -44,6 +52,10 @@ Runtime preflight in `R4_51`:
 `NAMESPACE` exports:
 
 - Core: `stabl_fit`, `auto_lambda_grid`, `compute_fdp_plus`
+  - DRIFT 2026-05-13: `stabl_refit` was added to `NAMESPACE` by commit
+    `5c11faa`. It is the end-to-end selector-plus-unpenalized-refit entry
+    point and is documented in `man/stabl_refit.Rd`. It is **absent from
+    `_pkgdown.yml`** — recurrence of the IMPL-007 pattern.
 - Artificial features: `make_artificial_features`
 - Learner adapters: `make_glmnet_adapter`, `make_adaptive_lasso_adapter`,
   `make_sgl_adapter`
@@ -73,11 +85,17 @@ S3 registrations:
 - `stabl_multiomic_cv`: `get_cooperative_features`,
   `get_cooperative_diagnostics`, `print`
 - `stabl_multiomic_nested_cv`: `print`
+- DRIFT 2026-05-13: `stabl_refit` now also has `S3method(predict, stabl_refit)`
+  and `S3method(print, stabl_refit)` registrations (commit `5c11faa`).
 
 Native registration:
 
 - `useDynLib(costablr, .registration=TRUE)`
 - `importFrom(Rcpp, evalCpp)`
+- Registered routines as of 2026-05-13:
+  - `_costablr_mvr_solve_ungrouped_cpp` (MVR knockoff S-matrix solver)
+  - `_costablr_corr_groups_from_corr_cpp` (NAT-002 correlation-union helper;
+    added by commit `6207d6a`)
 
 ## R inventory
 
@@ -97,17 +115,27 @@ Native registration:
   fusion, and stacking.
 - `R/mvr_knockoff.R`: R wrapper and pure-R fallback for Gaussian MVR knockoffs.
 - `R/nested_cv.R`: repeated nested CV for multi-omic STABL workflows.
-- `R/RcppExports.R`: generated `.Call` wrapper for the native MVR solver.
+- `R/RcppExports.R`: generated `.Call` wrappers for the native MVR solver and
+  (post-audit) the `corr_groups_from_corr_cpp` union helper.
 - `R/stabl_accessors.R`: S3 accessors and print methods.
 - `R/stabl_fit.R`: core STABL orchestration.
+- `R/stabl_refit.R`: end-to-end selector + unpenalized final refit (gaussian
+  via `lm`, binomial/poisson via `glm`, cox via `survival::coxph`, multinomial
+  via `nnet::multinom`), plus `predict.stabl_refit()` and
+  `print.stabl_refit()`. ADDED post-audit by commit `5c11faa`.
 - `R/visualization.R`: stability, FDP, ROC/PRC, and selected-feature plots.
 
 ## Native inventory
 
 - `src/mvr_knockoff.cpp`: RcppArmadillo ungrouped MVR S-matrix coordinate
   descent solver.
+- `src/corr_groups.cpp`: small Rcpp union-find that performs the NAT-002
+  thresholded correlation-union step (~55 lines). Uses `std::vector<int>` for
+  parent pointers and `std::map<int,int>` to renumber roots to 1-indexed
+  group IDs. Pure header-only `Rcpp.h`; does NOT link RcppArmadillo.
+  ADDED post-audit by commit `6207d6a`.
 - `src/RcppExports.cpp`: generated registration for
-  `_costablr_mvr_solve_ungrouped_cpp`.
+  `_costablr_mvr_solve_ungrouped_cpp` and `_costablr_corr_groups_from_corr_cpp`.
 - No `src/Makevars` file observed.
 
 ## Tests and fixtures
@@ -116,6 +144,11 @@ Native registration:
 - Python parity fixtures under `tests/testthat/fixtures/python_parity/` for
   binomial, gaussian, multinomial, elastic-net variants, and metrics.
 - No pre-existing snapshot directory was tracked before Phase 6.
+- DRIFT 2026-05-13: `tests/testthat/test-stabl-refit.R` (~100 lines) was added
+  by commit `5c11faa`. It covers happy-path gaussian, binomial, and
+  empty-support intercept-only cases. It does NOT exercise multinomial, cox,
+  poisson, or `predict.stabl_refit()` `newdata` schema mismatch — those
+  branches in `R/stabl_refit.R` are currently untested.
 
 ## Documentation inventory
 
@@ -132,6 +165,14 @@ Native registration:
 - `NEWS.md` was not present in the tracked file list.
 
 ## Public call graph summary
+
+> **Re-review note (2026-05-13 evening).** Line numbers cited in the
+> per-finding files (`02`–`06`) refer to the state when the audit was sealed.
+> `R/multiomic_workflows.R` has since grown from ~1430 to ~1870 lines after
+> commit `ed84166`'s multinomial cooperative fusion patch. The findings still
+> point at the correct code paths but the absolute offsets have drifted; use
+> the function names and grep markers (e.g. `.cooperative_multiomic_fit`,
+> `stacked_multi_omic`) rather than the line numbers when re-verifying.
 
 - `stabl_fit()` -> `validate_sample_alignment()` ->
   `.subset_outcome_by_ids()` -> optional `.subset_bootstrap_strata_by_ids()` ->
@@ -155,6 +196,12 @@ Native registration:
 - `stabl_multiomic_nested_cv()` -> `.make_repeated_cv_folds()` ->
   `.evaluate_stabl_candidates_inner()` -> `.fit_stabl_nested_candidate()` ->
   `stabl_fit()` and selected-feature prediction helpers.
+- POST-AUDIT (commit `5c11faa`): `stabl_refit()` ->
+  `validate_sample_alignment()` -> `.subset_outcome_by_ids()` ->
+  `stabl_fit()` -> `get_feature_names_out()` -> `.stabl_subset_selected_matrix()`
+  -> `.fit_stabl_final_model()` dispatched on `.stabl_refit_task_type(family)`.
+  `R/multiomic_workflows.R` and `R/nested_cv.R` both call
+  `.stabl_refit_task_type()` internally to share the family-to-task-type map.
 
 Dispatch paths that simple grep can miss:
 

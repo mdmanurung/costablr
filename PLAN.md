@@ -79,6 +79,9 @@ Current parity baseline includes Python-aligned FDP+ defaults: the R
 original Python `np.arange(0., 1., .01)` sweep.  The core selector also
 exposes Python's `bootstrap_threshold` control with the upstream effective
 default `1e-5` and sklearn-style per-bootstrap `>=` coefficient thresholding.
+The parity contract in `STABL.md` was source-audited on 2026-05-13 against
+upstream Python commit `1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`; no new
+core parity work item was opened.
 
 ## Active Dependencies
 
@@ -151,31 +154,24 @@ narrative rewrite, parallel render validation completed as SLURM array job
     plot that overlays class-specific elastic-net betas on global STABL
     stability scores; this is not inferential validation.
 14. For the guided AURORA all-view baseline analysis, use
-    `scratch/01_costablr_baseline_groups_test.ipynb` as the active notebook. It
-    now targets multinomial study-group classification (`EG`, `GA`, `TU`) with
-    all 11 RaJIVE-style preprocessed immune views, stratified elastic-net
-    STABL, cache/export artifact discipline, reader-facing interpretation
-    sections, selected-feature clustering heatmaps, multiclass late-fusion
-    scaffolding, and auxiliary cooperative one-vs-rest branches. The package
-    workflow now exposes the same OVR strategy directly via
-    `family = "multinomial", cooperative_fusion = TRUE`; native multinomial
-    cooperative optimization remains out of scope. The copied showcase
-    notebook `scratch/05_costablr_baseline_groups_multinomial_ovr_test.ipynb`
-    is now a nonblocking SLURM control center for only the automatic
-    multinomial OVR cooperative branch: dashboard, missing-output audit,
-    dry-run submission plan, guarded `sbatch`, log tailing, cache-only load,
-    and report sections that skip when caches are absent. Heavy execution is
-    routed through the new `cooperative_multinomial_ovr` branch in
-    `scratch/scripts/run_costablr_baseline_groups_branch.R`, with the
-    notebook namespace reusing source preprocessing caches from
-    `costablr_baseline_groups_test` instead of recomputing raw preprocessing.
-    The latest follow-up patches harden multiclass stacking label validation,
-    CV bootstrap-strata normalization, macro-F1 computation for omitted
-    predicted classes, and notebook cache loading from the script/SLURM
-    artifacts. Before treating results as biological evidence, rerun with
-    publication-scale
-    bootstrap/nested-CV settings and document nested-CV and sensitivity
-    results in `PROGRESS.md`.
+    `scratch/01_costablr_baseline_groups_test.ipynb` as the full baseline
+    SLURM control center, not as an in-kernel execution notebook. It now
+    audits expected caches, plans reruns, submits guarded nonblocking `sbatch`
+    jobs, tails logs, loads caches only, and renders report sections that skip
+    when artifacts are absent. Heavy execution remains centralized in
+    `scratch/scripts/run_costablr_baseline_groups_branch.R` and the paired
+    SLURM wrappers. The branch array now covers the current public
+    `family = "multinomial", cooperative_fusion = TRUE` automatic OVR
+    cooperative workflow in addition to the older CyTOF, single-view,
+    early-fusion, late-fusion, manual cooperative OVR, and nested-CV branches.
+    Baseline branch fits enforce stratified bootstraps through
+    `stratify_bootstrap = TRUE` with explicit study-group bootstrap strata
+    (plus outcome strata for one-vs-rest branches). A rerun chain using
+    `mvr_knockoff` is live as preprocessing job `24766504`, main branch array
+    `24766506`, and dependent visualization job `24766507`; monitor these
+    jobs before interpreting refreshed caches. Before treating results as
+    biological evidence, rerun with publication-scale bootstrap/nested-CV
+    settings and document nested-CV and sensitivity results in `PROGRESS.md`.
 15. For AURORA baseline binary study-group comparisons, use
     `scratch/04_costablr_baseline_binary_comparisons.ipynb`. It is the
     SLURM-cached companion to the multinomial notebook and evaluates

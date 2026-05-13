@@ -1,5 +1,11 @@
 # 03 Intent-vs-Implementation Findings
 
+> **Re-review note (2026-05-13 evening).** A new pkgdown drift mirroring
+> IMPL-007 has appeared since the audit closed: `stabl_refit()` is exported
+> in `NAMESPACE` and documented at `man/stabl_refit.Rd`, but is absent from
+> `_pkgdown.yml` reference sections. See IMPL-007 below for the existing
+> pattern and the post-audit drift candidates at the bottom of this file.
+
 ## Finding IMPL-001: `get_support()` does not validate documented threshold shape
 
 - Status: FIXED 2026-05-13. `new_hard_threshold` now resolves to a single
@@ -140,3 +146,55 @@
 - Confidence: HIGH.
 - Suggested fix: add the nested-CV article to `_pkgdown.yml`, or document and
   configure its exclusion if it is intentionally off-site.
+
+## Post-audit intent drift (NOT YET FILED AS NUMBERED FINDINGS)
+
+Candidates identified during the 2026-05-13 evening re-review.
+
+### IMPL-CAND-A: `stabl_refit()` is exported but not indexed in `_pkgdown.yml`
+
+- Severity: LOW (recurrence of IMPL-007).
+- Locations: `NAMESPACE` (`export(stabl_refit)`), `man/stabl_refit.Rd:1`,
+  `_pkgdown.yml:40-110` (no reference entry).
+- Observation: `stabl_refit()` is a new top-level public API added by commit
+  `5c11faa`. It is documented and tested, but `_pkgdown.yml` does not list
+  it under any reference section. `pkgdown::check_pkgdown()` was clean at
+  audit closure; running it now would either succeed (because pkgdown is
+  permissive about exported topics missing from the reference list) or
+  reproduce the IMPL-007 missing-topic warning, depending on configuration.
+- Risk: built site lacks the new function's reference page even though the
+  function is exported.
+- Confidence: HIGH from inspection. Not dynamically verified against
+  `pkgdown::check_pkgdown()` post-`5c11faa`.
+- Suggested fix: add `stabl_refit` to the `Core STABL Engine` section of
+  `_pkgdown.yml` (its `STABL.md`/`README.md` framing treats it as the
+  end-to-end equivalent of `stabl_fit`).
+
+### IMPL-CAND-B: `stabl_refit()` documented `(0, 1]` threshold not validated end-to-end
+
+- Severity: LOW.
+- Locations: `R/stabl_refit.R:33-35` (docs), `R/stabl_refit.R:100-104`
+  (delegation).
+- Observation: `stabl_refit()` forwards `new_hard_threshold` to
+  `get_feature_names_out()`, which uses `get_support()`, which now has the
+  IMPL-001 scalar-finite-range guard. The IMPL-001 fix therefore *does*
+  cover this entry point. However, `stabl_refit()`'s own docstring re-states
+  the `(0, 1]` contract without referencing the upstream validator. If the
+  upstream validation ever loosens, this docstring becomes a silent
+  contract drift.
+- Risk: contract drift in the future, not a current defect.
+- Confidence: HIGH from inspection.
+
+### IMPL-CAND-C: `stabl_refit()` binomial path silently calls `droplevels()`
+
+- Severity: LOW.
+- Location: `R/stabl_refit.R:227`.
+- Observation: binomial dispatch calls `droplevels(factor(y_train))` before
+  asserting `length(levels(...)) == 2L`. When `y_train` is already a
+  two-level factor with one level having zero rows after alignment, the
+  caller sees the "exactly two outcome classes" error rather than a more
+  diagnostic "outcome lost a class during alignment" message. The audit's
+  INT-001 duplicate-ID rejection reduces this risk but does not eliminate
+  it (e.g. validation-only outcomes restricted by `train_ids`).
+- Risk: confusing error in alignment-failure scenarios.
+- Confidence: HIGH from inspection; no dynamic check.

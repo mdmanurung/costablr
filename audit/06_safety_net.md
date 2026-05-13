@@ -9,6 +9,25 @@ Status reviewed: 2026-05-13. The safety net is CURRENT. Running
 passes all fixed INT/IMPL/performance audit assertions and reports exactly the
 two expected NAT placeholder skips.
 
+> **Re-review note (2026-05-13 evening).** Two post-audit code areas are NOT
+> covered by any `test-audit-*.R` file:
+>
+> 1. `stabl_refit()` (`R/stabl_refit.R`, commit `5c11faa`). Only the
+>    happy-path tests in `tests/testthat/test-stabl-refit.R` exercise it.
+>    No audit-level guard pins the `family` → task-type table, the
+>    multinomial `nnet::multinom` path, the cox `survival::coxph` path, the
+>    Poisson path, or `predict.stabl_refit()`'s `newdata` schema validation.
+> 2. Multinomial cooperative fusion one-vs-rest dispatch
+>    (`R/multiomic_workflows.R`, commit `ed84166`). The audit's INT-003
+>    cooperative-fusion misalignment risk now applies to this branch too,
+>    but `tests/testthat/test-audit-multiomic-workflows.R` does not exercise
+>    it. The relevant coverage lives in (non-audit)
+>    `tests/testthat/test-multiomic-workflows.R`.
+>
+> If the audit safety-net contract should be extended to cover these areas,
+> add new `test_that()` blocks to the existing audit files rather than
+> creating new files — same convention as the original audit suite.
+
 ## Formatting
 
 - Required command attempted: `air format .`
@@ -153,3 +172,7 @@ pkgdown::check_pkgdown()
 ```
 
 - Result: no problems found.
+- POST-AUDIT NOTE 2026-05-13: this check was last run BEFORE commit `5c11faa`
+  exported `stabl_refit()`. The function is not present in `_pkgdown.yml`,
+  so a fresh `pkgdown::check_pkgdown()` may reproduce the IMPL-007 missing-
+  topic pattern. Re-run is recommended before the next release.
