@@ -26,6 +26,11 @@ must remain explicit in code and tests:
 - `artificial_proportion` controls injected artificial-feature count.
 - `sample_fraction` controls bootstrap subsample size via `floor(sample_fraction * n)`.
 - `replace` controls with/without replacement bootstrap sampling.
+- R adds optional `bootstrap_strata` / `stratify_bootstrap` controls for
+  stratified bootstrap subsampling. Defaults remain unstratified for parity.
+- `l1_ratio` is forwarded to `auto_lambda_grid()` for elastic-net paths in
+  `stabl_fit()` and the multi-omic workflow helpers. It is additive API
+  surface and does not change default lasso or parity behavior when `NULL`.
 - `fdr_threshold_range` defines the threshold sweep used in FDP+ minimization.
 
 **Inputs:**
@@ -37,6 +42,12 @@ must remain explicit in code and tests:
 *   $\pi \in (0, 1]$: Artificial-feature proportion (`artificial_proportion`, default $\pi = 1$).
 *   $s > 0$: Subsample fraction (`sample_fraction`, default $s = 0.5$).
 *   `replace`: Whether sampling is with replacement (default `FALSE`).
+*   Optional R-only bootstrap stratification design (`bootstrap_strata`): one
+    categorical factor or a joint design across multiple categorical factors.
+    Named vectors and matrix/data-frame row names are aligned to sample IDs.
+    Full-length unnamed/implicit designs are treated positionally, except that
+    numeric-looking row names are still treated as sample IDs when their set
+    matches the sample IDs.
 
 ### Step 1: Noise Injection (Creating Artificial Features)
 1. Compute the number of injected artificial features $q$ from $p$ and $\pi$.
@@ -61,6 +72,12 @@ must remain explicit in code and tests:
 2. For each iteration $k$, draw a random subsample of size
    $m = \lfloor sn \rfloor$ from $(Y, \mathbb{X})$.
    The default is $s=0.5$ and `replace=FALSE`.
+   In R, when `bootstrap_strata` is supplied, the draw is performed within the
+   realised interaction of the supplied stratification columns.  When
+   `stratify_bootstrap = TRUE` and `bootstrap_strata = NULL`, the outcome
+   vector is used as the single stratification factor.  Grouped bootstrap still
+   preserves whole groups; grouped stratification requires every group to map
+   to exactly one realised stratum.
 3. Fit the Base SRM on $(Y, \mathbb{X})_k$ across all values of the regularization parameter(s) $\lambda \in \Lambda$ [5].
 4. For each $(k, \lambda)$, derive a binary selection mask over the $p+q$ features (typically using non-zero/thresholded coefficients).
 
@@ -75,7 +92,7 @@ must remain explicit in code and tests:
    $$
 
 ### Step 4: Compute the Data-Driven Reliability Threshold ($\theta$)
-1. Evaluate potential thresholds $t$ on a grid (default: `seq(0, 1, by=0.01)` in R; `np.arange(0.,1.,.01)` in Python).
+1. Evaluate potential thresholds $t$ on a grid (default: `seq(0, 0.99, by=0.01)` in R; `np.arange(0.,1.,.01)` in Python).
 2. For each $t$, compute the surrogate FDP+ using strict comparison (`>` in code):
    $$
    FDP_+(t) = \frac{1 + \frac{1}{\pi}\sum_{j \in \mathcal{A}} \mathbf{1}[f_j > t]}{\max\left(1, \sum_{j \in \mathcal{O}} \mathbf{1}[f_j > t]\right)}.
@@ -100,11 +117,13 @@ must remain explicit in code and tests:
 - Bootstrap implementation details:
    - Both support grouped and ungrouped sampling, same default policy ($s=0.5$, `replace=FALSE`).
    - Grouped bootstrap internals differ but target the same leakage-prevention intent.
+   - R additionally supports optional stratified bootstrap designs; this is
+     R-only and disabled by default to preserve Python parity.
 - Thresholding comparator:
    - Both use strict $>$ for FDP+ and support-mask selection.
 - FDP+ threshold grid defaults:
    - Python default is `np.arange(0., 1., .01)`.
-   - R default is `seq(0, 1, by = 0.01)`.
+   - R default is `seq(0, 0.99, by = 0.01)`.
 - Core output contract:
    - Both core fit paths stop at stability scores + thresholding + feature support; final predictive refit is handled downstream.
 - Bootstrap selection threshold (`bootstrap_threshold`):
@@ -136,3 +155,22 @@ must remain explicit in code and tests:
 - Core fit does not perform final downstream predictive refitting.
 - Core fit does not own full benchmark orchestration from `Notebook examples/`.
 - Core fit does not replace higher-level multi-omic workflow composition.
+
+### Higher-Level Multi-Omic Workflow Semantics
+
+- `stabl_multiomic_train_validate(late_fusion = TRUE)` is downstream workflow
+  logic, not part of the core STABL selector. For `family = "multinomial"`, it
+  now performs true multiclass late fusion by stacking per-view class
+  probability matrices and selecting non-negative view weights by multiclass
+  log loss.
+- Multinomial late fusion uses per-view class-prior probabilities as the
+  fallback when no features are selected for a view or the downstream refit
+  fails. Binary/regression late fusion keeps the existing scalar prediction
+  contract.
+- Multiclass probability stacking requires every outcome label to be present
+  in the supplied probability-column levels; mismatches are errors rather than
+  silently dropped samples.
+- Cooperative fusion remains restricted to families supported by `multiview`;
+  multinomial cooperative learning is intentionally rejected. Multiclass
+  cooperative analyses should be expressed as explicit one-vs-rest binomial
+  branches when needed.

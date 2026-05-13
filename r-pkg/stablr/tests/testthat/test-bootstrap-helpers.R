@@ -14,6 +14,74 @@ test_that("classic_bootstrap_indices validates non-replacement size", {
   )
 })
 
+test_that("classic_bootstrap_indices can stratify by outcome class", {
+  y <- c(rep("NP", 15L), rep("P", 23L))
+
+  idx <- classic_bootstrap_indices(
+    y = y,
+    n_subsamples = 19L,
+    replace = FALSE,
+    stratify = TRUE,
+    seed = 11L
+  )
+
+  expect_length(idx, 19L)
+  expect_equal(as.integer(table(y[idx])), c(8L, 11L))
+  expect_named(table(y[idx]), c("NP", "P"))
+})
+
+test_that("classic_bootstrap_indices rejects impossible stratified targets", {
+  y <- c("A", "B", "C")
+
+  expect_error(
+    classic_bootstrap_indices(y = y, n_subsamples = 2L, stratify = TRUE),
+    "at least the number of realised strata"
+  )
+})
+
+test_that("classic_bootstrap_indices can stratify by a multi-column design", {
+  y <- c(rep("NP", 15L), rep("P", 23L))
+  study <- c(
+    rep("CVTU3", 3L), rep("EGSV2", 4L), rep("PfGA2", 8L),
+    rep("CVTU3", 9L), rep("EGSV2", 6L), rep("PfGA2", 8L)
+  )
+  strata <- data.frame(outcome = y, study = study)
+
+  idx <- classic_bootstrap_indices(
+    y = y,
+    n_subsamples = 19L,
+    replace = FALSE,
+    strata = strata,
+    seed = 12L
+  )
+
+  observed <- table(interaction(strata[idx, ], drop = TRUE, sep = "\r"))
+  expect_length(idx, 19L)
+  expect_equal(length(observed), 6L)
+  expect_true(all(observed >= 1L))
+})
+
+test_that("bootstrap strata row names are used when numeric sample ids are shuffled", {
+  sample_ids <- c("2", "1", "3")
+  strata_df <- data.frame(
+    site = c("site_for_1", "site_for_2", "site_for_3"),
+    row.names = c("1", "2", "3")
+  )
+  strata_mat <- matrix(
+    c("site_for_1", "site_for_2", "site_for_3"),
+    ncol = 1L,
+    dimnames = list(c("1", "2", "3"), "site")
+  )
+
+  out_df <- .subset_bootstrap_strata_by_ids(strata_df, sample_ids)
+  out_mat <- .subset_bootstrap_strata_by_ids(strata_mat, sample_ids)
+
+  expect_equal(rownames(out_df), sample_ids)
+  expect_equal(out_df$site, c("site_for_2", "site_for_1", "site_for_3"))
+  expect_equal(rownames(out_mat), sample_ids)
+  expect_equal(out_mat$site, c("site_for_2", "site_for_1", "site_for_3"))
+})
+
 test_that("group_bootstrap_indices validates group length", {
   y <- c(0, 1, 0)
   g <- c("a", "a")
@@ -90,6 +158,60 @@ test_that("group_bootstrap_indices replace=FALSE never re-draws the same group",
     expect_equal(length(unique(selected_groups)),
                  length(unique(groups[idx])))
   }
+})
+
+test_that("group_bootstrap_indices can stratify while preserving whole groups", {
+  groups <- rep(paste0("id", seq_len(8L)), each = 2L)
+  y <- rep(c(rep("NP", 4L), rep("P", 4L)), each = 2L)
+
+  idx <- group_bootstrap_indices(
+    y = y,
+    groups = groups,
+    n_subsamples = 8L,
+    replace = FALSE,
+    stratify = TRUE,
+    seed = 22L
+  )
+
+  expect_true(all(table(y[idx]) >= 4L))
+  selected_groups <- unique(groups[idx])
+  for (g in selected_groups) {
+    expect_setequal(idx[groups[idx] == g], which(groups == g))
+  }
+})
+
+test_that("group_bootstrap_indices stratification requires class-pure groups", {
+  groups <- c("id1", "id1", "id2", "id2")
+  y <- c("NP", "P", "NP", "P")
+
+  expect_error(
+    group_bootstrap_indices(
+      y = y,
+      groups = groups,
+      n_subsamples = 2L,
+      stratify = TRUE,
+      seed = 1L
+    ),
+    "exactly one realised stratum"
+  )
+})
+
+test_that("group_bootstrap_indices stratified replacement can reuse groups", {
+  groups <- c("id1", "id1", "id2", "id2")
+  y <- c("NP", "NP", "P", "P")
+
+  idx <- group_bootstrap_indices(
+    y = y,
+    groups = groups,
+    n_subsamples = 6L,
+    replace = TRUE,
+    stratify = TRUE,
+    seed = 3L
+  )
+
+  expect_gte(length(idx), 6L)
+  expect_true(anyDuplicated(idx) > 0L)
+  expect_true(all(c("NP", "P") %in% y[idx]))
 })
 
 test_that("classic_bootstrap_indices errors after max retries on impossible class diversity", {

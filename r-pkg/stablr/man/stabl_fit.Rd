@@ -16,11 +16,14 @@ stabl_fit(
   sample_fraction = 0.5,
   replace = FALSE,
   hard_threshold = NULL,
-  fdr_threshold_range = seq(0, 1, by = 0.01),
+  fdr_threshold_range = seq(0, 0.99, by = 0.01),
   explore = FALSE,
   n_explore = 5L,
   groups = NULL,
+  stratify_bootstrap = FALSE,
+  bootstrap_strata = NULL,
   n_lambda = 30L,
+  l1_ratio = NULL,
   verbose = FALSE,
   workers = 1L,
   random_state = NULL,
@@ -69,7 +72,8 @@ control is bypassed and this value is the stability-score cut-off.
 Default: \code{NULL}.}
 
 \item{fdr_threshold_range}{Numeric vector swept when computing FDP+.
-Default: \code{seq(0, 1, by = 0.01)}.}
+Default: \code{seq(0, 0.99, by = 0.01)}, matching Python STABL's
+\code{np.arange(0., 1., .01)}.}
 
 \item{explore}{Logical; if \code{TRUE} and no features pass the threshold, fall
 back to the top \code{n_explore} features.  Default: \code{FALSE}.}
@@ -80,8 +84,25 @@ back to the top \code{n_explore} features.  Default: \code{FALSE}.}
 \code{NULL}.  When supplied, \code{\link[=group_bootstrap_indices]{group_bootstrap_indices()}} is used instead of
 \code{\link[=classic_bootstrap_indices]{classic_bootstrap_indices()}}.  Default: \code{NULL}.}
 
+\item{stratify_bootstrap}{Logical; if \code{TRUE}, bootstrap subsamples are
+stratified by the outcome class.  This is intended for classification
+tasks with small or imbalanced classes.  Default \code{FALSE} preserves the
+original STABL sampling behavior.}
+
+\item{bootstrap_strata}{Optional categorical stratification design for
+bootstrap sampling.  Provide a named vector, matrix, \code{data.frame}, or
+list with one row/value per sample.  Multiple columns are combined as a
+joint interaction stratum, for example outcome class by study group.  When
+supplied, this overrides \code{stratify_bootstrap}.}
+
 \item{n_lambda}{Integer; number of lambda values when \code{lambda_grid = "auto"}.
 Ignored otherwise.  Default: \code{30L}.}
+
+\item{l1_ratio}{Numeric scalar, numeric vector, or \code{NULL}. Passed to
+\code{\link[=auto_lambda_grid]{auto_lambda_grid()}} when \code{lambda_grid = "auto"}. Use this for
+\code{base_learner = "elastic_net"} so the generated grid contains the
+elastic-net \code{alpha} column. Default \code{NULL} preserves the lasso-like auto
+grid used by existing workflows.}
 
 \item{verbose}{Logical; emit progress messages.  Default: \code{FALSE}.}
 

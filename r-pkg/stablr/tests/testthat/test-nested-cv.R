@@ -161,3 +161,35 @@ test_that("stabl_multiomic_nested_cv rejects folds with too few class samples", 
     "Each stratum"
   )
 })
+
+test_that("stabl_multiomic_nested_cv forwards l1_ratio to auto lambda grids", {
+  set.seed(303)
+  n <- 18L
+  ids <- paste0("s", seq_len(n))
+  y <- setNames(factor(rep(c("A", "B", "C"), each = 6L)), ids)
+  x <- matrix(rnorm(n * 5L), nrow = n,
+              dimnames = list(ids, paste0("f", seq_len(5L))))
+
+  fit <- suppressWarnings(stabl_multiomic_nested_cv(
+    x_list = list(mrna = x),
+    y = y,
+    candidates = list(list(name = "mrna", blocks = "mrna")),
+    lambda_grid = "auto",
+    outer_v = 3L,
+    outer_repeats = 1L,
+    inner_v = 3L,
+    family = "multinomial",
+    base_learner = "elastic_net",
+    l1_ratio = 0.5,
+    n_lambda = 2L,
+    artificial_type = NULL,
+    hard_threshold = 1,
+    n_bootstraps = 2L,
+    sample_fraction = 1.0,
+    random_state = 303L
+  ))
+
+  grid <- fit$fold_results[[1L]]$fit$stabl_fit$fitted_lambda_grid
+  expect_true("alpha" %in% names(grid))
+  expect_equal(unique(grid$alpha), 0.5)
+})

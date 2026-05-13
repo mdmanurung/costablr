@@ -4,7 +4,15 @@
 \alias{group_bootstrap_indices}
 \title{Group-Aware Bootstrap Sampler Indices}
 \usage{
-group_bootstrap_indices(y, groups, n_subsamples, replace = FALSE, seed = NULL)
+group_bootstrap_indices(
+  y,
+  groups,
+  n_subsamples,
+  replace = FALSE,
+  stratify = FALSE,
+  strata = NULL,
+  seed = NULL
+)
 }
 \arguments{
 \item{y}{Outcome vector with the same length as \code{groups}.}
@@ -19,6 +27,17 @@ the smallest group-aligned value \verb{>= n_subsamples}).}
 
 \item{replace}{Logical; may the same group be sampled more than once?
 Default \code{FALSE}.}
+
+\item{stratify}{Logical; if \code{TRUE}, sample whole groups within outcome
+strata so the realised subsample retains class representation where the
+group structure permits it.  Each group must map to exactly one outcome
+class.  Whole groups are still preserved, so realised counts can exceed
+per-class targets.  Default \code{FALSE}.}
+
+\item{strata}{Optional categorical stratification design.  Provide a vector
+for one stratification factor, or a \code{data.frame}/matrix/list for a joint
+design across multiple factors.  Each group must map to exactly one
+realised stratum.}
 
 \item{seed}{Optional integer; passed to \code{\link[=set.seed]{set.seed()}} before sampling.
 \code{NULL} leaves the RNG state unchanged.}

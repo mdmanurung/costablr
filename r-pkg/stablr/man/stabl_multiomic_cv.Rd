@@ -15,6 +15,9 @@ stabl_multiomic_cv(
   n_bootstraps = 100L,
   artificial_type = "random_permutation",
   hard_threshold = NULL,
+  stratify_bootstrap = FALSE,
+  bootstrap_strata = NULL,
+  l1_ratio = NULL,
   random_state = NULL,
   early_fusion = FALSE,
   late_fusion = FALSE,
@@ -52,6 +55,13 @@ the same group are assigned to the same assessment fold.}
 \item{artificial_type}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
 \item{hard_threshold}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
+
+\item{stratify_bootstrap}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
+
+\item{bootstrap_strata}{Optional categorical bootstrap stratification design
+forwarded to \code{\link[=stabl_fit]{stabl_fit()}} for each training fold.}
+
+\item{l1_ratio}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} when \code{lambda_grid = "auto"}.}
 
 \item{random_state}{Optional integer seed used for deterministic fold
 assignment and forwarded to each per-fold \code{\link[=stabl_fit]{stabl_fit()}} call.}

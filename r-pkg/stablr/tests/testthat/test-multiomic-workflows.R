@@ -98,6 +98,33 @@ test_that("stabl_multiomic_train_validate errors on misaligned validation sample
   )
 })
 
+test_that("stabl_multiomic_train_validate forwards l1_ratio to auto lambda grids", {
+  set.seed(131)
+  n <- 24L
+  ids <- paste0("s", seq_len(n))
+  x <- matrix(rnorm(n * 5L), nrow = n,
+              dimnames = list(ids, paste0("f", seq_len(5L))))
+  y <- setNames(rnorm(n), ids)
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x),
+    y_train = y,
+    lambda_grid = "auto",
+    base_learner = "elastic_net",
+    l1_ratio = 0.4,
+    n_lambda = 2L,
+    artificial_type = NULL,
+    hard_threshold = 1,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    random_state = 131L
+  )
+
+  grid <- fit$fits$omic_a$fitted_lambda_grid
+  expect_true("alpha" %in% names(grid))
+  expect_equal(unique(grid$alpha), 0.4)
+})
+
 test_that("stabl_multiomic_cv returns deterministic fold diagnostics and selected matrices", {
   set.seed(202)
   n <- 18L
@@ -135,6 +162,73 @@ test_that("stabl_multiomic_cv returns deterministic fold diagnostics and selecte
   expect_named(fold1$selected_valid, c("omic_a", "omic_b"))
   expect_equal(nrow(fold1$selected_valid$omic_a), length(fit$folds[[1L]]$valid_ids))
   expect_equal(nrow(fold1$selected_train$omic_b), length(fit$folds[[1L]]$train_ids))
+})
+
+test_that("stabl_multiomic_cv accepts unnamed full-length bootstrap strata", {
+  set.seed(232)
+  n <- 18L
+  ids <- paste0("s", seq_len(n))
+  x <- matrix(rnorm(n * 4L), nrow = n,
+              dimnames = list(ids, paste0("f", seq_len(4L))))
+  y <- setNames(factor(rep(c("A", "B"), each = n / 2L)), ids)
+  strata <- rep(c("site1", "site2", "site3"), length.out = n)
+
+  fit_vec <- suppressWarnings(stabl_multiomic_cv(
+    x_list = list(omic_a = x),
+    y = y,
+    lambda_grid = data.frame(lambda = 0.2),
+    v = 3L,
+    family = "binomial",
+    artificial_type = NULL,
+    hard_threshold = 1,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    bootstrap_strata = strata,
+    random_state = 232L
+  ))
+
+  fit_df <- suppressWarnings(stabl_multiomic_cv(
+    x_list = list(omic_a = x),
+    y = y,
+    lambda_grid = data.frame(lambda = 0.2),
+    v = 3L,
+    family = "binomial",
+    artificial_type = NULL,
+    hard_threshold = 1,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    bootstrap_strata = data.frame(site = strata),
+    random_state = 233L
+  ))
+
+  expect_s3_class(fit_vec, "stabl_multiomic_cv")
+  expect_s3_class(fit_df, "stabl_multiomic_cv")
+})
+
+test_that("stabl_multiomic_cv rejects wrong-length unnamed bootstrap strata", {
+  set.seed(234)
+  n <- 18L
+  ids <- paste0("s", seq_len(n))
+  x <- matrix(rnorm(n * 4L), nrow = n,
+              dimnames = list(ids, paste0("f", seq_len(4L))))
+  y <- setNames(factor(rep(c("A", "B"), each = n / 2L)), ids)
+
+  expect_error(
+    stabl_multiomic_cv(
+      x_list = list(omic_a = x),
+      y = y,
+      lambda_grid = data.frame(lambda = 0.2),
+      v = 3L,
+      family = "binomial",
+      artificial_type = NULL,
+      hard_threshold = 1,
+      n_bootstraps = 2L,
+      sample_fraction = 1,
+      bootstrap_strata = c("site1", "site2"),
+      random_state = 234L
+    ),
+    "one value per sample"
+  )
 })
 
 test_that("stabl_multiomic_cv keeps grouped samples in the same assessment fold", {
@@ -252,6 +346,52 @@ test_that("stacked_multi_omic handles NA predictions per-row", {
                              n_iter = 200L, random_state = 5L)
   # Rows 1 and 3 have NA in omic_b — stacked prediction should still be non-NA
   expect_false(any(is.na(res$predictions[["Stacked Gen. Predictions"]])))
+})
+
+test_that("stacked_multi_omic supports multiclass probability stacking", {
+  set.seed(9)
+  y <- factor(rep(c("A", "B", "C"), each = 5L))
+  ids <- paste0("s", seq_along(y))
+  make_probs <- function(noise) {
+    p <- matrix(0.1, nrow = length(y), ncol = 3L,
+                dimnames = list(ids, levels(y)))
+    p[cbind(seq_along(y), as.integer(y))] <- 0.8
+    p <- p + matrix(stats::runif(length(p), 0, noise), nrow = nrow(p))
+    p / rowSums(p)
+  }
+  preds <- list(omic_a = make_probs(0.05), omic_b = make_probs(0.25))
+
+  res <- stacked_multi_omic(preds, y, task_type = "multiclass",
+                            n_iter = 200L, random_state = 9L)
+
+  expect_named(res, c("predictions", "weights", "score", "log_loss", "levels"))
+  expect_equal(res$levels, levels(y))
+  expect_equal(nrow(res$weights), 2L)
+  expect_true(all(paste0("prob_", levels(y)) %in% names(res$predictions)))
+  expect_true("predicted_class" %in% names(res$predictions))
+  expect_true(is.finite(res$log_loss))
+  expect_true(res$log_loss < 1)
+})
+
+test_that("stacked_multi_omic errors when multiclass labels are absent from probability columns", {
+  y <- factor(c("A", "B", "C"))
+  ids <- paste0("s", seq_along(y))
+  preds <- list(
+    omic_a = matrix(
+      c(0.9, 0.1,
+        0.2, 0.8,
+        0.4, 0.6),
+      nrow = length(y),
+      byrow = TRUE,
+      dimnames = list(ids, c("A", "B"))
+    )
+  )
+
+  expect_error(
+    stacked_multi_omic(preds, y, task_type = "multiclass",
+                       n_iter = 5L, random_state = 99L),
+    "All multiclass `y` labels must be present"
+  )
 })
 
 # ---------------------------------------------------------------------------
@@ -413,6 +553,45 @@ test_that("late_fusion = TRUE with validation returns valid_predictions vector",
   lf <- fit$late_fusion
   expect_false(is.null(lf$valid_predictions))
   expect_equal(length(lf$valid_predictions), n_va)
+})
+
+test_that("late_fusion = TRUE supports multinomial probability stacking", {
+  set.seed(321)
+  n <- 24L
+  ids <- paste0("s", seq_len(n))
+  y <- setNames(factor(rep(c("A", "B", "C"), each = 8L)), ids)
+  signal <- model.matrix(~ y - 1)
+  x_a <- matrix(rnorm(n * 6L, sd = 0.2), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(6L))))
+  x_b <- matrix(rnorm(n * 5L, sd = 0.2), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(5L))))
+  x_a[, 1:3] <- x_a[, 1:3] + signal
+  x_b[, 1:3] <- x_b[, 1:3] + signal
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = c(0.05, 0.01)),
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "multinomial",
+    random_state = 321L,
+    late_fusion = TRUE,
+    n_iter_lf = 100L
+  ))
+
+  lf <- fit$late_fusion
+  expect_equal(lf$task_type, "multiclass")
+  expect_equal(lf$levels, levels(y))
+  expect_equal(nrow(lf$weights), 2L)
+  expect_true(all(paste0("prob_", levels(y)) %in% names(lf$train_predictions)))
+  expect_true("predicted_class" %in% names(lf$train_predictions))
+  expect_named(lf$train_metrics,
+               c("accuracy", "balanced_error_rate", "per_class_recall",
+                 "macro_f1", "confusion"))
+  expect_true(is.finite(lf$log_loss))
 })
 
 test_that("late_fusion = FALSE leaves late_fusion field NULL", {
@@ -724,6 +903,32 @@ test_that("cooperative_fusion rejects unsupported selection combinations", {
       cooperation_selector = "lambda.1se"
     ),
     "lambda.1se"
+  )
+})
+
+test_that("cooperative_fusion rejects multinomial family", {
+  set.seed(401)
+  n <- 18L
+  ids <- paste0("s", seq_len(n))
+  x_a <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(3L))))
+  x_b <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(3L))))
+  y <- setNames(factor(rep(c("A", "B", "C"), each = 6L)), ids)
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = x_a, omic_b = x_b),
+      y_train = y,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 2L,
+      family = "multinomial",
+      cooperative_fusion = TRUE,
+      rho = c(0, 0.2)
+    ),
+    "supports family"
   )
 })
 

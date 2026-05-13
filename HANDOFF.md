@@ -46,8 +46,8 @@ For details that must not be duplicated here:
   `r-pkg/stablr/vignettes/`.  The rewrite used an original, curiosity-driven
   scientific narrative voice and preserved executable code chunks and runtime
   settings.
-- Parallel render validation for the five non-nested-CV vignettes was submitted
-  as SLURM array job `24752130` using
+- Parallel render validation for the five non-nested-CV vignettes completed as
+  SLURM array job `24752130` using
   `r-pkg/stablr/inst/analysis/render_vignettes.slurm`.
   - Per-task resources: 6 CPUs, 128 GB RAM, 24H walltime.
   - Array targets: `stablr-intro.Rmd`, `stablr-multiomic.Rmd`,
@@ -56,7 +56,9 @@ For details that must not be duplicated here:
   - `stablr-tcga-nestedcv.Rmd` was intentionally excluded from this render
     array because its benchmark cache is managed by the separate nested-CV
     workflow.
-  - Status at submission check: pending as `24752130_[0-4%5]`.
+  - Log check: HTML output was created for all five array targets; no failed
+    render signal was observed in
+    `r-pkg/stablr/inst/analysis/cache/vignette-renders/`.
 - TCGA nested-CV head-to-head scaffold is in place:
   - exported `stabl_multiomic_nested_cv()` supports stratified folds,
     custom categorical strata, numeric-strata quantile binning, and
@@ -78,9 +80,10 @@ For details that must not be duplicated here:
 - Cooperative fusion: promoted workflow-layer extension (non-parity-blocking). Hardening milestone CLOSED 2026-05-08 (M12); promotion accessor milestone CLOSED 2026-05-10. Public inspection surface now includes `get_cooperative_features()` and `get_cooperative_diagnostics()`.
 - Latest verified full-suite signal: `PASS 1359`, `FAIL 0`, `WARN 2`, `SKIP 0` (see `PROGRESS.md` for command trail).
 - Latest verified package-check signal: `R CMD check --no-manual` `Status: OK`; full `R CMD check` has `Status: 1 WARNING` from missing local LaTeX package `inconsolata.sty`.
-- Latest verified vignette signal: all 5 canonical source vignettes build
-  successfully in one pass (`stablr-cooperative`, `stablr-intro`,
-  `stablr-multiomic`, `stablr-python-parity`, `stablr-tcga`).
+- Latest verified vignette signal: all 5 non-nested canonical source vignettes
+  rendered successfully in SLURM array job `24752130` after the narrative
+  rewrite (`stablr-cooperative`, `stablr-intro`, `stablr-multiomic`,
+  `stablr-python-parity`, `stablr-tcga`).
 - Latest verified documentation-site signal: pkgdown site builds to
   `docs/stablr` with clean metadata checks (URLs, favicons, Open Graph,
   articles, reference metadata all OK).
@@ -95,6 +98,65 @@ For details that must not be duplicated here:
   rebuild. OOL recovered all 7 Python tutorial selected features
   (`Overlap count: 7 of 7`); COVID-19 recovered all 6 Python tutorial selected
   features (`Overlap count: 6 of 6`).
+- Latest scratch-analysis signal: ignored notebook
+  `scratch/01_stablr_core_basemalvac.ipynb` now runs the STABL-only AURORA
+  baseline study-group feasibility workflow with multinomial elastic net. It
+  predicts `EG`, `GA`, and `TU` across all eligible baseline samples,
+  regardless of P/NP status, using a `cytof_celltype` pilot followed by a
+  no-imputation core three-view extension (`cytof_celltype`,
+  `exvivo_celltype`, `exvivo_enzyme`) with per-view fits and early fusion.
+  The notebook includes a parameter audit table and passes
+  `bootstrap_strata = data.frame(study_group)` so bootstraps preserve target
+  class composition. P/NP status is QC-only context in tables and plot point
+  shapes. The CyTOF pilot includes a top-5-per-study-group predictor plot that
+  refits full-data multinomial elastic net on the same lambda grid, extracts
+  class-specific betas, and overlays beta sign/magnitude on STABL stability.
+  Notebook JSON, nbformat validation, R syntax parsing, baseline/core balance
+  checks, and the CyTOF beta-overlay smoke fit pass in `R4_51`; observed
+  warnings are package build-version warnings and the known small-class glmnet
+  bootstrap warnings.
+- Latest guided all-view scratch notebook:
+  `scratch/01_stablr_baseline_groups_test.ipynb` is now the active guided
+  AURORA baseline study-group notebook. It uses all 11 RaJIVE-style
+  preprocessed immune views, predicts `EG`, `GA`, and `TU`, keeps P/NP as
+  descriptive QC only, writes artifacts through branch-aware helpers under
+  `scratch/cache/stablr_baseline_groups_test/` and
+  `scratch/outputs/stablr_baseline_groups_test/`, and includes reader guidance
+  under every major section heading. The notebook adds CyTOF sanity-check
+  STABL, per-view STABL, all-view early fusion, true multiclass late-fusion
+  scaffolding, auxiliary cooperative one-vs-rest branches,
+  top-5-per-study-group predictor tables, beta/stability interpretation,
+  feature-value plots, selected-feature heatmaps, cluster-purity summaries,
+  PCA/UMAP companions, feature-overlap plots, cross-view contribution
+  summaries, and disabled-by-default publication nested-CV scaffolding.
+  Heavy branches can be run with
+  `scratch/scripts/run_stablr_baseline_groups_branch.R` or the paired SLURM
+  scripts in `scratch/slurm/` (128 GB, 8 CPUs, 24H per task). Validation
+  passed in `R4_51`: nbformat OK, R parse OK, SLURM `bash -n` OK,
+  preprocessing OK with 11 views and 38 baseline samples (`EG=10`, `GA=16`,
+  `TU=12`, missing=0), isolated reduced CyTOF branch smoke OK, and heatmap
+  export smoke OK.
+- Latest bootstrap API signal: `stabl_fit()` now accepts `bootstrap_strata`
+  for arbitrary categorical bootstrap stratification designs; defaults remain
+  unstratified, and `stratify_bootstrap = TRUE` is retained as outcome-only
+  shorthand. Grouped `replace = TRUE` sampling can now reuse whole groups
+  without stalling under stratified targets. Targeted helper, `stabl_fit`, and
+  multiomic workflow tests are green.
+- Latest FDP+ parity signal: the R default `fdr_threshold_range` is now
+  `seq(0, 0.99, by = 0.01)`, matching Python STABL's
+  `np.arange(0., 1., .01)`. The active scratch notebook is the study-group
+  multinomial elastic-net analysis noted above.
+- Latest multi-omic API signal: auto-lambda calls now forward `l1_ratio`
+  through `stabl_fit()`, `stabl_multiomic_train_validate()`,
+  `stabl_multiomic_cv()`, and nested CV. Multiclass late fusion is supported
+  through per-view class-probability stacking and log-loss optimization, with
+  class-prior fallback when a view selects no features. Stacking now errors
+  when multiclass outcome labels are absent from probability columns, and
+  `stabl_multiomic_cv()` now accepts unnamed full-length bootstrap strata
+  aligned to input row order before per-fold subsetting. The active AURORA
+  notebook and branch helper now compute macro F1 with omitted predicted
+  classes contributing 0 rather than being dropped. Cooperative multinomial
+  remains rejected; use explicit one-vs-rest binomial branches.
 - Vignette source policy: edit `r-pkg/stablr/vignettes/*.Rmd`; `doc/` is
   generated by `devtools::build_vignettes()` / `R CMD build` and is ignored.
 
@@ -114,12 +176,11 @@ For details that must not be duplicated here:
 
 ### Immediate next tasks (updated)
 
-1. Monitor SLURM array job `24752130`; when tasks finish, inspect logs under
-   `r-pkg/stablr/inst/analysis/cache/vignette-renders/` and confirm the five
-   non-nested vignette HTML renders completed successfully.
-2. Monitor SLURM job `24750538`; when it finishes, confirm
+1. Monitor SLURM job `24750538`; when it finishes, confirm
    `r-pkg/stablr/inst/analysis/cache/tcga_nestedcv_results.rds` is complete
    and re-render `stablr-tcga-nestedcv.Rmd` from cache.
+2. Use the nested-CV benchmark cache to update the research vignette outputs
+   and then refresh the pkgdown site if the article output changes.
 3. Decide whether to install/fix local TeX manual tooling (`inconsolata.sty`) or defer manual PDF validation to CI/CRAN-like builders.
 
 ### Vignette runtime profile (2026-05-10)
@@ -238,6 +299,23 @@ conda run -n R4_51 R CMD INSTALL multiview
   tutorial parity workflow. For the tutorial datasets and preprocessing
   contract, use `stablr-python-parity.Rmd`; the multiomic vignette now states
   this boundary explicitly.
+- Ignored scratch notebook `scratch/01_stablr_core_basemalvac.ipynb` is now
+  configured for baseline study-group multinomial elastic-net classification
+  (`EG`, `GA`, `TU`) and treats P/NP status as QC-only context.
+- Scratch workflow sources are no longer blanket-ignored; generated scratch
+  artifact directories remain ignored. Bootstrap-strata data-frame/matrix row
+  names are now aligned by sample ID when numeric-looking IDs match the sample
+  set but appear in a different order.
+- Current AURORA baseline execution chain:
+  - preprocess `24757561` completed successfully;
+  - branch array `24757562` is running by remaining heavy tasks
+    (`late_fusion`, cooperative one-vs-rest, `nested_cv`), with completed
+    single-view and early-fusion artifacts already appearing under
+    `scratch/cache/stablr_baseline_groups_test/` and
+    `scratch/outputs/stablr_baseline_groups_test/`;
+  - visualization `24757563` is pending on the full branch array;
+  - notebook execution `24757565` is pending on visualization and will write
+    `scratch/01_stablr_baseline_groups_test.executed.ipynb`.
 
 ## Update protocol
 

@@ -20,6 +20,7 @@ stabl_multiomic_nested_cv(
   hard_threshold = NULL,
   random_state = NULL,
   n_lambda = 30L,
+  l1_ratio = NULL,
   workers = 1L,
   cv_workers = 1L,
   ...
@@ -59,6 +60,8 @@ stabl_multiomic_nested_cv(
 \item{random_state}{Optional integer seed.}
 
 \item{n_lambda}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} when \code{lambda_grid = "auto"}.}
+
+\item{l1_ratio}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} when \code{lambda_grid = "auto"}. Use this with \code{base_learner = "elastic_net"} to generate alpha-aware auto grids.}
 
 \item{workers}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} for bootstrap-level parallelism.}
 

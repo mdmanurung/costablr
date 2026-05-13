@@ -74,19 +74,24 @@ The core port baseline (Phases 1-8) is complete. This plan now tracks only remai
 
 For command-level evidence and exact validation results, use `PROGRESS.md`.
 
+Current parity baseline includes Python-aligned FDP+ defaults: the R
+`fdr_threshold_range` default is `seq(0, 0.99, by = 0.01)`, matching the
+original Python `np.arange(0., 1., .01)` sweep.
+
 ## Active Dependencies
 
 - R environment reproducibility in `R4_51` is required for reliable benchmark smoke checks.
 - Python reference scripts remain the behavior anchor for parity checks where tests are not yet frozen.
 - Current workspace scope (2026-05-03): CI workflow implementation is deferred; validation is performed via local R test suites.
 
-## Vignette Status (as of 2026-05-12) — Rewrite Pending Render Validation
+## Vignette Status (as of 2026-05-12) — Rewrite Render Validation Complete
 
 All 6 stablr vignette sources have canonical source under
 `r-pkg/stablr/vignettes/`.  Generated `doc/` output is build output, not the
 edit source.  The five non-nested-CV vignettes previously rebuilt successfully
-via `devtools::build_vignettes('r-pkg/stablr')`; after the 2026-05-12 narrative
-rewrite, parallel render validation is active as SLURM array job `24752130`.
+via `devtools::build_vignettes('r-pkg/stablr')`; after the 2026-05-12
+narrative rewrite, parallel render validation completed as SLURM array job
+`24752130` with HTML output created for all five non-nested-CV vignettes.
 
 - `stablr-intro.Rmd` ✅ — simulated-data introduction with clearer input
   contract, selected-feature interpretation, and single-omic scope boundaries.
@@ -114,10 +119,9 @@ rewrite, parallel render validation is active as SLURM array job `24752130`.
 
 ## Current Planning Focus (Forward Only)
 
-0. **[ACTIVE] Vignette render validation after narrative rewrite.** Parallel
-   SLURM array `24752130` renders the five non-nested-CV vignettes with 6 CPUs,
-   128 GB RAM, and 24H walltime per task; monitor logs in
-   `r-pkg/stablr/inst/analysis/cache/vignette-renders/`.
+0. ~~**[ACTIVE] Vignette render validation after narrative rewrite.**~~
+   **CLOSED 2026-05-12.** SLURM array `24752130` created HTML output for all
+   five non-nested-CV vignettes; see `PROGRESS.md`.
 1. **[ACTIVE] TCGA nested-CV head-to-head analysis.** Full SLURM job submitted
    for cached stablr-vs-DIABLO three-class TCGA benchmark; monitor job
    `24750538` and render `stablr-tcga-nestedcv.Rmd` from the resulting cache.
@@ -132,6 +136,33 @@ rewrite, parallel render validation is active as SLURM array job `24752130`.
 10. Keep local deterministic validation green for every forward change.
 11. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
 12. Next CRAN-prep priority: decide whether to install/fix local TeX manual tooling or defer manual PDF validation to CI/CRAN-like builders.
+13. For the AURORA baseline scratch analysis, treat
+    `scratch/01_stablr_core_basemalvac.ipynb` as feasibility only. The current
+    notebook uses multinomial elastic net to classify study group
+    (`EG`, `GA`, `TU`) for the `cytof_celltype` pilot and core three-view
+    extension; any promoted analysis must rerun with an explicit
+    validation/resampling design and a parameter grid justified for inference.
+    The feasibility notebook uses `bootstrap_strata = data.frame(study_group)`
+    to preserve target-class composition during bootstrap subsampling. P/NP
+    status is retained only for QC tables and descriptive plot point shapes.
+    The CyTOF pilot also includes a descriptive top-5-per-study-group predictor
+    plot that overlays class-specific elastic-net betas on global STABL
+    stability scores; this is not inferential validation.
+14. For the guided AURORA all-view baseline analysis, use
+    `scratch/01_stablr_baseline_groups_test.ipynb` as the active notebook. It
+    now targets multinomial study-group classification (`EG`, `GA`, `TU`) with
+    all 11 RaJIVE-style preprocessed immune views, stratified elastic-net
+    STABL, cache/export artifact discipline, reader-facing interpretation
+    sections, selected-feature clustering heatmaps, multiclass late-fusion
+    scaffolding, and auxiliary cooperative one-vs-rest branches. Heavy branches
+    should run through `scratch/scripts/run_stablr_baseline_groups_branch.R`
+    and `scratch/slurm/stablr_baseline_*.slurm`; the notebook should consume
+    branch caches where possible. The latest follow-up patch hardens
+    multiclass stacking label validation, CV bootstrap-strata normalization,
+    and macro-F1 computation for omitted predicted classes. Before treating
+    results as biological evidence, rerun with publication-scale
+    bootstrap/nested-CV settings and document nested-CV and sensitivity
+    results in `PROGRESS.md`.
 
 ## Remediation Audit Execution Status (2026-05-08)
 
@@ -495,3 +526,13 @@ Promotion criteria:
   overlap against `Notebook examples/Tutorial Notebook.ipynb`. The fresh render
   recovered all 7 OOL tutorial features and all 6 COVID tutorial features; no
   roadmap or acceptance-gate change is required.
+- 2026-05-12: Ignored scratch notebook
+  `scratch/01_stablr_core_basemalvac.ipynb` was repurposed from baseline P vs
+  NP adaptive lasso to baseline study-group multinomial elastic net
+  (`EG`, `GA`, `TU`) while retaining P/NP only for QC displays. This is a
+  scratch analysis update; no roadmap or acceptance-gate change is required.
+- 2026-05-13: Review follow-up narrowed scratch ignore rules so workflow
+  notebooks/scripts/SLURM files are trackable while generated artifact
+  directories remain ignored, and hardened bootstrap-strata alignment for
+  numeric-looking sample IDs. This is a maintenance patch; no roadmap or
+  acceptance-gate change is required.

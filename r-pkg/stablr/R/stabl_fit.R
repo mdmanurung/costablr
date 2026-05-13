@@ -32,15 +32,30 @@
 #'   control is bypassed and this value is the stability-score cut-off.
 #'   Default: `NULL`.
 #' @param fdr_threshold_range Numeric vector swept when computing FDP+.
-#'   Default: `seq(0, 1, by = 0.01)`.
+#'   Default: `seq(0, 0.99, by = 0.01)`, matching Python STABL's
+#'   `np.arange(0., 1., .01)`.
 #' @param explore Logical; if `TRUE` and no features pass the threshold, fall
 #'   back to the top `n_explore` features.  Default: `FALSE`.
 #' @param n_explore Positive integer; fallback feature count.  Default: `5L`.
 #' @param groups Named vector of group IDs (same names as `rownames(x)`) or
 #'   `NULL`.  When supplied, [group_bootstrap_indices()] is used instead of
 #'   [classic_bootstrap_indices()].  Default: `NULL`.
+#' @param stratify_bootstrap Logical; if `TRUE`, bootstrap subsamples are
+#'   stratified by the outcome class.  This is intended for classification
+#'   tasks with small or imbalanced classes.  Default `FALSE` preserves the
+#'   original STABL sampling behavior.
+#' @param bootstrap_strata Optional categorical stratification design for
+#'   bootstrap sampling.  Provide a named vector, matrix, `data.frame`, or
+#'   list with one row/value per sample.  Multiple columns are combined as a
+#'   joint interaction stratum, for example outcome class by study group.  When
+#'   supplied, this overrides `stratify_bootstrap`.
 #' @param n_lambda Integer; number of lambda values when `lambda_grid = "auto"`.
 #'   Ignored otherwise.  Default: `30L`.
+#' @param l1_ratio Numeric scalar, numeric vector, or `NULL`. Passed to
+#'   [auto_lambda_grid()] when `lambda_grid = "auto"`. Use this for
+#'   `base_learner = "elastic_net"` so the generated grid contains the
+#'   elastic-net `alpha` column. Default `NULL` preserves the lasso-like auto
+#'   grid used by existing workflows.
 #' @param verbose Logical; emit progress messages.  Default: `FALSE`.
 #' @param workers Positive integer; parallel workers for
 #'   `furrr::future_map()`.  Actual parallelism requires the caller to invoke
@@ -160,11 +175,14 @@ stabl_fit <- function(
     sample_fraction       = 0.5,
     replace               = FALSE,
     hard_threshold        = NULL,
-    fdr_threshold_range   = seq(0, 1, by = 0.01),
+    fdr_threshold_range   = seq(0, 0.99, by = 0.01),
     explore               = FALSE,
     n_explore             = 5L,
     groups                = NULL,
+    stratify_bootstrap    = FALSE,
+    bootstrap_strata      = NULL,
     n_lambda              = 30L,
+    l1_ratio              = NULL,
     verbose               = FALSE,
     workers               = 1L,
     random_state          = NULL,
@@ -184,11 +202,24 @@ stabl_fit <- function(
   # Align y (and groups) to row order of x
   y <- .subset_outcome_by_ids(y, rownames(x))
   if (!is.null(groups)) groups <- groups[rownames(x)]
+  if (!is.null(bootstrap_strata)) {
+    bootstrap_strata <- .subset_bootstrap_strata_by_ids(
+      bootstrap_strata,
+      sample_ids = rownames(x)
+    )
+  } else if (isTRUE(stratify_bootstrap)) {
+    bootstrap_strata <- y
+  }
+  bootstrap_strata_ids <- .bootstrap_strata_ids(
+    strata = bootstrap_strata,
+    n = nrow(x),
+    arg = "bootstrap_strata"
+  )
 
   # ---- Validate scalar params -----------------------------------------------
   .validate_stabl_params(n_bootstraps, sample_fraction, replace,
                          hard_threshold, artificial_type,
-                         artificial_proportion)
+                         artificial_proportion, stratify_bootstrap)
 
   n_samples   <- nrow(x)
   n_features  <- ncol(x)
@@ -198,7 +229,13 @@ stabl_fit <- function(
   # ---- Lambda grid ----------------------------------------------------------
   if (identical(lambda_grid, "auto")) {
     if (verbose) message("Computing auto lambda grid...")
-    lambda_grid <- auto_lambda_grid(x, y, family = family, n_lambda = n_lambda)
+    lambda_grid <- auto_lambda_grid(
+      x,
+      y,
+      family = family,
+      n_lambda = n_lambda,
+      l1_ratio = l1_ratio
+    )
   }
   if (!is.data.frame(lambda_grid)) {
     stop("`lambda_grid` must be a data.frame or \"auto\".", call. = FALSE)
@@ -303,11 +340,13 @@ stabl_fit <- function(
 
   boot_sampler <- if (is.null(groups)) {
     function(.) classic_bootstrap_indices(y = y, n_subsamples = n_subsamples,
-                                          replace = replace)
+                                          replace = replace,
+                                          strata = bootstrap_strata)
   } else {
     function(.) group_bootstrap_indices(y = y, groups = groups,
                                         n_subsamples = n_subsamples,
-                                        replace = replace)
+                                        replace = replace,
+                                        strata = bootstrap_strata)
   }
   boot_indices <- lapply(seq_len(n_bootstraps), boot_sampler)
 
@@ -409,6 +448,10 @@ stabl_fit <- function(
       hard_threshold        = hard_threshold,
       artificial_type       = artificial_type,
       artificial_proportion = artificial_proportion,
+      stratify_bootstrap    = !is.null(bootstrap_strata_ids),
+      bootstrap_strata_levels = if (!is.null(bootstrap_strata_ids)) {
+        sort(unique(as.character(bootstrap_strata_ids)))
+      } else NULL,
       explore               = explore,
       n_explore             = as.integer(n_explore),
       feature_names         = feat_names,
@@ -421,7 +464,8 @@ stabl_fit <- function(
 # ---- Internal param validator ------------------------------------------------
 .validate_stabl_params <- function(n_bootstraps, sample_fraction, replace,
                                    hard_threshold, artificial_type,
-                                   artificial_proportion) {
+                                   artificial_proportion,
+                                   stratify_bootstrap) {
   if (!is.numeric(n_bootstraps) || length(n_bootstraps) != 1L ||
       n_bootstraps < 1L) {
     stop("`n_bootstraps` must be a positive integer.", call. = FALSE)
@@ -432,6 +476,10 @@ stabl_fit <- function(
   }
   if (!is.logical(replace) || length(replace) != 1L || is.na(replace)) {
     stop("`replace` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.logical(stratify_bootstrap) || length(stratify_bootstrap) != 1L ||
+      is.na(stratify_bootstrap)) {
+    stop("`stratify_bootstrap` must be TRUE or FALSE.", call. = FALSE)
   }
   if (!replace && sample_fraction > 1) {
     stop(

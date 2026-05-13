@@ -9,6 +9,8 @@ classic_bootstrap_indices(
   n_subsamples,
   replace = TRUE,
   class_weights = NULL,
+  stratify = FALSE,
+  strata = NULL,
   seed = NULL
 )
 }
@@ -25,6 +27,18 @@ not exceed \code{length(y)} when \code{replace = FALSE}.}
 \item{class_weights}{Optional named numeric vector keyed by class labels
 (as produced by \code{as.character(y)}).  When \code{NULL} all samples are equally
 likely.}
+
+\item{stratify}{Logical; if \code{TRUE}, draw approximately the same class
+proportions as \code{y} by sampling within each outcome class.  This is useful
+for small or imbalanced classification tasks where unstratified
+subsampling can produce very sparse minority-class bootstraps.  Default
+\code{FALSE} preserves the original STABL sampling behavior.}
+
+\item{strata}{Optional categorical stratification design.  Provide a vector
+for one stratification factor, or a \code{data.frame}/matrix/list for a joint
+design across multiple factors.  Bootstrap samples are drawn within the
+interaction of all supplied columns.  When \code{NULL}, no stratification is
+used unless \code{stratify = TRUE}, in which case \code{y} is used as the strata.}
 
 \item{seed}{Optional integer; passed to \code{\link[=set.seed]{set.seed()}} before sampling for
 reproducibility.  \code{NULL} leaves the RNG state unchanged.}

@@ -190,6 +190,34 @@ test_that("group bootstrap path runs without error", {
   expect_s3_class(fit, "stabl_fit")
 })
 
+test_that("stabl_fit exposes bootstrap stratification design option", {
+  set.seed(10)
+  n <- 38L; p <- 6L
+  x <- matrix(rnorm(n * p), n, p,
+              dimnames = list(paste0("s", seq_len(n)),
+                              paste0("f", seq_len(p))))
+  y <- setNames(factor(c(rep("NP", 15L), rep("P", 23L))), rownames(x))
+  study <- setNames(rep(c("A", "B"), length.out = n), rownames(x))
+  bootstrap_strata <- data.frame(outcome = y, study = study)
+  rownames(bootstrap_strata) <- rownames(x)
+  lam_grid <- data.frame(lambda = seq(0.05, 0.2, length.out = 3L))
+
+  fit <- suppressWarnings(stabl_fit(
+    x                  = x,
+    y                  = y,
+    lambda_grid        = lam_grid,
+    family             = "binomial",
+    n_bootstraps       = 6L,
+    artificial_type    = "random_permutation",
+    bootstrap_strata   = bootstrap_strata,
+    random_state       = 10L
+  ))
+
+  expect_s3_class(fit, "stabl_fit")
+  expect_true(isTRUE(fit$stratify_bootstrap))
+  expect_length(fit$bootstrap_strata_levels, 4L)
+})
+
 test_that("auto_lambda_grid returns data.frame with lambda column", {
   set.seed(11)
   n <- 40L; p <- 10L
@@ -215,6 +243,33 @@ test_that("auto_lambda_grid with l1_ratio returns alpha column", {
   expect_true("alpha" %in% names(grid))
   expect_true("lambda" %in% names(grid))
   expect_true(all(c(0.5, 0.9) %in% grid$alpha))
+})
+
+test_that("stabl_fit auto lambda grid forwards l1_ratio", {
+  set.seed(120)
+  n <- 30L; p <- 8L
+  x <- matrix(rnorm(n * p), n, p,
+              dimnames = list(paste0("s", seq_len(n)),
+                              paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  fit <- stabl_fit(
+    x = x,
+    y = y,
+    lambda_grid = "auto",
+    base_learner = "elastic_net",
+    family = "gaussian",
+    n_lambda = 3L,
+    l1_ratio = c(0.3, 0.7),
+    n_bootstraps = 2L,
+    artificial_type = NULL,
+    hard_threshold = 1,
+    sample_fraction = 1,
+    random_state = 120L
+  )
+
+  expect_true("alpha" %in% names(fit$fitted_lambda_grid))
+  expect_equal(sort(unique(fit$fitted_lambda_grid$alpha)), c(0.3, 0.7))
 })
 
 test_that("get_feature_names_out returns character subset of feature names", {

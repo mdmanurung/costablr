@@ -83,7 +83,7 @@ $$\hat{S}(\theta) = \{i \in \mathcal{O} : f_i > \theta\}$$
 | Aspect | Python | R |
 |--------|--------|---|
 | Artificial-feature count | $q = \lfloor p\pi \rfloor$ (`floor`) | $q = \mathrm{round}(p\pi)$ |
-| FDP+ threshold grid default | `np.arange(0., 1., .01)` | `seq(0, 1, by = 0.01)` |
+| FDP+ threshold grid default | `np.arange(0., 1., .01)` | `seq(0, 0.99, by = 0.01)` |
 | Grouped bootstrap internals | `GroupShuffleSplit`-based | Different internals, same intent |
 | Comparison operator | strict `>` everywhere | strict `>` everywhere |
 

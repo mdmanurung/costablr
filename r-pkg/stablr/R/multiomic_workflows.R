@@ -22,6 +22,13 @@
 #' @param n_bootstraps Passed to [stabl_fit()].
 #' @param artificial_type Passed to [stabl_fit()].
 #' @param hard_threshold Passed to [stabl_fit()].
+#' @param stratify_bootstrap Passed to [stabl_fit()]. When `TRUE`, per-omic
+#'   and early-fusion STABL fits draw class-stratified bootstrap subsamples.
+#' @param bootstrap_strata_train Optional categorical bootstrap stratification
+#'   design for training samples, forwarded to [stabl_fit()].
+#' @param l1_ratio Passed to [stabl_fit()] when `lambda_grid = "auto"`.
+#'   Use this with `base_learner = "elastic_net"` to generate alpha-aware auto
+#'   grids.
 #' @param random_state Passed to [stabl_fit()].
 #' @param ... Additional arguments forwarded to [stabl_fit()].
 #'
@@ -30,9 +37,11 @@
 #'   per-omic fits.  Results are returned in the `early_fusion` field.
 #' @param late_fusion Logical.  When `TRUE`, a downstream predictor is fitted
 #'   per omic on its selected features, and [stacked_multi_omic()] combines the
-#'   per-omic predictions.  Requires at least one feature to be selected across
-#'   the omics.  The `task_type` (binary vs. regression) is inferred from
-#'   `family`.  Results are returned in the `late_fusion` field.
+#'   per-omic predictions.  If no features are selected for an omic, late
+#'   fusion falls back to class priors for multinomial tasks or the train-set
+#'   mean for other tasks. The `task_type` (binary, regression, or multiclass)
+#'   is inferred from `family`.  Results are returned in the `late_fusion`
+#'   field.
 #' @param n_iter_lf Number of random weight draws passed to
 #'   [stacked_multi_omic()] during late fusion.  Ignored when
 #'   `late_fusion = FALSE`.
@@ -67,7 +76,8 @@
 #'       `selected_valid` for the concatenated single-STABL run.}
 #'     \item{`late_fusion`}{`NULL` when `late_fusion = FALSE`.  Otherwise a
 #'       list with `weights` (data.frame), `train_predictions` (data.frame),
-#'       `valid_predictions` (numeric vector or `NULL`), and `score`.}
+#'       `valid_predictions`, and `score`; multinomial tasks also include
+#'       `levels`, `log_loss`, and classification metrics.}
 #'     \item{`cooperative_fusion`}{Present only when
 #'       `cooperative_fusion = TRUE`. A list containing the selected multiview
 #'       fit, chosen `rho` and `lambda`, selected features per view,
@@ -86,6 +96,9 @@ stabl_multiomic_train_validate <- function(
     n_bootstraps    = 100L,
     artificial_type = "random_permutation",
     hard_threshold  = NULL,
+    stratify_bootstrap = FALSE,
+    bootstrap_strata_train = NULL,
+    l1_ratio        = NULL,
     random_state    = NULL,
     early_fusion    = FALSE,
     late_fusion     = FALSE,
@@ -158,6 +171,9 @@ stabl_multiomic_train_validate <- function(
       artificial_type = artificial_type,
       hard_threshold = hard_threshold,
       groups = groups_train,
+      stratify_bootstrap = stratify_bootstrap,
+      bootstrap_strata = bootstrap_strata_train,
+      l1_ratio = l1_ratio,
       random_state = random_state,
       ...
     )
@@ -194,6 +210,9 @@ stabl_multiomic_train_validate <- function(
       artificial_type = artificial_type,
       hard_threshold  = hard_threshold,
       groups       = groups_train,
+      stratify_bootstrap = stratify_bootstrap,
+      bootstrap_strata = bootstrap_strata_train,
+      l1_ratio     = l1_ratio,
       random_state = random_state,
       ...
     )
@@ -223,21 +242,43 @@ stabl_multiomic_train_validate <- function(
   lf_result <- NULL
   if (isTRUE(late_fusion)) {
     task_type    <- .family_to_task_type(family)
-    y_train_mean <- mean(unname(y_train))
+    y_train_mean <- if (identical(task_type, "regression")) {
+      mean(unname(y_train))
+    } else {
+      NA_real_
+    }
 
-    train_preds_mat <- matrix(
-      NA_real_,
-      nrow = length(y_train),
-      ncol = length(omic_names),
-      dimnames = list(names(y_train), omic_names)
-    )
-    valid_preds_mat <- if (!is.null(x_valid_list)) {
-      matrix(
+    if (identical(task_type, "multiclass")) {
+      train_preds <- vector("list", length(omic_names))
+      names(train_preds) <- omic_names
+      valid_preds <- if (!is.null(x_valid_list)) {
+        out <- vector("list", length(omic_names))
+        names(out) <- omic_names
+        out
+      } else {
+        NULL
+      }
+    } else {
+      train_preds <- matrix(
         NA_real_,
-        nrow = length(y_valid),
+        nrow = length(y_train),
         ncol = length(omic_names),
-        dimnames = list(names(y_valid), omic_names)
+        dimnames = list(names(y_train), omic_names)
       )
+      valid_preds <- if (!is.null(x_valid_list)) {
+        matrix(
+          NA_real_,
+          nrow = length(y_valid),
+          ncol = length(omic_names),
+          dimnames = list(names(y_valid), omic_names)
+        )
+      } else {
+        NULL
+      }
+    }
+
+    y_levels <- if (identical(task_type, "multiclass")) {
+      levels(factor(y_train))
     } else {
       NULL
     }
@@ -248,33 +289,42 @@ stabl_multiomic_train_validate <- function(
         y_train      = y_train,
         x_valid_sel  = if (!is.null(x_valid_list)) selected_valid[[omic]] else NULL,
         y_train_mean = y_train_mean,
-        task_type    = task_type
+        task_type    = task_type,
+        levels       = y_levels
       )
-      train_preds_mat[, omic] <- omic_result$train_preds
-      if (!is.null(valid_preds_mat)) {
-        valid_preds_mat[, omic] <- omic_result$valid_preds
+      if (identical(task_type, "multiclass")) {
+        train_preds[[omic]] <- omic_result$train_preds
+        if (!is.null(valid_preds)) {
+          valid_preds[[omic]] <- omic_result$valid_preds
+        }
+      } else {
+        train_preds[, omic] <- omic_result$train_preds
+        if (!is.null(valid_preds)) {
+          valid_preds[, omic] <- omic_result$valid_preds
+        }
       }
     }
 
     stacked <- stacked_multi_omic(
-      predictions  = train_preds_mat,
+      predictions  = train_preds,
       y            = unname(y_train),
       task_type    = task_type,
       n_iter       = n_iter_lf,
       random_state = random_state
     )
 
-    # Apply best weights to validation predictions.
-    lf_valid_preds <- if (!is.null(valid_preds_mat)) {
-      w      <- stacked$weights$Associated_weight
-      w_mat  <- matrix(w, nrow = nrow(valid_preds_mat),
-                       ncol = length(w), byrow = TRUE)
-      is_obs <- !is.na(valid_preds_mat)
-      denom  <- rowSums(is_obs * w_mat)
-      num    <- rowSums(ifelse(is_obs, valid_preds_mat * w_mat, 0))
-      ifelse(denom > 0, num / denom, NA_real_)
-    } else {
+    lf_valid_preds <- if (is.null(valid_preds)) {
       NULL
+    } else if (identical(task_type, "multiclass")) {
+      .apply_multiclass_stack_weights(valid_preds, stacked$weights$Associated_weight)
+    } else {
+      w      <- stacked$weights$Associated_weight
+      w_mat  <- matrix(w, nrow = nrow(valid_preds),
+                       ncol = length(w), byrow = TRUE)
+      is_obs <- !is.na(valid_preds)
+      denom  <- rowSums(is_obs * w_mat)
+      num    <- rowSums(ifelse(is_obs, valid_preds * w_mat, 0))
+      ifelse(denom > 0, num / denom, NA_real_)
     }
 
     lf_result <- list(
@@ -283,6 +333,23 @@ stabl_multiomic_train_validate <- function(
       valid_predictions = lf_valid_preds,
       score             = stacked$score
     )
+    if (identical(task_type, "multiclass")) {
+      lf_result$task_type <- task_type
+      lf_result$levels <- stacked$levels
+      lf_result$log_loss <- stacked$log_loss
+      lf_result$train_metrics <- .classification_metrics(
+        truth = factor(y_train, levels = stacked$levels),
+        predicted = factor(stacked$predictions$predicted_class,
+                           levels = stacked$levels)
+      )
+      if (!is.null(y_valid) && !is.null(lf_valid_preds)) {
+        lf_result$valid_metrics <- .classification_metrics(
+          truth = factor(y_valid, levels = stacked$levels),
+          predicted = factor(lf_valid_preds$predicted_class,
+                             levels = stacked$levels)
+        )
+      }
+    }
   }
 
   # ---- Cooperative fusion --------------------------------------------------
@@ -343,6 +410,10 @@ stabl_multiomic_train_validate <- function(
 #' @param n_bootstraps Passed to [stabl_fit()].
 #' @param artificial_type Passed to [stabl_fit()].
 #' @param hard_threshold Passed to [stabl_fit()].
+#' @param stratify_bootstrap Passed to [stabl_fit()].
+#' @param bootstrap_strata Optional categorical bootstrap stratification design
+#'   forwarded to [stabl_fit()] for each training fold.
+#' @param l1_ratio Passed to [stabl_fit()] when `lambda_grid = "auto"`.
 #' @param random_state Optional integer seed used for deterministic fold
 #'   assignment and forwarded to each per-fold [stabl_fit()] call.
 #' @param early_fusion Logical.  Forwarded to each per-fold
@@ -384,6 +455,9 @@ stabl_multiomic_cv <- function(
   n_bootstraps    = 100L,
   artificial_type = "random_permutation",
   hard_threshold  = NULL,
+  stratify_bootstrap = FALSE,
+  bootstrap_strata = NULL,
+  l1_ratio        = NULL,
   random_state    = NULL,
   early_fusion    = FALSE,
   late_fusion     = FALSE,
@@ -399,6 +473,11 @@ stabl_multiomic_cv <- function(
   validate_multiomic_inputs(x_list = x_list, y = y, groups = groups)
 
   sample_ids <- rownames(x_list[[1L]])
+  bootstrap_strata <- .subset_bootstrap_strata_by_ids(
+    bootstrap_strata,
+    sample_ids = sample_ids,
+    arg = "bootstrap_strata"
+  )
   folds <- .make_multiomic_cv_folds(
     sample_ids = sample_ids,
     groups = groups,
@@ -429,6 +508,13 @@ stabl_multiomic_cv <- function(
       n_bootstraps    = n_bootstraps,
       artificial_type = artificial_type,
       hard_threshold  = hard_threshold,
+      stratify_bootstrap = stratify_bootstrap,
+      bootstrap_strata_train = .subset_bootstrap_strata_by_ids(
+        bootstrap_strata,
+        sample_ids = train_ids,
+        arg = "bootstrap_strata"
+      ),
+      l1_ratio        = l1_ratio,
       random_state    = random_state,
       early_fusion    = early_fusion,
       late_fusion     = late_fusion,
@@ -1098,13 +1184,18 @@ stabl_multiomic_cv <- function(
 #' Missing values in `predictions` are handled per-row: rows with all-NA
 #' predictions receive `NA` in the stacked output.
 #'
-#' @param predictions A `data.frame` or numeric matrix with one column per
-#'   omic and one row per sample.  Missing values (`NA`) are supported and
-#'   treated as absent omics for those samples.
+#' @param predictions For `task_type = "binary"` or `"regression"`, a
+#'   `data.frame` or numeric matrix with one column per omic and one row per
+#'   sample. For `task_type = "multiclass"`, a named list of class-probability
+#'   matrices/data frames, one per omic, with samples in rows and classes in
+#'   columns.
 #' @param y Named numeric outcome vector aligned with rows of `predictions`.
-#'   For `task_type = "binary"` values must be `0`/`1`.
-#' @param task_type Either `"binary"` (maximise AUC) or `"regression"`
-#'   (maximise R²).
+#'   For `task_type = "binary"` values must be `0`/`1`; for
+#'   `task_type = "multiclass"`, values are coerced to a factor with levels
+#'   matching the probability columns, and every label must be present in those
+#'   columns.
+#' @param task_type `"binary"` (maximise AUC), `"regression"` (maximise R²), or
+#'   `"multiclass"` (minimise multiclass log loss).
 #' @param n_iter Number of random weight draws to try.  Mirrors `n_iter` in
 #'   the Python implementation (default `10000`).
 #' @param random_state Optional integer seed for reproducibility.  Saves and
@@ -1116,17 +1207,26 @@ stabl_multiomic_cv <- function(
 #'       `"Stacked Gen. Predictions"` column of the best weighted average.}
 #'     \item{`weights`}{`data.frame` with one row per omic and a column
 #'       `Associated_weight` containing the optimal weight.}
-#'     \item{`score`}{Best score achieved (AUC or R²).}
+#'     \item{`score`}{Best score achieved (AUC, R², or negative log loss).}
 #'   }
 #' @export
 stacked_multi_omic <- function(
     predictions,
     y,
-    task_type = c("binary", "regression"),
+    task_type = c("binary", "regression", "multiclass"),
     n_iter    = 10000L,
     random_state = NULL
 ) {
   task_type <- match.arg(task_type)
+  if (identical(task_type, "multiclass")) {
+    return(.stacked_multi_omic_multiclass(
+      predictions = predictions,
+      y = y,
+      n_iter = n_iter,
+      random_state = random_state
+    ))
+  }
+
   predictions <- as.matrix(predictions)
   n_omics   <- ncol(predictions)
   n_samples <- nrow(predictions)
@@ -1189,21 +1289,243 @@ stacked_multi_omic <- function(
   list(predictions = preds_df, weights = weights_df, score = best_score)
 }
 
+.stacked_multi_omic_multiclass <- function(predictions,
+                                           y,
+                                           n_iter = 10000L,
+                                           random_state = NULL) {
+  arr <- .as_multiclass_prediction_array(predictions)
+  n_samples <- dim(arr)[[1L]]
+  n_classes <- dim(arr)[[2L]]
+  n_omics <- dim(arr)[[3L]]
+  classes <- dimnames(arr)[[2L]]
+  omic_names <- dimnames(arr)[[3L]]
+
+  if (length(y) != n_samples) {
+    stop("`y` must have one value per prediction row.", call. = FALSE)
+  }
+  y <- factor(y, levels = classes)
+  if (anyNA(y)) {
+    stop(
+      "All multiclass `y` labels must be present in prediction probability columns.",
+      call. = FALSE
+    )
+  }
+
+  if (!is.null(random_state)) {
+    old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    if (old_seed_exists) {
+      old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+    }
+    on.exit({
+      if (old_seed_exists) {
+        assign(".Random.seed", old_seed, envir = .GlobalEnv)
+      } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+        rm(".Random.seed", envir = .GlobalEnv)
+      }
+    }, add = TRUE)
+    set.seed(as.integer(random_state))
+  }
+
+  best_score <- -Inf
+  best_loss <- Inf
+  best_weights <- rep(1 / n_omics, n_omics)
+  best_probs <- matrix(NA_real_, nrow = n_samples, ncol = n_classes,
+                       dimnames = list(dimnames(arr)[[1L]], classes))
+
+  for (i in seq_len(as.integer(n_iter))) {
+    weights <- stats::runif(n_omics, 0, 10)
+    probs <- .weighted_multiclass_probabilities(arr, weights)
+    loss <- .multiclass_log_loss(y, probs)
+    score <- -loss
+    if (is.finite(score) && score > best_score) {
+      best_score <- score
+      best_loss <- loss
+      best_weights <- weights
+      best_probs <- probs
+    }
+  }
+
+  weights_df <- data.frame(Associated_weight = best_weights,
+                           row.names = omic_names)
+  preds_df <- as.data.frame(best_probs, check.names = FALSE)
+  names(preds_df) <- paste0("prob_", names(preds_df))
+  preds_df$predicted_class <- classes[max.col(best_probs, ties.method = "first")]
+
+  list(
+    predictions = preds_df,
+    weights = weights_df,
+    score = best_score,
+    log_loss = best_loss,
+    levels = classes
+  )
+}
+
+.as_multiclass_prediction_array <- function(predictions) {
+  if (!is.list(predictions) || is.null(names(predictions)) || length(predictions) == 0L) {
+    stop("Multiclass `predictions` must be a named non-empty list.", call. = FALSE)
+  }
+  mats <- lapply(predictions, function(x) {
+    x <- as.matrix(x)
+    storage.mode(x) <- "double"
+    x
+  })
+  first_dim <- dim(mats[[1L]])
+  first_rows <- rownames(mats[[1L]])
+  first_cols <- colnames(mats[[1L]])
+  if (is.null(first_cols)) {
+    stop("Multiclass prediction matrices must have class column names.", call. = FALSE)
+  }
+  for (nm in names(mats)) {
+    if (!identical(dim(mats[[nm]]), first_dim) ||
+        !identical(rownames(mats[[nm]]), first_rows) ||
+        !identical(colnames(mats[[nm]]), first_cols)) {
+      stop("All multiclass prediction matrices must have identical rows and class columns.",
+           call. = FALSE)
+    }
+  }
+  arr <- array(
+    NA_real_,
+    dim = c(first_dim[[1L]], first_dim[[2L]], length(mats)),
+    dimnames = list(first_rows, first_cols, names(mats))
+  )
+  for (i in seq_along(mats)) {
+    arr[, , i] <- mats[[i]]
+  }
+  arr
+}
+
+.weighted_multiclass_probabilities <- function(pred_array, weights) {
+  n_samples <- dim(pred_array)[[1L]]
+  n_classes <- dim(pred_array)[[2L]]
+  n_omics <- dim(pred_array)[[3L]]
+  out <- matrix(NA_real_, nrow = n_samples, ncol = n_classes,
+                dimnames = dimnames(pred_array)[1:2])
+
+  for (i in seq_len(n_samples)) {
+    row_probs <- pred_array[i, , , drop = FALSE]
+    row_probs <- matrix(row_probs, nrow = n_classes, ncol = n_omics)
+    observed <- apply(row_probs, 2L, function(x) all(is.finite(x)))
+    if (!any(observed)) next
+    w <- weights[observed]
+    p <- row_probs[, observed, drop = FALSE] %*% w / sum(w)
+    p <- as.numeric(p)
+    p[p < 0] <- 0
+    if (sum(p) <= 0 || !is.finite(sum(p))) next
+    out[i, ] <- p / sum(p)
+  }
+  out
+}
+
+.multiclass_log_loss <- function(y, probs, eps = 1e-15) {
+  y <- factor(y, levels = colnames(probs))
+  idx <- !is.na(y) & apply(probs, 1L, function(x) all(is.finite(x)))
+  if (sum(idx) == 0L) return(Inf)
+  probs <- pmin(pmax(probs[idx, , drop = FALSE], eps), 1 - eps)
+  probs <- probs / rowSums(probs)
+  truth_idx <- cbind(seq_len(sum(idx)), as.integer(y[idx]))
+  -mean(log(probs[truth_idx]))
+}
+
+.apply_multiclass_stack_weights <- function(predictions, weights) {
+  arr <- .as_multiclass_prediction_array(predictions)
+  probs <- .weighted_multiclass_probabilities(arr, weights)
+  out <- as.data.frame(probs, check.names = FALSE)
+  names(out) <- paste0("prob_", names(out))
+  classes <- dimnames(arr)[[2L]]
+  out$predicted_class <- classes[max.col(probs, ties.method = "first")]
+  out
+}
+
 # ---------------------------------------------------------------------------
 # Late-fusion helpers
 # ---------------------------------------------------------------------------
 
 # Infer task_type from glm family string.
 .family_to_task_type <- function(family) {
-  if (identical(family, "binomial")) "binary" else "regression"
+  if (identical(family, "binomial")) {
+    "binary"
+  } else if (identical(family, "multinomial")) {
+    "multiclass"
+  } else {
+    "regression"
+  }
 }
 
 # Fit a downstream predictor on selected features for one omic.
 # Returns a list(train_preds, valid_preds, model) where valid_preds may be NULL.
 .late_fusion_fit_omic <- function(x_train_sel, y_train,
                                   x_valid_sel = NULL, y_train_mean,
-                                  task_type) {
+                                  task_type,
+                                  levels = NULL) {
   n_sel <- ncol(x_train_sel)
+
+  if (identical(task_type, "multiclass")) {
+    levels <- levels %||% levels(factor(y_train))
+    y_train <- factor(y_train, levels = levels)
+    priors <- as.numeric(table(y_train) / length(y_train))
+    names(priors) <- levels
+    fallback_matrix <- function(n, row_names) {
+      out <- matrix(
+        rep(priors, each = n),
+        nrow = n,
+        ncol = length(priors),
+        dimnames = list(row_names, names(priors))
+      )
+      out
+    }
+    if (n_sel == 0L) {
+      train_preds <- fallback_matrix(nrow(x_train_sel), rownames(x_train_sel))
+      valid_preds <- if (!is.null(x_valid_sel)) {
+        fallback_matrix(nrow(x_valid_sel), rownames(x_valid_sel))
+      } else {
+        NULL
+      }
+      return(list(train_preds = train_preds, valid_preds = valid_preds, model = NULL))
+    }
+
+    model_fit <- tryCatch({
+      glmnet::cv.glmnet(
+        x = as.matrix(x_train_sel),
+        y = y_train,
+        family = "multinomial",
+        type.measure = "class",
+        nfolds = min(5L, min(table(y_train)))
+      )
+    }, error = function(e) NULL)
+
+    if (is.null(model_fit)) {
+      train_preds <- fallback_matrix(nrow(x_train_sel), rownames(x_train_sel))
+      valid_preds <- if (!is.null(x_valid_sel)) {
+        fallback_matrix(nrow(x_valid_sel), rownames(x_valid_sel))
+      } else {
+        NULL
+      }
+      return(list(train_preds = train_preds, valid_preds = valid_preds, model = NULL))
+    }
+
+    coerce_prob <- function(pred, row_names) {
+      pred <- as.matrix(pred[, , 1L])
+      pred <- pred[, levels, drop = FALSE]
+      rownames(pred) <- row_names
+      pred
+    }
+
+    train_preds <- coerce_prob(
+      stats::predict(model_fit, newx = as.matrix(x_train_sel),
+                     s = "lambda.min", type = "response"),
+      rownames(x_train_sel)
+    )
+    valid_preds <- if (!is.null(x_valid_sel)) {
+      coerce_prob(
+        stats::predict(model_fit, newx = as.matrix(x_valid_sel),
+                       s = "lambda.min", type = "response"),
+        rownames(x_valid_sel)
+      )
+    } else {
+      NULL
+    }
+    return(list(train_preds = train_preds, valid_preds = valid_preds, model = model_fit))
+  }
 
   if (n_sel == 0L) {
     fallback <- if (task_type == "binary") 0.5 else y_train_mean

@@ -39,6 +39,293 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### AURORA Artifact-Complete Fusion, Clustering, and Visualization Workflow (2026-05-12)
+
+- Extended `scratch/01_stablr_baseline_groups_test.ipynb` with branch-aware
+  artifact helpers. Notebook-generated RDS, CSV, PNG, and PDF artifacts now
+  go through `cache_object()`, `export_table()`, `export_plot()`, or
+  heatmap-specific export helpers under `CACHE_DIR` / `EXPORT_DIR`.
+- Added guided notebook sections for true multiclass late fusion, cooperative
+  one-vs-rest auxiliary branches, selected-feature clustering heatmaps,
+  stability-weighted heatmaps, per-study-group top-feature heatmaps, sample
+  cluster-purity summaries, PCA/UMAP companion plots, feature-overlap plots,
+  and late-fusion probability heatmaps.
+- Added shared scratch helpers and branch execution entrypoints:
+  - `scratch/scripts/stablr_baseline_groups_helpers.R`
+  - `scratch/scripts/run_stablr_baseline_groups_branch.R`
+  - `scratch/slurm/stablr_baseline_preprocess.slurm`
+  - `scratch/slurm/stablr_baseline_branches.slurm`
+- Package workflow updates:
+  - `stabl_fit()` and multi-omic/nested-CV auto-lambda paths now forward
+    `l1_ratio` for elastic-net grids.
+  - `stacked_multi_omic()` supports true multiclass probability stacking with
+    log-loss optimization.
+  - `stabl_multiomic_train_validate(late_fusion = TRUE)` supports
+    multinomial late fusion, class-prior fallback, train/validation metrics,
+    and unchanged binary/regression return behavior.
+  - Cooperative multinomial remains rejected; one-vs-rest binomial branches
+    are the supported auxiliary path.
+- Preprocessing branch smoke created branch-local artifacts under
+  `scratch/cache/stablr_baseline_groups_test/preprocess/` and
+  `scratch/outputs/stablr_baseline_groups_test/preprocess/`.
+  Result: 11 views, 38 baseline samples, `EG=10`, `GA=16`, `TU=12`, and
+  zero missing values after preprocessing.
+
+Validation:
+
+```bash
+python -c "import nbformat; nb=nbformat.read('scratch/01_stablr_baseline_groups_test.ipynb', as_version=4); nbformat.validate(nb); print('notebook json ok')"
+# -> notebook json ok
+
+conda run -n R4_51 Rscript -e 'invisible(parse("scratch/scripts/stablr_baseline_groups_helpers.R")); invisible(parse("scratch/scripts/run_stablr_baseline_groups_branch.R")); invisible(parse("/tmp/stablr_baseline_groups_test_code.R")); cat("R parse ok\n")'
+# -> R parse ok
+
+bash -n scratch/slurm/stablr_baseline_preprocess.slurm
+bash -n scratch/slurm/stablr_baseline_branches.slurm
+# -> both passed
+
+conda run -n R4_51 Rscript scratch/scripts/run_stablr_baseline_groups_branch.R --help
+# -> printed supported branch list
+
+conda run -n R4_51 Rscript scratch/scripts/run_stablr_baseline_groups_branch.R preprocess
+# -> Preprocessed views: cytof_celltype, exvivo_celltype, exvivo_enzyme,
+#    6h_cyto_LPS, 6h_cyto_ssRNA40, 24h_cyto_iRBC, 24h_cyto_SEB,
+#    24h_enzyme_iRBC, 24h_enzyme_SEB, 3d_cyto, 3d_enzyme
+
+conda run -n R4_51 Rscript -e 'x <- readRDS("scratch/cache/stablr_baseline_groups_test/preprocess/baseline_preprocessed.rds"); cat("views=", length(x$x_list), "\n", sep=""); cat("samples=", length(x$y), "\n", sep=""); print(table(x$y)); cat("missing=", sum(vapply(x$x_list, function(m) sum(is.na(m)), numeric(1))), "\n", sep="")'
+# -> views=11; samples=38; EG=10, GA=16, TU=12; missing=0
+
+STABLR_CACHE_DIR=/tmp/stablr_branch_smoke_cache \
+STABLR_EXPORT_DIR=/tmp/stablr_branch_smoke_export \
+STABLR_N_BOOTSTRAPS=2 STABLR_N_LAMBDA=3 STABLR_N_ITER_LF=25 \
+conda run -n R4_51 Rscript scratch/scripts/run_stablr_baseline_groups_branch.R single_view:cytof_celltype
+# -> Finished STABL baseline branch: single_view:cytof_celltype
+
+conda run -n R4_51 R --quiet -e 'setwd("r-pkg/stablr"); devtools::load_all(quiet=TRUE); testthat::test_file("tests/testthat/test-stabl-fit.R", reporter="summary"); testthat::test_file("tests/testthat/test-multiomic-workflows.R", reporter="summary"); testthat::test_file("tests/testthat/test-nested-cv.R", reporter="summary")'
+# -> stabl-fit DONE; multiomic-workflows DONE; nested-cv DONE
+```
+
+### Review-Finding Follow-Up Patch (2026-05-13)
+
+- Hardened multiclass probability stacking so `stacked_multi_omic()` errors
+  when `y` contains labels absent from the supplied probability columns,
+  instead of silently dropping those samples from log-loss scoring.
+- Normalized `stabl_multiomic_cv(bootstrap_strata = ...)` once against the
+  full input sample IDs before per-fold subsetting. Unnamed full-length vectors
+  and data frames aligned to `x_list` row order now behave like the equivalent
+  `stabl_fit()` input.
+- Fixed the AURORA scratch helper and active notebook macro-F1 calculation so
+  classes with zero predicted samples contribute F1 = 0 instead of being
+  dropped as `NaN`.
+
+Validation:
+
+```bash
+conda run -n R4_51 R --quiet -e 'setwd("r-pkg/stablr"); devtools::load_all(quiet=TRUE); testthat::test_file("tests/testthat/test-multiomic-workflows.R", reporter="summary")'
+# -> multiomic-workflows DONE
+
+conda run -n R4_51 R --quiet -e 'setwd("r-pkg/stablr"); devtools::load_all(quiet=TRUE); testthat::test_file("tests/testthat/test-stabl-fit.R", reporter="summary")'
+# -> stabl-fit DONE
+
+conda run -n R4_51 Rscript -e 'invisible(parse("scratch/scripts/stablr_baseline_groups_helpers.R")); source("scratch/scripts/stablr_baseline_groups_helpers.R"); out <- classification_metric_table(truth = c("A", "B", "C"), predicted = c("A", "A", "A"), levels = c("A", "B", "C")); stopifnot(isTRUE(all.equal(out$value[out$metric == "macro_f1"], 1 / 6))); cat("scratch metric smoke ok\n")'
+# -> scratch metric smoke ok
+
+python -c "import nbformat; nb=nbformat.read('scratch/01_stablr_baseline_groups_test.ipynb', as_version=4); nbformat.validate(nb); open('/tmp/stablr_baseline_groups_test_code.R','w').write('\n\n'.join(c.source for c in nb.cells if c.cell_type=='code')); print('notebook json ok')"
+# -> notebook json ok
+
+conda run -n R4_51 Rscript -e 'invisible(parse("/tmp/stablr_baseline_groups_test_code.R")); cat("notebook R parse ok\n")'
+# -> notebook R parse ok
+```
+
+### AURORA Guided All-View Study-Group Notebook (2026-05-12)
+
+- Updated `scratch/01_stablr_baseline_groups_test.ipynb` into a guided
+  all-view baseline study-group analysis.
+- The notebook now uses all 11 RaJIVE-style immune views, with preprocessing
+  helpers for sample alignment, `PfGA1` exclusion, missForest imputation,
+  mixOmics near-zero variance filtering, robust median/MAD scaling, and
+  Frobenius block scaling.
+- Primary target is multinomial `study_group` (`EG`, `GA`, `TU`). P/NP status
+  is retained only for descriptive plot annotation and QC tables.
+- Added reader guidance after every major section heading so the notebook
+  explains what each section does, what output to expect, and how to interpret
+  results.
+- Added cached preprocessing via
+  `scratch/cache/stablr_baseline_groups_test/rajive_style_preprocessed_all_views.rds`;
+  set `FORCE_RECOMPUTE = TRUE` to rerun the RaJIVE-style preprocessing.
+- Added CyTOF sanity-check STABL, all single-view STABL fits, all-view
+  early-fusion STABL, top-5 predictors per study group, feature-distribution
+  plots, group-mean heatmaps, cross-view contribution summaries, and export
+  helpers for CSV/PNG outputs.
+- Changed default `SAMPLE_FRACTION` to `0.8` so stratified,
+  without-replacement resamples keep at least 8 samples from the smallest
+  study group (`EG`, n = 10).
+- Publication-scale nested-CV scaffolding is included but disabled by default.
+
+Validation:
+
+```bash
+python -c "import nbformat; p='scratch/01_stablr_baseline_groups_test.ipynb'; nb=nbformat.read(p, as_version=4); nbformat.validate(nb); print('nbformat validate ok:', len(nb.cells), 'cells')"
+# -> nbformat validate ok: 30 cells
+
+conda run -n R4_51 R --quiet -e 'if (!requireNamespace("jsonlite", quietly=TRUE)) stop("jsonlite missing"); nb <- jsonlite::fromJSON("scratch/01_stablr_baseline_groups_test.ipynb", simplifyVector=FALSE); code <- vapply(Filter(function(x) identical(x$cell_type, "code"), nb$cells), function(x) paste(unlist(x$source), collapse=""), character(1)); invisible(parse(text=paste(code, collapse="\n\n"))); cat("R parse ok: ", length(code), " code cells\n", sep="")'
+# -> R parse ok: 16 code cells
+
+conda run -n R4_51 R --quiet -e 'nb <- jsonlite::fromJSON("scratch/01_stablr_baseline_groups_test.ipynb", simplifyVector=FALSE); env <- globalenv(); for (i in seq_along(nb$cells)) { cell <- nb$cells[[i]]; if (identical(cell$cell_type, "code") && (i - 1L) <= 10L) { src <- paste(unlist(cell$source), collapse=""); invisible(eval(parse(text=src), envir=env)); } }; cat("preprocessing ok: ", length(get("x_all_list", env)), " views, n=", length(get("y_all", env)), ", counts=", paste(names(table(get("y_all", env))), as.integer(table(get("y_all", env))), sep="=", collapse=","), "\n", sep="")'
+# -> preprocessing ok: 11 views, n=38, counts=EG=10,GA=16,TU=12
+
+conda run -n R4_51 R --quiet -e 'nb <- jsonlite::fromJSON("scratch/01_stablr_baseline_groups_test.ipynb", simplifyVector=FALSE); env <- globalenv(); wanted <- c(2L,3L,5L,7L,8L,10L,12L,14L); for (i in seq_along(nb$cells)) { idx <- i - 1L; cell <- nb$cells[[i]]; if (identical(cell$cell_type, "code") && idx %in% wanted) { if (idx == 14L) { assign("N_BOOTSTRAPS", 2L, envir=env); assign("N_LAMBDA", 3L, envir=env); assign("N_WORKERS", 1L, envir=env) }; src <- paste(unlist(cell$source), collapse=""); invisible(eval(parse(text=src), envir=env)); } }; cat("cytof smoke ok\n")'
+# -> cytof smoke ok
+```
+
+### FDP+ Threshold Parity Audit (2026-05-12)
+
+- Audited R FDP+ thresholding against the original Python STABL
+  `_compute_FDPplus()` implementation.
+- Confirmed parity-critical semantics:
+  - row-max stability scores across lambda are used for global FDP+;
+  - strict `>` threshold comparisons are used;
+  - numerator is `(1 / artificial_proportion) * n_artificial + 1`;
+  - denominator is `max(1, n_real)`;
+  - final cutoff falls back to `1` when the minimum FDP+ exceeds `1`.
+- Aligned the R default `fdr_threshold_range` from `seq(0, 1, by = 0.01)` to
+  `seq(0, 0.99, by = 0.01)` to match Python STABL's
+  `np.arange(0., 1., .01)` default. This mainly affects the stored `min_fdr_`
+  diagnostic in all-noise fallback cases; support behavior remains
+  conservative.
+- Recomputed the then-current AURORA CyTOF elastic-net feasibility fit after
+  the FDP+ default change:
+  - `fdr_min_threshold_ = 0.96`;
+  - `min_fdr_ = 1`;
+  - selected features = `0`;
+  - max real stability = `0.812`;
+  - max artificial stability = `0.96`.
+  The high threshold is therefore driven by an artificial feature being more
+  stable than any real feature in the minimal-bootstrap feasibility run.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "setwd('r-pkg/stablr'); devtools::load_all(quiet = TRUE); testthat::test_file('tests/testthat/test-fdp-plus-invariants.R'); testthat::test_file('tests/testthat/test-stabl-fit.R')"
+# -> test-fdp-plus-invariants: PASS 6, FAIL 0
+# -> test-stabl-fit: PASS 131, FAIL 0
+
+conda run -n R4_51 Rscript -e "setwd('r-pkg/stablr'); devtools::load_all(quiet = TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R')"
+# -> PASS 108, FAIL 0
+```
+
+### AURORA Baseline P vs NP STABL Feasibility Notebook (2026-05-12)
+
+- This entry is superseded for the active scratch notebook by the later
+  Basemalvac study-group multinomial elastic-net update.
+- Updated ignored scratch notebook `scratch/01_stablr_core_basemalvac.ipynb`
+  from the prior elastic-net feasibility run to an adaptive-lasso feasibility
+  analysis.
+- The notebook fits one aggregated baseline `P` vs `NP` model across `t1`
+  samples and keeps `study_id` only for descriptive selected-feature facets.
+- Added an in-notebook parameter audit table documenting the data subset,
+  outcome mapping, preprocessing, STABL controls, runtime controls, and
+  multiview scope.
+- Single-view pilot:
+  - uses `cytof_celltype`;
+  - validates 38 baseline samples, 125 raw features, no missing values;
+  - validates class balance `NP = 15`, `P = 23`;
+  - runs `stabl_fit()` with `base_learner = "adaptive_lasso"`,
+    `family = "binomial"`, 20 auto-generated lasso-path lambda values,
+    `adaptive_gamma = 1.0`, `adaptive_epsilon = 1e-6`, 1000 bootstraps,
+    random-permutation artificial features, 70% subsampling, and a joint
+    `protection` by `study_id` bootstrap stratification design.
+- The adaptive-lasso grid intentionally has no `l1_ratio`; the helper now calls
+  `auto_lambda_grid()` without elastic-net mixing parameters.
+- Kept selected-feature outputs, stability-path plotting, and custom
+  descriptive feature-value plots faceted as `study_id ~ feature` and by
+  feature only.
+- Kept the core no-imputation multiview extension for `cytof_celltype`,
+  `exvivo_celltype`, and `exvivo_enzyme`, with per-view STABL fits and an
+  early-fusion STABL fit.
+- Added package-level `bootstrap_strata` support for arbitrary categorical
+  bootstrap stratification designs, including multi-column joint designs such
+  as outcome by study group. Defaults remain unstratified for Python-parity
+  behavior; `stratify_bootstrap = TRUE` remains a convenience shortcut for
+  outcome-only stratification.
+- Fixed grouped bootstrap replacement handling so `replace = TRUE` can reuse
+  whole groups without stalling when stratified targets exceed unique rows in a
+  realised stratum.
+
+Validation:
+
+```bash
+jq empty scratch/01_stablr_core_basemalvac.ipynb
+# -> JSON valid
+
+python -c "import nbformat; nb=nbformat.read('scratch/01_stablr_core_basemalvac.ipynb', as_version=4); nbformat.validate(nb); print('nbformat validate ok')"
+# -> nbformat validate ok
+
+conda run -n R4_51 Rscript -e 'library(jsonlite); nb <- read_json("scratch/01_stablr_core_basemalvac.ipynb", simplifyVector = FALSE); code <- unlist(lapply(nb$cells, function(cell) if (identical(cell$cell_type, "code")) paste(unlist(cell$source), collapse = "") else NULL), use.names = FALSE); tf <- tempfile(fileext = ".R"); writeLines(code, tf); source(tf, echo = FALSE, print.eval = FALSE); cat("cytof_threshold=", fit_cytof$fdr_min_threshold_, "\n"); cat("cytof_min_fdp=", fit_cytof$min_fdr_, "\n"); cat("cytof_selected=", length(get_feature_names_out(fit_cytof)), "\n"); cat("cytof_max_real=", max(get_importances(fit_cytof)), "\n"); if (exists("fit_core_early")) { cat("core_early_selected=", length(get_feature_names_out(fit_core_early)), "\n") }'
+# -> completed successfully; build-version warnings only
+# -> cytof_threshold=0.85; cytof_min_fdp=1; cytof_selected=0
+# -> cytof_max_real=0.483; core_early_selected=0
+
+conda run -n R4_51 Rscript -e "setwd('r-pkg/stablr'); devtools::load_all(quiet = TRUE); testthat::test_file('tests/testthat/test-bootstrap-helpers.R'); testthat::test_file('tests/testthat/test-stabl-fit.R')"
+# -> test-bootstrap-helpers: PASS 46, FAIL 0
+# -> test-stabl-fit: PASS 131, FAIL 0
+
+conda run -n R4_51 Rscript -e "setwd('r-pkg/stablr'); devtools::load_all(quiet = TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R')"
+# -> PASS 108, FAIL 0
+```
+
+### AURORA Baseline Core Notebook Feature-Only Plot (2026-05-12)
+
+- Updated ignored scratch notebook `scratch/01_stablr_core_basemalvac.ipynb`.
+- Kept the existing `study_id ~ feature` descriptive feature plot for
+  study-group heterogeneity checks.
+- Added a pooled `plot_features_by_feature()` view that facets only by feature,
+  so each selected or fallback feature has one panel across all baseline study
+  groups.
+- The CyTOF plotting cell now returns both `cytof_features_by_group_plot` and
+  `cytof_features_by_feature_plot`.
+
+Validation:
+
+```bash
+jq empty scratch/01_stablr_core_basemalvac.ipynb
+# -> JSON valid
+
+conda run -n R4_51 Rscript -e "library(jsonlite); nb <- read_json('scratch/01_stablr_core_basemalvac.ipynb', simplifyVector = FALSE); code <- unlist(lapply(nb$cells, function(cell) if (identical(cell$cell_type, 'code')) paste(unlist(cell$source), collapse = '') else NULL), use.names = FALSE); parse(text = paste(code, collapse = '\n')) ; cat('notebook R syntax ok\n')"
+# -> notebook R syntax ok
+
+conda run -n R4_51 Rscript -e 'library(jsonlite); nb <- read_json("scratch/01_stablr_core_basemalvac.ipynb", simplifyVector = FALSE); code <- paste(unlist(nb$cells[[7]]$source), collapse = ""); eval(parse(text = code)); x <- matrix(c(-1, 0, 1, 2, -2, -1, 0, 1), nrow = 4, dimnames = list(paste0("s", 1:4), c("feat_a", "feat_b"))); metadata <- data.frame(study_id = factor(c("A", "A", "B", "B")), protection = factor(c("NP", "P", "NP", "P"), levels = c("NP", "P")), row.names = rownames(x)); p_grid <- plot_features_by_study_group(c("feat_a", "feat_b"), x, metadata); p_wrap <- plot_features_by_feature(c("feat_a", "feat_b"), x, metadata); stopifnot(inherits(p_grid$facet, "FacetGrid"), inherits(p_wrap$facet, "FacetWrap")); cat("feature plot facets ok\n")'
+# -> feature plot facets ok
+```
+
+### Vignette Parallel Render Validation Complete (2026-05-12)
+
+- Confirmed SLURM array job `24752130` completed the five non-nested-CV vignette
+  renders submitted after the narrative rewrite.
+- Logs under `r-pkg/stablr/inst/analysis/cache/vignette-renders/` show HTML
+  output created for:
+  - `stablr-intro.Rmd`
+  - `stablr-multiomic.Rmd`
+  - `stablr-python-parity.Rmd`
+  - `stablr-tcga.Rmd`
+  - `stablr-cooperative.Rmd`
+- The task-specific `.err` files contain the expected knit/render messages and
+  `Output created:` lines; no `Error`, `Execution halted`, or failed render
+  signal was observed in the log search.
+
+Validation:
+
+```bash
+squeue -j 24752130
+# -> slurm_load_jobs error: Invalid job id specified
+#    Interpreted with completed log files below as no longer active in queue.
+
+rg -n "ERROR|Error|Execution halted|Quitting|Output created|render|Render|completed|success|DONE|failed|Finished" \
+  r-pkg/stablr/inst/analysis/cache/vignette-renders
+# -> Output created lines for all five HTML files.
+# -> Finished lines for all five array tasks.
+```
+
 ### Vignette Narrative Rewrite and Parallel Render Submission (2026-05-12)
 
 - Rewrote prose across all six canonical vignette sources under
@@ -1373,3 +1660,111 @@ Validation:
   where fixed-design knockoff dimensions require `n > p`; COVID-19 glmnet emits
   rare-class bootstrap warnings for some resamples. Neither warning stopped the
   render.
+
+### Basemalvac Scratch Notebook Study-Group Update (2026-05-12)
+
+- Updated ignored notebook `scratch/01_stablr_core_basemalvac.ipynb` from a
+  baseline P vs NP adaptive-lasso feasibility analysis to a baseline
+  multinomial elastic-net study classifier.
+- The notebook now maps `EGSV2 -> EG`, `PfGA2 -> GA`, and `CVTU3 -> TU`,
+  sets `STABL_FAMILY = "multinomial"`, `STABL_BASE_LEARNER = "elastic_net"`,
+  and uses `ELASTIC_NET_L1_RATIO = 0.5`.
+- Baseline and core multiview preparation now use `study_group` as the outcome
+  and bootstrap stratum. P/NP status is retained only for QC tables and plot
+  point shapes, not as a target, covariate, or bootstrap stratum.
+- Cleared stale notebook outputs so old binary P vs NP tables/plots are not
+  displayed after the source change.
+
+Validation:
+
+- Notebook JSON loaded successfully after editing: 23 cells and 0 stored
+  outputs.
+- `nbformat.validate()` passed for
+  `scratch/01_stablr_core_basemalvac.ipynb`.
+- Stale binary/adaptive-lasso reference scan found no remaining
+  `adaptive_lasso`, `STABL_FAMILY <- "binomial"`, or P-vs-NP model wiring.
+- `conda run -n R4_51 Rscript -e "parse('/tmp/01_stablr_core_basemalvac_code.R'); cat('R parse ok\n')"`
+  passed.
+- Lightweight data-prep smoke script through preprocessing passed with
+  CyTOF/core class counts `EG = 10`, `GA = 16`, `TU = 12` and no missing
+  values in the modeled matrices.
+- Full notebook execution was not run in this edit pass.
+
+### Basemalvac Scratch Notebook Elastic-Net Label Fix (2026-05-12)
+
+- Preserved the user's choice to use elastic net in
+  `scratch/01_stablr_core_basemalvac.ipynb`.
+- Fixed the expected study-group balance checks to use the actual mapped labels
+  `EG`, `GA`, and `TU` instead of stale `EG2` and `TU3` labels.
+- Kept the elastic-net controls in the notebook parameter audit:
+  `STABL_BASE_LEARNER = "elastic_net"` and `ELASTIC_NET_L1_RATIO = 0.5`.
+
+Validation:
+
+- Notebook JSON validation passed with `jq empty`.
+- `nbformat.validate()` passed.
+- Baseline and core multiview preparation through the failing checks passed
+  with class counts `EG = 10`, `GA = 16`, `TU = 12`.
+- The CyTOF single-view elastic-net smoke fit passed; the generated lambda grid
+  has `alpha,lambda` columns.
+
+### Basemalvac Scratch Notebook Top-Predictor Beta Overlay (2026-05-12)
+
+- Added a CyTOF pilot cell to
+  `scratch/01_stablr_core_basemalvac.ipynb` for top predictors by study group.
+- The notebook now refits full-data multinomial elastic net on the same CyTOF
+  lambda grid, extracts class-specific signed betas for `EG`, `GA`, and `TU`,
+  joins them to global STABL stability scores, and ranks the top five features
+  per study group by `abs(beta) * stability_score`.
+- Added `cytof_top_predictors_by_group` and
+  `cytof_top_predictors_by_group_plot`. The plot uses STABL stability on the
+  x-axis, point size for `abs(beta)`, and color for signed beta.
+- Restored the in-notebook parameter audit cell and added the top-predictor
+  visualization setting.
+- Cleared stored notebook outputs after editing.
+
+Validation:
+
+- `jq empty scratch/01_stablr_core_basemalvac.ipynb` passed.
+- `nbformat.validate()` passed.
+- All notebook R code parsed successfully.
+- CyTOF cells through the new beta overlay passed and produced 15 rows, five
+  per study group. Observed warnings were package build-version warnings and
+  known small-class glmnet bootstrap warnings.
+
+### Review Follow-Up Patch: Scratch Ignore And Strata Alignment (2026-05-13)
+
+- Narrowed `.gitignore` so `scratch/` workflow sources are visible to git while
+  generated `cache`, `export`, `exports`, and `results` directories under
+  `scratch` remain ignored.
+- Updated `.subset_bootstrap_strata_by_ids()` so data-frame and matrix row
+  names are treated as sample IDs when their set matches `sample_ids`, even if
+  those row names look like R's default numeric sequence.
+- Added regression coverage for shuffled numeric sample IDs to prevent
+  silent bootstrap-strata swaps.
+
+Validation:
+
+- `conda run -n R4_51 R --quiet -e 'setwd("r-pkg/stablr"); devtools::load_all(quiet=TRUE); testthat::test_file("tests/testthat/test-bootstrap-helpers.R", reporter="summary")'`
+  passed.
+- `git diff --check` passed.
+- `git ls-files --others --exclude-standard scratch` now reports only the
+  intended workflow sources: three notebooks, two R scripts, and two SLURM
+  files.
+
+### AURORA Baseline SLURM Execution Chain Submitted (2026-05-13)
+
+- Submitted the guided baseline study-group workflow through SLURM:
+  - preprocess job: `24757561`;
+  - branch array after preprocess: `24757562` (`0-17`);
+  - visualization branch after the full branch array: `24757563`;
+  - notebook execution after visualization:
+    `24757565`, writing
+    `scratch/01_stablr_baseline_groups_test.executed.ipynb`.
+- `24757561` completed successfully and confirmed the 11 preprocessed views.
+- Early branch-array monitoring showed completed CyTOF and single-view branch
+  artifacts under `scratch/cache/stablr_baseline_groups_test/` and
+  `scratch/outputs/stablr_baseline_groups_test/`.
+- At the last status check, `late_fusion`, the cooperative one-vs-rest
+  branches, and `nested_cv` were still running, with visualization and notebook
+  execution pending on `afterok` dependencies.

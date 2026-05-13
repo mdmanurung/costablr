@@ -8,7 +8,7 @@ compute_fdp_plus(
   stabl_scores,
   stabl_scores_artificial,
   artificial_proportion,
-  fdr_threshold_range = seq(0, 1, by = 0.01)
+  fdr_threshold_range = seq(0, 0.99, by = 0.01)
 )
 }
 \arguments{
@@ -22,7 +22,8 @@ stability scores for the real features.}
 artificial features relative to real features (used as \eqn{\pi}).}
 
 \item{fdr_threshold_range}{Numeric vector of threshold values to sweep.
-Default: \code{seq(0, 1, by = 0.01)}.}
+Default: \code{seq(0, 0.99, by = 0.01)}, matching Python STABL's
+\code{np.arange(0., 1., .01)}.}
 }
 \value{
 Named list:

@@ -19,7 +19,8 @@
 #' @param artificial_proportion Positive numeric scalar; the fraction of
 #'   artificial features relative to real features (used as \eqn{\pi}).
 #' @param fdr_threshold_range Numeric vector of threshold values to sweep.
-#'   Default: `seq(0, 1, by = 0.01)`.
+#'   Default: `seq(0, 0.99, by = 0.01)`, matching Python STABL's
+#'   `np.arange(0., 1., .01)`.
 #'
 #' @return Named list:
 #'   \describe{
@@ -35,7 +36,7 @@ compute_fdp_plus <- function(
     stabl_scores,
     stabl_scores_artificial,
     artificial_proportion,
-    fdr_threshold_range = seq(0, 1, by = 0.01)
+    fdr_threshold_range = seq(0, 0.99, by = 0.01)
 ) {
   inv_prop    <- 1.0 / artificial_proportion
   max_scores  <- apply(stabl_scores,            1L, max)

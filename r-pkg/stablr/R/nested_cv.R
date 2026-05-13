@@ -34,6 +34,9 @@
 #' @param hard_threshold Passed to [stabl_fit()].
 #' @param random_state Optional integer seed.
 #' @param n_lambda Passed to [stabl_fit()] when `lambda_grid = "auto"`.
+#' @param l1_ratio Passed to [stabl_fit()] when `lambda_grid = "auto"`.
+#'   Use this with `base_learner = "elastic_net"` to generate alpha-aware
+#'   train-fold grids.
 #' @param workers Passed to [stabl_fit()] for bootstrap-level parallelism.
 #' @param cv_workers Number of outer folds to evaluate in parallel. Uses
 #'   `parallel::mclapply()` on Unix-like systems and falls back to sequential
@@ -62,6 +65,7 @@ stabl_multiomic_nested_cv <- function(
     hard_threshold  = NULL,
     random_state    = NULL,
     n_lambda        = 30L,
+    l1_ratio        = NULL,
     workers         = 1L,
     cv_workers      = 1L,
     ...
@@ -132,6 +136,7 @@ stabl_multiomic_nested_cv <- function(
       hard_threshold = hard_threshold,
       random_state = .derive_nested_seed(random_state, outer_i, 2000L),
       n_lambda = n_lambda,
+      l1_ratio = l1_ratio,
       workers = workers,
       ...
     )
@@ -152,6 +157,7 @@ stabl_multiomic_nested_cv <- function(
       hard_threshold = hard_threshold,
       random_state = .derive_nested_seed(random_state, outer_i, 3000L),
       n_lambda = n_lambda,
+      l1_ratio = l1_ratio,
       workers = workers,
       ...
     )
@@ -438,7 +444,8 @@ stabl_multiomic_nested_cv <- function(
                                              inner_folds, lambda_grid, metric,
                                              family, n_bootstraps,
                                              artificial_type, hard_threshold,
-                                             random_state, n_lambda, workers, ...) {
+                                             random_state, n_lambda, l1_ratio,
+                                             workers, ...) {
   candidate_rows <- list()
   k <- 1L
 
@@ -463,6 +470,7 @@ stabl_multiomic_nested_cv <- function(
         hard_threshold = hard_threshold,
         random_state = .derive_nested_seed(random_state, fold_i, k * 100L),
         n_lambda = n_lambda,
+        l1_ratio = l1_ratio,
         workers = workers,
         ...
       )
@@ -503,7 +511,7 @@ stabl_multiomic_nested_cv <- function(
                                         candidate, lambda_grid, family,
                                         n_bootstraps, artificial_type,
                                         hard_threshold, random_state,
-                                        n_lambda, workers, ...) {
+                                        n_lambda, l1_ratio, workers, ...) {
   x_train <- .candidate_matrix(x_list, candidate, train_ids)
   x_valid <- .candidate_matrix(x_list, candidate, valid_ids)
   y_train <- y[train_ids]
@@ -511,13 +519,22 @@ stabl_multiomic_nested_cv <- function(
   fit <- stabl_fit(
     x = x_train,
     y = y_train,
-    lambda_grid = .resolve_nested_lambda_grid(lambda_grid, candidate, x_train, y_train, family, n_lambda),
+    lambda_grid = .resolve_nested_lambda_grid(
+      lambda_grid,
+      candidate,
+      x_train,
+      y_train,
+      family,
+      n_lambda,
+      l1_ratio
+    ),
     family = family,
     n_bootstraps = n_bootstraps,
     artificial_type = artificial_type,
     hard_threshold = hard_threshold,
     random_state = random_state,
     n_lambda = n_lambda,
+    l1_ratio = l1_ratio,
     workers = workers,
     ...
   )
@@ -552,7 +569,8 @@ stabl_multiomic_nested_cv <- function(
   out
 }
 
-.resolve_nested_lambda_grid <- function(lambda_grid, candidate, x_train, y_train, family, n_lambda) {
+.resolve_nested_lambda_grid <- function(lambda_grid, candidate, x_train, y_train,
+                                        family, n_lambda, l1_ratio = NULL) {
   if (identical(lambda_grid, "auto")) {
     return("auto")
   }
@@ -567,7 +585,13 @@ stabl_multiomic_nested_cv <- function(
       return(lambda_grid[[candidate$blocks[[1L]]]])
     }
   }
-  auto_lambda_grid(x_train, y_train, family = family, n_lambda = n_lambda)
+  auto_lambda_grid(
+    x_train,
+    y_train,
+    family = family,
+    n_lambda = n_lambda,
+    l1_ratio = l1_ratio
+  )
 }
 
 .predict_selected_multinomial <- function(x_train, y_train, x_valid, levels) {

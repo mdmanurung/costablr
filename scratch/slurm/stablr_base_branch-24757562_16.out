@@ -1,0 +1,25 @@
+<stabl_multiomic_fit>
+  Omics:           11 (cytof_celltype, exvivo_celltype, exvivo_enzyme, 6h_cyto_LPS, 6h_cyto_ssRNA40, 24h_cyto_iRBC, 24h_cyto_SEB, 24h_enzyme_iRBC, 24h_enzyme_SEB, 3d_cyto, 3d_enzyme)
+  Per-omic selected features:
+    cytof_celltype: 16
+    exvivo_celltype: 4
+    exvivo_enzyme: 17
+    6h_cyto_LPS: 18
+    6h_cyto_ssRNA40: 12
+    24h_cyto_iRBC: 9
+    24h_cyto_SEB: 6
+    24h_enzyme_iRBC: 4
+    24h_enzyme_SEB: 4
+    3d_cyto: 8
+    3d_enzyme: 5
+  Validation data:  no 
+  Early fusion:     no 
+  Late fusion:      no 
+  Cooperative fusion:
+    selection:     cv
+    rho (chosen):  0.1
+    selector:      lambda.1se
+    type.measure:  deviance
+    score:         0.2771
+    selected feats: 295 (across views)
+

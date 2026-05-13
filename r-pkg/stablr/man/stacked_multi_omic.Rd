@@ -3,19 +3,25 @@
 \alias{stacked_multi_omic}
 \title{Stacked Generalization Over Per-Omic Predictions}
 \usage{
-stacked_multi_omic(predictions, y, task_type = c("binary", "regression"),
+stacked_multi_omic(predictions, y, task_type = c("binary", "regression",
+    "multiclass"),
     n_iter = 10000L, random_state = NULL)
 }
 \arguments{
-\item{predictions}{A \code{data.frame} or numeric matrix with one column per
-omic and one row per sample.  Missing values (\code{NA}) are supported and
-treated as absent omics for those samples.}
+\item{predictions}{For \code{task_type = "binary"} or \code{"regression"}, a
+\code{data.frame} or numeric matrix with one column per omic and one row per
+sample. For \code{task_type = "multiclass"}, a named list of class-probability
+matrices/data frames, one per omic, with samples in rows and classes in
+columns.}
 
 \item{y}{Named numeric outcome vector aligned with rows of \code{predictions}.
-For \code{task_type = "binary"} values must be \code{0}/\code{1}.}
+For \code{task_type = "binary"} values must be \code{0}/\code{1}; for
+\code{task_type = "multiclass"}, values are coerced to a factor with levels
+matching the probability columns, and every label must be present in those
+columns.}
 
-\item{task_type}{Either \code{"binary"} (maximise AUC) or \code{"regression"}
-(maximise R²).}
+\item{task_type}{\code{"binary"} (maximise AUC), \code{"regression"} (maximise
+R²), or \code{"multiclass"} (minimise multiclass log loss).}
 
 \item{n_iter}{Number of random weight draws to try.  Mirrors \code{n_iter} in
 the Python implementation (default \code{10000}).}
@@ -30,7 +36,7 @@ A named list with three elements:
     \code{"Stacked Gen. Predictions"} column of the best weighted average.}
   \item{\code{weights}}{\code{data.frame} with one row per omic and a column
     \code{Associated_weight} containing the optimal weight.}
-  \item{\code{score}}{Best score achieved (AUC or R²).}
+  \item{\code{score}}{Best score achieved (AUC, R², or negative log loss).}
 }
 }
 \description{
@@ -43,7 +49,8 @@ predictions receive \code{NA} in the stacked output.
 In each of \code{n_iter} iterations a weight vector is sampled from
 \code{Uniform(0, 10)}.  For each sample the weighted average of available
 omic predictions is computed (missing omics for that sample are skipped).
-The iteration that maximises AUC (binary) or R² (regression) is retained.
+The iteration that maximises AUC (binary), R² (regression), or negative
+multiclass log loss is retained.
 }
 \examples{
 set.seed(1)

@@ -149,3 +149,10 @@ AGENTS.md
 *.RData
 *.rd*
 multiview/
+
+# Scratch workflow sources are intentionally trackable; ignore only generated
+# analysis artifacts written by notebooks and branch runners.
+scratch/**/cache/
+scratch/**/export/
+scratch/**/exports/
+scratch/**/results/

@@ -16,6 +16,9 @@ stabl_multiomic_train_validate(
   n_bootstraps = 100L,
   artificial_type = "random_permutation",
   hard_threshold = NULL,
+  stratify_bootstrap = FALSE,
+  bootstrap_strata_train = NULL,
+  l1_ratio = NULL,
   random_state = NULL,
   early_fusion = FALSE,
   late_fusion = FALSE,
@@ -58,6 +61,16 @@ When supplied, grouped bootstrap sampling is used in each per-omic fit.}
 
 \item{hard_threshold}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
+\item{stratify_bootstrap}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}. When \code{TRUE}, per-omic
+and early-fusion STABL fits draw class-stratified bootstrap subsamples.}
+
+\item{bootstrap_strata_train}{Optional categorical bootstrap stratification
+design for training samples, forwarded to \code{\link[=stabl_fit]{stabl_fit()}}.}
+
+\item{l1_ratio}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} when \code{lambda_grid = "auto"}.
+Use this with \code{base_learner = "elastic_net"} to generate alpha-aware auto
+grids.}
+
 \item{random_state}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
 \item{early_fusion}{Logical.  When \code{TRUE}, a single \code{\link[=stabl_fit]{stabl_fit()}} is run on
@@ -66,9 +79,11 @@ per-omic fits.  Results are returned in the \code{early_fusion} field.}
 
 \item{late_fusion}{Logical.  When \code{TRUE}, a downstream predictor is fitted
 per omic on its selected features, and \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} combines the
-per-omic predictions.  Requires at least one feature to be selected across
-the omics.  The \code{task_type} (binary vs. regression) is inferred from
-\code{family}.  Results are returned in the \code{late_fusion} field.}
+per-omic predictions.  If no features are selected for an omic, late
+fusion falls back to class priors for multinomial tasks or the train-set
+mean for other tasks. The \code{task_type} (binary, regression, or multiclass)
+is inferred from \code{family}.  Results are returned in the \code{late_fusion}
+field.}
 
 \item{n_iter_lf}{Number of random weight draws passed to
 \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} during late fusion.  Ignored when
@@ -113,7 +128,8 @@ list with \code{fit}, \code{selected_features}, \code{selected_train}, and
 \code{selected_valid} for the concatenated single-STABL run.}
 \item{\code{late_fusion}}{\code{NULL} when \code{late_fusion = FALSE}.  Otherwise a
 list with \code{weights} (data.frame), \code{train_predictions} (data.frame),
-\code{valid_predictions} (numeric vector or \code{NULL}), and \code{score}.}
+\code{valid_predictions}, and \code{score}; multinomial tasks also include
+\code{levels}, \code{log_loss}, and classification metrics.}
 \item{\code{cooperative_fusion}}{Present only when
 \code{cooperative_fusion = TRUE}. A list containing the selected multiview
 fit, chosen \code{rho} and \code{lambda}, selected features per view,
