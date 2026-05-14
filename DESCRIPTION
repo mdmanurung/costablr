@@ -9,7 +9,7 @@ Description: R implementation of STABL for sparse and reliable biomarker
     late, and cooperative fusion workflows, visualization helpers, and
     export utilities without a Python or tidymodels runtime dependency.
 License: MIT + file LICENSE
-URL: https://gregbellan.github.io/Stabl/costablr/, https://github.com/gregbellan/Stabl
+URL: https://github.com/gregbellan/Stabl
 BugReports: https://github.com/gregbellan/Stabl/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

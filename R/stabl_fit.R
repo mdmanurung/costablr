@@ -95,6 +95,7 @@
 #'     \item{`hard_threshold`}{As supplied.}
 #'     \item{`artificial_type`}{As supplied.}
 #'     \item{`artificial_proportion`}{As supplied.}
+#'     \item{`bootstrap_threshold`}{As supplied.}
 #'     \item{`explore`}{As supplied.}
 #'     \item{`n_explore`}{As supplied.}
 #'     \item{`feature_names`}{Character vector of original feature names.}

@@ -14,11 +14,12 @@ sample. For \code{task_type = "multiclass"}, a named list of class-probability
 matrices/data frames, one per omic, with samples in rows and classes in
 columns.}
 
-\item{y}{Named numeric outcome vector aligned with rows of \code{predictions}.
-For \code{task_type = "binary"} values must be \code{0}/\code{1}; for
-\code{task_type = "multiclass"}, values are coerced to a factor with levels
-matching the probability columns, and every label must be present in those
-columns.}
+\item{y}{Outcome vector aligned with rows of \code{predictions}. For
+\code{task_type = "binary"}, values may be numeric/logical \code{0}/\code{1}
+or a two-level factor/character vector; the second level is treated as the
+positive class. For \code{task_type = "multiclass"}, values are coerced to a
+factor with levels matching the probability columns, and every label must be
+present in those columns.}
 
 \item{task_type}{\code{"binary"} (maximise AUC), \code{"regression"} (maximise
 R²), or \code{"multiclass"} (minimise multiclass log loss).}
@@ -43,7 +44,9 @@ A named list with three elements:
 Finds optimal omic weights by random search, matching the Python
 \code{stacked_multi_omic} algorithm from \code{stabl/stacked_generalization.py}.
 Missing values in \code{predictions} are handled per-row: rows with all-NA
-predictions receive \code{NA} in the stacked output.
+predictions receive \code{NA} in the stacked output. For binary and regression
+scoring, rows with missing outcomes are skipped when evaluating candidate
+weights.
 }
 \details{
 In each of \code{n_iter} iterations a weight vector is sampled from

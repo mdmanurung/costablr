@@ -261,3 +261,71 @@ test_that("AUDIT INT-CAND-C: two-class multinomial cooperative error points to b
     "family = 'binomial'"
   )
 })
+
+test_that("AUDIT CRIT-001: binary stacking treats factor outcomes like 0/1 labels", {
+  predictions <- matrix(
+    c(
+      0.10, 0.80, 0.20, 0.90,
+      0.20, 0.70, 0.30, 0.80
+    ),
+    nrow = 4L,
+    dimnames = list(paste0("s", seq_len(4L)), c("omic_a", "omic_b"))
+  )
+  y_numeric <- c(0, 1, 0, 1)
+  y_factor <- factor(c("no", "yes", "no", "yes"), levels = c("no", "yes"))
+
+  fit_numeric <- stacked_multi_omic(
+    predictions = predictions,
+    y = y_numeric,
+    task_type = "binary",
+    n_iter = 20L,
+    random_state = 17L
+  )
+  fit_factor <- stacked_multi_omic(
+    predictions = predictions,
+    y = y_factor,
+    task_type = "binary",
+    n_iter = 20L,
+    random_state = 17L
+  )
+
+  expect_equal(fit_factor$score, fit_numeric$score, tolerance = 1e-12)
+  expect_equal(fit_factor$score, 1)
+  expect_equal(fit_factor$weights, fit_numeric$weights)
+  expect_equal(fit_factor$predictions, fit_numeric$predictions)
+})
+
+test_that("AUDIT CRIT-001: binary stacking rejects malformed outcome labels", {
+  predictions <- matrix(
+    c(0.1, 0.8, 0.2, 0.9),
+    ncol = 1L,
+    dimnames = list(paste0("s", seq_len(4L)), "omic")
+  )
+
+  expect_error(
+    stacked_multi_omic(predictions, factor(rep("yes", 4L)), task_type = "binary"),
+    "exactly two"
+  )
+  expect_error(
+    stacked_multi_omic(predictions, c(0, 2, 0, 1), task_type = "binary"),
+    "0/1"
+  )
+})
+
+test_that("AUDIT CRIT-001: binary stacking skips missing outcomes after validation", {
+  predictions <- matrix(
+    c(0.1, 0.8, 0.2, 0.9),
+    ncol = 1L,
+    dimnames = list(paste0("s", seq_len(4L)), "omic")
+  )
+
+  fit <- stacked_multi_omic(
+    predictions,
+    c(0, 1, NA, 1),
+    task_type = "binary",
+    n_iter = 10L,
+    random_state = 19L
+  )
+
+  expect_true(is.finite(fit$score))
+})

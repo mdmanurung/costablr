@@ -71,6 +71,14 @@ For details that must not be duplicated here:
   - full SLURM job `24750538` is running as of the latest check.
 - Workspace mode: May 13 audit remediation is closed; local package checks now
   have 0 errors, with only environment/toolchain warning/note items remaining.
+- Latest package robustness audit signal: `audits/PACKAGE_ROBUSTNESS_AUDIT.md`
+  was added. CRIT-001 is fixed in `stacked_multi_omic()` so binary stacking
+  now normalizes numeric/logical 0/1 and two-level factor/character outcomes,
+  preserving missing-outcome skip behavior. Targeted audit tests and the full
+  local suite pass; final `rcmdcheck --no-manual --as-cran` has 0 errors, 1
+  qpdf warning, and 3 notes (new submission/dev version, conda
+  `-march=nocona`, and `stabl_fit()` example elapsed time). `lintr` currently
+  reports 847 backlog findings; `goodpractice` is unavailable in `R4_51`.
 - Latest audit-document signal: all files under `audit/` now explicitly state
   whether each finding is fixed, deferred, or not planned. INT-001 through
   INT-006, IMPL-001 through IMPL-007, and medium performance findings

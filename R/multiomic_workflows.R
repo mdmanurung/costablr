@@ -1553,18 +1553,21 @@ stabl_multiomic_cv <- function(
 #' Finds optimal omic weights by random search, matching the Python
 #' `stacked_multi_omic` algorithm from `stabl/stacked_generalization.py`.
 #' Missing values in `predictions` are handled per-row: rows with all-NA
-#' predictions receive `NA` in the stacked output.
+#' predictions receive `NA` in the stacked output. For binary and regression
+#' scoring, rows with missing outcomes are skipped when evaluating candidate
+#' weights.
 #'
 #' @param predictions For `task_type = "binary"` or `"regression"`, a
 #'   `data.frame` or numeric matrix with one column per omic and one row per
 #'   sample. For `task_type = "multiclass"`, a named list of class-probability
 #'   matrices/data frames, one per omic, with samples in rows and classes in
 #'   columns.
-#' @param y Named numeric outcome vector aligned with rows of `predictions`.
-#'   For `task_type = "binary"` values must be `0`/`1`; for
-#'   `task_type = "multiclass"`, values are coerced to a factor with levels
-#'   matching the probability columns, and every label must be present in those
-#'   columns.
+#' @param y Outcome vector aligned with rows of `predictions`. For
+#'   `task_type = "binary"`, values may be numeric/logical `0`/`1` or a
+#'   two-level factor/character vector; the second level is treated as the
+#'   positive class. For `task_type = "multiclass"`, values are coerced to a
+#'   factor with levels matching the probability columns, and every label must
+#'   be present in those columns.
 #' @param task_type `"binary"` (maximise AUC), `"regression"` (maximise R²), or
 #'   `"multiclass"` (minimise multiclass log loss).
 #' @param n_iter Number of random weight draws to try.  Mirrors `n_iter` in
@@ -1607,6 +1610,9 @@ stacked_multi_omic <- function(
   }
   if (length(y) != n_samples) {
     stop("`y` must have one value per prediction row.", call. = FALSE)
+  }
+  if (identical(task_type, "binary")) {
+    y <- .coerce_binary_stack_outcome(y)
   }
 
   if (!is.null(random_state)) {
@@ -1679,6 +1685,48 @@ stacked_multi_omic <- function(
   preds_df[["Stacked Gen. Predictions"]] <- best_probs
 
   list(predictions = preds_df, weights = weights_df, score = best_score)
+}
+
+.coerce_binary_stack_outcome <- function(y) {
+  missing <- is.na(y)
+
+  if (is.factor(y) || is.character(y)) {
+    y_factor <- droplevels(factor(y[!missing]))
+    if (length(levels(y_factor)) != 2L) {
+      stop(
+        "Binary stacking `y` must contain exactly two observed classes.",
+        call. = FALSE
+      )
+    }
+    out <- rep(NA_integer_, length(y))
+    out[!missing] <- as.integer(y_factor == levels(y_factor)[[2L]])
+    return(out)
+  }
+
+  y_num <- if (is.logical(y)) {
+    as.numeric(y)
+  } else {
+    suppressWarnings(as.numeric(y))
+  }
+  if (any(!missing & (is.na(y_num) | !is.finite(y_num)))) {
+    stop(
+      "Binary stacking `y` must be numeric/logical 0/1 values or a two-level factor/character vector.",
+      call. = FALSE
+    )
+  }
+
+  observed <- sort(unique(y_num[!missing]))
+  if (!all(observed %in% c(0, 1))) {
+    stop("Binary stacking `y` must contain only 0/1 values.", call. = FALSE)
+  }
+  if (!identical(observed, c(0, 1))) {
+    stop(
+      "Binary stacking `y` must contain exactly two observed classes.",
+      call. = FALSE
+    )
+  }
+
+  as.integer(y_num)
 }
 
 .stacked_multi_omic_multiclass <- function(predictions,

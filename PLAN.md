@@ -251,6 +251,14 @@ narrative rewrite, parallel render validation completed as SLURM array job
     extraction with fallback, prepared grouped-bootstrap samplers, and the
     NAT-002 Rcpp correlation-union helper. PERF-004, PERF-007, and PERF-008
     remain deferred low-severity opportunities.
+23. ~~Complete package robustness audit and binary stacking hardening.~~
+    **CLOSED 2026-05-14.** Added
+    `audits/PACKAGE_ROBUSTNESS_AUDIT.md`, fixed binary
+    `stacked_multi_omic()` outcome coercion for factor/character/logical
+    labels, added CRIT-001 regression tests, cleaned package-build excludes,
+    and removed the dead DESCRIPTION URL. Acceptance signal: full local tests
+    pass with no failures; final `rcmdcheck --no-manual --as-cran` has
+    `0 errors`, with only local/release hygiene warning-note items remaining.
 
 ## Remediation Audit Execution Status (2026-05-08)
 

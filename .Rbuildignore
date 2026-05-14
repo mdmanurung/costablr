@@ -7,13 +7,17 @@
 ^src/.*[.]o$
 ^src/.*[.]so$
 ^_pkgdown[.]yml$
+^[.]claude(/|$)
+^[.]vscode(/|$)
 ^AGENTS[.]md$
 ^HANDOFF[.]md$
 ^PLAN[.]md$
 ^PROGRESS[.]md$
 ^STABL[.]md$
-^audit$
+^audit(/|$)
+^audits(/|$)
 ^docs$
-^Notebook examples$
-^Sample Data$
+^Notebook examples(/|$)
+^Sample Data(/|$)
+^scratch(/|$)
 ^scripts$

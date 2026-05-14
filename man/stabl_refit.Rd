@@ -56,7 +56,7 @@ The final refit is determined by \code{family}:
 \item{\code{"binomial"}}{logistic regression via \code{\link[stats:glm]{stats::glm()}} with a logit
 link.}
 \item{\code{"multinomial"}}{multinomial logistic regression via
-\code{nnet::multinom()} with no weight decay.}
+\code{\link[nnet:multinom]{nnet::multinom()}} with no weight decay.}
 \item{\code{"poisson"}}{Poisson regression via \code{\link[stats:glm]{stats::glm()}} with a log link.}
 \item{\code{"cox"}}{Cox proportional-hazards regression via
 \code{\link[survival:coxph]{survival::coxph()}}.}

@@ -89,6 +89,64 @@ conda run -n R4_51 Rscript -e "Sys.setenv(NOT_CRAN='true'); devtools::test('.')"
 # -> skips are intentional NAT-001 and NAT-003 placeholders
 ```
 
+### Package Robustness Audit and Binary Stacking Hardening (2026-05-14)
+
+- Added `audits/PACKAGE_ROBUSTNESS_AUDIT.md` with the requested package audit
+  structure, exported-function inventory, interoperability findings, static
+  check results, validation evidence, and unresolved CRAN/static-check debt.
+- Found and fixed CRIT-001: `stacked_multi_omic(task_type = "binary")`
+  silently computed the wrong AUC for two-level factor outcomes because the
+  binary scorer expected numeric `0`/`1` labels. Binary stacking now validates
+  and normalizes numeric/logical `0`/`1` and two-level factor/character labels,
+  treats the second factor/character level as positive, preserves missing-outcome
+  skipping during scoring, and rejects malformed labels clearly.
+- Added three CRIT-001 tests to
+  `tests/testthat/test-audit-multiomic-workflows.R`: factor-vs-numeric binary
+  stacking equivalence, malformed-label errors, and missing-outcome skip
+  behavior.
+- Updated `stacked_multi_omic()` source/Rd documentation for factor/character
+  binary outcomes and missing-outcome scoring behavior. Restored
+  `bootstrap_threshold` in the `stabl_fit()` roxygen return contract after
+  documentation regeneration.
+- Cleaned package-build inputs in `.Rbuildignore` so analysis-only directories
+  and hidden editor/tool directories are excluded from source builds; removed
+  the stale 404 pkgdown URL from `DESCRIPTION`.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "devtools::document()"
+# -> completed; hand-maintained NAMESPACE, stacked_multi_omic.Rd, and
+#    stabl_multiomic_nested_cv.Rd were skipped by roxygen; stacked_multi_omic.Rd
+#    was updated manually.
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R', reporter = 'summary'); testthat::test_file('tests/testthat/test-audit-performance-optimizations.R', reporter = 'summary')"
+# -> both targeted files passed
+
+conda run -n R4_51 Rscript -e "Sys.setenv(NOT_CRAN='true'); devtools::test('.', reporter = 'summary')"
+# -> no failures; WARN 2 existing future build-version warnings; SKIP 2
+#    intentional NAT-001/NAT-003 placeholders
+
+conda run -n R4_51 Rscript -e "lints <- lintr::lint_package(); print(lints); cat('lint_count=', length(lints), '\n', sep='')"
+# -> lint_count=847; mostly pre-existing style/object-usage findings
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet=TRUE); codetools::checkUsageEnv(asNamespace('costablr'), all=TRUE)"
+# -> non-fatal usage diagnostics; R CMD check dependency/code checks remain OK
+
+conda run -n R4_51 Rscript -e "cat('goodpractice=', requireNamespace('goodpractice', quietly=TRUE), '\n')"
+# -> goodpractice= FALSE
+
+conda run -n R4_51 Rscript -e "res <- devtools::check('.', error_on = 'never'); print(res)"
+# -> 0 errors, 1 warning, 4 notes before build-ignore cleanup; warning/notes
+#    were package-build/toolchain hygiene rather than test failures
+
+conda run -n R4_51 Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual", "--as-cran"), error_on = "never", quiet = TRUE); cat("errors=", length(res$errors), " warnings=", length(res$warnings), " notes=", length(res$notes), "\n", sep = "")'
+# -> errors=0 warnings=1 notes=3
+# -> warning: qpdf missing for PDF size-reduction checks
+# -> notes: CRAN new submission/dev version, conda -march=nocona compile flag,
+#    and stabl_fit example elapsed time above 5 seconds
+```
+
 ### STABL Upstream Parity Source Audit (2026-05-13)
 
 - Audited `STABL.md` against pinned upstream Python commit
