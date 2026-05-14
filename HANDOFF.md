@@ -107,10 +107,18 @@ For details that must not be duplicated here:
   and the intentional R `explore = TRUE` tie-handling hardening difference.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
 - Cooperative fusion: promoted workflow-layer extension (non-parity-blocking). Hardening milestone CLOSED 2026-05-08 (M12); promotion accessor milestone CLOSED 2026-05-10. Public inspection surface now includes `get_cooperative_features()` and `get_cooperative_diagnostics()`.
-- Latest verified full-suite signal after the automatic OVR cooperative-fusion update:
-  `testthat::test_dir('tests/testthat', reporter='summary')` passes locally in
-  `R4_51`; warnings are the two existing `future` package build-version
-  warnings, and skips are NAT-001, NAT-003, plus two CRAN-gated tests.
+- Latest verified full-suite signal after post-audit `stabl_refit()` /
+  cooperative-fusion hardening: `Sys.setenv(NOT_CRAN='true'); devtools::test('.')`
+  passes locally in `R4_51` with `FAIL 0`, `WARN 2`, `SKIP 2`, `PASS 1596`;
+  warnings are the two existing `future` package build-version warnings, and
+  skips are the intentional NAT-001 and NAT-003 placeholders.
+- Latest recent-changes robustness follow-up: committed `src/*.o` and
+  `src/*.so` artifacts were removed from the git index and working tree,
+  matching ignore patterns were added to `.gitignore` and `.Rbuildignore`, and
+  nested-CV final refit/predict now falls back to the training majority class
+  when the shared final-refit helper errors. Targeted validation passed:
+  `testthat::test_file('tests/testthat/test-nested-cv.R', reporter = 'summary')`
+  in `R4_51` with only the existing testthat build-version warning.
 - Latest verified package-check signal: `devtools::check('.', error_on =
   'never')` has `0 errors`, `1 WARNING`, and `2 NOTEs`; remaining items are
   missing local `qpdf`, timestamp verification, and the conda `-march=nocona`
@@ -120,8 +128,8 @@ For details that must not be duplicated here:
   rewrite (`costablr-cooperative`, `costablr-intro`, `costablr-multiomic`,
   `costablr-python-parity`, `costablr-tcga`).
 - Latest verified documentation-site signal: `pkgdown::check_pkgdown()` reports
-  no problems after adding the nested-CV article and nested-CV reference topic
-  to `_pkgdown.yml`.
+  no problems after adding the post-audit `stabl_refit` reference topic to
+  `_pkgdown.yml`.
 - Latest targeted plotting signal: `test-phase7.R` passes against local source
   (`PASS 83`, `FAIL 0`, `WARN 0`, `SKIP 0`).
 - Latest intro-vignette signal: `costablr-intro.Rmd` renders successfully after a
@@ -457,18 +465,20 @@ conda run -n R4_51 R CMD INSTALL multiview
     for the 27 heavy branches and then submit a dependent `visualize` branch.
 - Current audit gate:
   - May 13 audit remediation is closed for INT-001 through INT-006 and
-    IMPL-001 through IMPL-007;
+    IMPL-001 through IMPL-007; May 14 post-audit hardening closes the
+    `stabl_refit()` pkgdown/test gaps and cooperative-fusion alignment
+    audit-coverage gaps;
   - additive audit tests now assert fixed behavior in
     `tests/testthat/test-audit-*.R`; stale bug snapshots were removed;
-  - latest full-suite validation is `FAIL 0`, `WARN 2`, `SKIP 3`, `PASS 1481`
+  - latest full-suite validation is `FAIL 0`, `WARN 2`, `SKIP 2`, `PASS 1596`
     with `NOT_CRAN=true`;
-  - the three skips are intentional NAT-001, NAT-002, and NAT-003 placeholders;
+  - the two skips are intentional NAT-001 and NAT-003 placeholders;
   - `devtools::check(error_on = 'never')` now rebuilds vignettes successfully
     and reports 0 errors, with only local `qpdf`/timestamp/toolchain
     warning/note items;
   - `pkgdown::check_pkgdown()` reports no problems;
-  - defer NAT-001 through NAT-003 implementation until a separate profiling
-    pass justifies native work.
+  - defer NAT-001 and NAT-003 implementation until a separate profiling pass
+    justifies native work; NAT-002 is fixed.
 - Current final-refit workflow:
   - `stabl_fit()` remains the selector boundary for stability scores, FDP+
     diagnostics, and support masks;
@@ -479,8 +489,9 @@ conda run -n R4_51 R CMD INSTALL multiview
     reuses those same refits for stacking;
   - nested CV selected-candidate evaluation now uses the same final-refit
     helper;
-  - latest validation for this change is `FAIL 0`, `WARN 2`, `SKIP 2`,
-    `PASS 1566` under `NOT_CRAN=true`, plus `R CMD INSTALL .` completed.
+  - latest validation after the follow-up hardening is `FAIL 0`, `WARN 2`,
+    `SKIP 2`, `PASS 1596` under `NOT_CRAN=true`; the earlier `R CMD INSTALL .`
+    check completed after the initial refit implementation.
 
 ## Update protocol
 

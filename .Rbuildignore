@@ -4,6 +4,8 @@
 ^vignettes/.*-cache$
 ^vignettes/tcga_results$
 ^inst/analysis/cache$
+^src/.*[.]o$
+^src/.*[.]so$
 ^_pkgdown[.]yml$
 ^AGENTS[.]md$
 ^HANDOFF[.]md$

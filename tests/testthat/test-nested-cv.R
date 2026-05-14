@@ -163,6 +163,40 @@ test_that("stabl_multiomic_nested_cv rejects folds with too few class samples", 
   )
 })
 
+test_that("nested CV final refit falls back to the training majority class", {
+  train_ids <- paste0("tr", seq_len(4L))
+  valid_ids <- paste0("va", seq_len(3L))
+  x_train <- matrix(
+    numeric(0L),
+    nrow = length(train_ids),
+    ncol = 0L,
+    dimnames = list(train_ids, character(0L))
+  )
+  x_valid <- matrix(
+    numeric(0L),
+    nrow = length(valid_ids),
+    ncol = 0L,
+    dimnames = list(valid_ids, character(0L))
+  )
+  y_train <- setNames(
+    factor(rep("case", length(train_ids)), levels = c("control", "case")),
+    train_ids
+  )
+
+  pred <- .predict_stabl_nested_final_classes(
+    x_train_sel = x_train,
+    y_train = y_train,
+    x_valid_sel = x_valid,
+    family = "binomial",
+    levels = levels(y_train)
+  )
+
+  expect_equal(pred$predicted, rep("case", length(valid_ids)))
+  expect_equal(pred$final_refit$model_type, "majority_class")
+  expect_equal(pred$final_refit$majority_class, "case")
+  expect_match(pred$final_refit$fallback_reason, "one observed outcome class")
+})
+
 test_that("stabl_multiomic_nested_cv forwards l1_ratio to auto lambda grids", {
   set.seed(303)
   n <- 18L

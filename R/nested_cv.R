@@ -542,26 +542,20 @@ stabl_multiomic_nested_cv <- function(
   support <- get_support(fit)
   selected <- names(support)[support]
   importances <- get_importances(fit)
-  final_refit <- .fit_stabl_final_model(
+  refit_prediction <- .predict_stabl_nested_final_classes(
     x_train_sel = x_train[, selected, drop = FALSE],
     y_train = y_train,
-    task_type = .stabl_refit_task_type(family),
+    x_valid_sel = x_valid[, selected, drop = FALSE],
+    family = family,
     levels = levels(y)
-  )
-  predicted <- as.character(
-    .predict_stabl_final_model(
-      final_refit,
-      x_valid[, selected, drop = FALSE],
-      type = "class"
-    )
   )
 
   list(
     stabl_fit = fit,
-    final_refit = final_refit,
+    final_refit = refit_prediction$final_refit,
     selected_features = .split_prefixed_features(selected),
     importances = importances,
-    predicted = predicted,
+    predicted = refit_prediction$predicted,
     candidate = candidate$name
   )
 }
@@ -599,6 +593,65 @@ stabl_multiomic_nested_cv <- function(
     family = family,
     n_lambda = n_lambda,
     l1_ratio = l1_ratio
+  )
+}
+
+.predict_stabl_nested_final_classes <- function(x_train_sel, y_train, x_valid_sel,
+                                                family, levels) {
+  task_type <- .stabl_refit_task_type(family)
+  tryCatch({
+    final_refit <- .fit_stabl_final_model(
+      x_train_sel = x_train_sel,
+      y_train = y_train,
+      task_type = task_type,
+      levels = levels
+    )
+    list(
+      final_refit = final_refit,
+      predicted = as.character(.predict_stabl_final_model(
+        final_refit,
+        x_valid_sel,
+        type = "class"
+      ))
+    )
+  }, error = function(e) {
+    .stabl_nested_majority_prediction(
+      y_train = y_train,
+      x_valid_sel = x_valid_sel,
+      task_type = task_type,
+      levels = levels,
+      error = e
+    )
+  })
+}
+
+.stabl_nested_majority_prediction <- function(y_train, x_valid_sel, task_type,
+                                              levels, error = NULL) {
+  level_set <- levels
+  if (is.null(level_set)) {
+    level_set <- base::levels(factor(y_train))
+  }
+  observed <- as.character(y_train[!is.na(y_train)])
+  if (length(level_set) == 0L) {
+    level_set <- sort(unique(observed))
+  }
+  if (length(level_set) == 0L) {
+    stop("Cannot derive a majority-class fallback without observed labels.",
+         call. = FALSE)
+  }
+
+  counts <- table(factor(observed, levels = level_set))
+  majority <- names(counts)[[which.max(counts)]]
+  list(
+    final_refit = list(
+      model = NULL,
+      model_type = "majority_class",
+      task_type = task_type,
+      levels = level_set,
+      majority_class = majority,
+      fallback_reason = if (is.null(error)) NULL else conditionMessage(error)
+    ),
+    predicted = rep(majority, nrow(x_valid_sel))
   )
 }
 

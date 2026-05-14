@@ -167,13 +167,13 @@ old-reference parity helpers and a strict 10% runtime-or-allocation gate.
 ### PERF-CAND-A: Multinomial cooperative OvR fits N binomial cooperative models serially
 
 - Severity: LOW (constant-factor, scales with number of classes K).
-- Location: `R/multiomic_workflows.R` (one-vs-rest cooperative path, see the
-  multinomial dispatch starting near the post-`ed84166` lines flagged by
-  grep markers `if (identical(family, "multinomial"))` and
-  `"One-vs-rest cooperative fusion for ..."`).
+- Location: `R/multiomic_workflows.R:1315` (`for (class_level in class_levels)`
+  loop inside `.cooperative_multiomic_fit_ovr`); each iteration calls
+  `.cooperative_multiomic_fit()` at `:1326`. Multinomial dispatch enters this
+  path via `.cooperative_multiomic_fit()` at `:1069`.
 - Observation: each class fit is independent and could be parallelized with
   `furrr::future_map()` under the existing `future` plan, but currently runs
-  serially.
+  serially as a base-R `for` loop.
 - Risk: linear K-fold cost on top of the cooperative tuning loop.
 - Expected win: K-fold constant factor when `future` workers are available.
 - Implementation risk: MEDIUM around deterministic RNG across `future`

@@ -20,18 +20,19 @@ finding bodies are now stale in places. Concrete drift:
   `R/multiomic_workflows.R` to ~1870 lines. Audit line refs for INT-003,
   PERF-001, PERF-002, and the cooperative call-site inference (formerly at
   `multiomic_workflows.R:991`, `:1047`) have shifted; see per-file notes.
-  Audit dynamic verification for the cooperative branch was never performed
-  and the multinomial path expands that gap.
+  Audit dynamic verification for the cooperative branch was not present at
+  re-review time; the scalar and multinomial one-vs-rest alignment gaps are
+  now guarded by `tests/testthat/test-audit-multiomic-workflows.R`.
 - `5c11faa` (new `stabl_refit()` public API): adds `R/stabl_refit.R` (~505
   lines), exports `stabl_refit()`, registers `predict.stabl_refit` and
   `print.stabl_refit` S3 methods, and pulls `nnet` into Suggests. Used
   internally from `R/multiomic_workflows.R:175` and `R/nested_cv.R:548` via
-  `.stabl_refit_task_type()`. Not present in `_pkgdown.yml` — recurrence of
-  the IMPL-007 pkgdown drift pattern. Not covered by any audit safety-net
-  test.
+  `.stabl_refit_task_type()`. The initial pkgdown and audit-safety-net gaps
+  are fixed as of 2026-05-14: `stabl_refit` is indexed in `_pkgdown.yml`, and
+  branch/schema guards were added to `tests/testthat/test-audit-stabl-fit.R`.
 
-Treat the drift items above as new candidate findings that have not been put
-through the audit's dynamic-verification or remediation pipeline.
+The drift items above have now been reviewed for the concrete package-index,
+validation-message, and audit-coverage gaps identified in this audit set.
 
 Remediation status: implemented 2026-05-13 for INT-001 through INT-006,
 IMPL-001 through IMPL-007, and the medium-severity performance tranche
@@ -42,6 +43,14 @@ skipped placeholders.
 Status annotation update: reviewed 2026-05-13. All audit documents now carry
 explicit fixed/deferred/not-planned status notes. The audit regression subset
 passes with the expected NAT placeholder skips.
+
+Post-audit hardening update: reviewed 2026-05-14. `stabl_refit()` pkgdown
+indexing, `predict.stabl_refit()` newdata row-ID validation, final-model-args
+validation centralization, binomial class-loss diagnostics, scalar and
+multinomial cooperative alignment guards, and the `stabl_refit()` family
+branch safety-net additions are implemented. `pkgdown::check_pkgdown()` has no
+problems, and the full local test directory reports `FAIL 0`, `WARN 2`,
+`SKIP 2`, `PASS 1596`.
 
 ## Per-document status
 
@@ -69,8 +78,7 @@ passes with the expected NAT placeholder skips.
 - Phase 1 `devtools::test('.')`: `PASS 1458`, `FAIL 0`, `WARN 2`, `SKIP 0`.
 - Phase 6 `devtools::test('.')` with `NOT_CRAN=true` so snapshots run:
   `PASS 1475`, `FAIL 0`, `WARN 2`, `SKIP 3`.
-- Current full local test-directory skips are NAT-001, NAT-003, and two
-  CRAN-gated tests.
+- Current full local test-directory skips are NAT-001 and NAT-003.
 - `devtools::check('.', error_on = 'never')`: FAIL in both baseline and
   post-safety-net runs at `costablr-python-parity.Rmd` vignette rebuild.
 - `pkgdown::check_pkgdown()`: FAIL in baseline because
@@ -93,10 +101,10 @@ passes with the expected NAT placeholder skips.
 - Added `.Rbuildignore` rules so R source builds exclude repository-only
   sample data, notebooks, audit reports, and planning docs.
 - Closure validation:
-  - Audit safety net: pass, with NAT-001/002/003 skipped intentionally.
-  - Full test directory after the performance tranche: pass, with `WARN 2`
-    from existing `future` package build-version warnings and `SKIP 4`
-    (NAT-001, NAT-003, and two CRAN-gated tests).
+  - Audit safety net: pass, with NAT-001 and NAT-003 skipped intentionally.
+  - Full test directory after post-audit hardening: pass, with `WARN 2`
+    from existing `future` package build-version warnings and `SKIP 2`
+    (NAT-001 and NAT-003).
   - `devtools::check('.', error_on = 'never')`: `0 errors`, `1 WARNING`,
     `2 NOTEs`; remaining items are local `qpdf`, timestamp, and conda
     toolchain warnings/notes.
@@ -187,8 +195,8 @@ metrics before simpler pure-R improvements are attempted.
 - The original `devtools::check()` failure using a stale `stablr::stabl_fit()`
   backtrace is resolved after removing ignored vignette caches and rerendering
   `costablr-python-parity.Rmd`.
-- Cooperative-fusion outcome misalignment is inferred from positional call
-  sites but was not dynamically verified.
+- Cooperative-fusion outcome alignment is now dynamically guarded for scalar
+  Gaussian cooperative fusion and multinomial one-vs-rest cooperative fusion.
 - Sparse-group missing-dependency behavior was not dynamically verified because
   `sparsegl` is installed in the audit environment.
 
@@ -200,20 +208,14 @@ metrics before simpler pure-R improvements are attempted.
 - No external Python parity reruns were performed.
 - Heavy vignettes and SLURM workflows were not executed beyond the requested
   `devtools::check()` and pkgdown diagnostics.
-- Post-audit additions are explicitly NOT audited:
-  - `stabl_refit()` end-to-end refit API (commit `5c11faa`). No interface or
-    intent finding examines its scalar-validation contracts, factor-level
-    handling for binomial/multinomial, or `predict.stabl_refit()` newdata
-    column-checking. Its sole guard is `tests/testthat/test-stabl-refit.R`,
-    which only covers happy-path gaussian/binomial/empty-support cases.
-  - Multinomial cooperative fusion one-vs-rest branch (commit `ed84166`).
-    Audit INT-003 still flags this as a positional-alignment risk but did
-    not dynamically verify it for any family.
+- Post-audit additions now have targeted audit coverage for the concrete gaps
+  identified here: `stabl_refit()` family branches/schema validation and
+  cooperative-fusion outcome alignment.
 
 ## Gate
 
 Audit remediation complete. Safety net is updated to assert the fixed
-contracts. The full local test directory passes with WARN 2 and SKIP 4;
+contracts. The full local test directory passes with WARN 2 and SKIP 2;
 `devtools::check()` has 0 errors and no longer fails at
 `costablr-python-parity.Rmd`; pkgdown metadata checks are clean. NAT-001 and
 NAT-003 remain deferred.

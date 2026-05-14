@@ -42,6 +42,7 @@ reference:
   desc: Fit single-matrix STABL selectors and compute FDP+ thresholds.
   contents:
   - stabl_fit
+  - stabl_refit
   - auto_lambda_grid
   - compute_fdp_plus
 

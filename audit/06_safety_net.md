@@ -4,29 +4,15 @@ Remediation update: the audit tests were converted on 2026-05-13 from
 "current bug" snapshots to fixed-behavior assertions. The old bug snapshot
 files were removed because the corresponding tests no longer snapshot errors.
 
-Status reviewed: 2026-05-13. The safety net is CURRENT. Running
+Status reviewed: 2026-05-14. The safety net is CURRENT. Running
 `testthat::test_dir('tests/testthat', filter = 'audit', reporter = 'summary')`
 passes all fixed INT/IMPL/performance audit assertions and reports exactly the
 two expected NAT placeholder skips.
 
-> **Re-review note (2026-05-13 evening).** Two post-audit code areas are NOT
-> covered by any `test-audit-*.R` file:
->
-> 1. `stabl_refit()` (`R/stabl_refit.R`, commit `5c11faa`). Only the
->    happy-path tests in `tests/testthat/test-stabl-refit.R` exercise it.
->    No audit-level guard pins the `family` → task-type table, the
->    multinomial `nnet::multinom` path, the cox `survival::coxph` path, the
->    Poisson path, or `predict.stabl_refit()`'s `newdata` schema validation.
-> 2. Multinomial cooperative fusion one-vs-rest dispatch
->    (`R/multiomic_workflows.R`, commit `ed84166`). The audit's INT-003
->    cooperative-fusion misalignment risk now applies to this branch too,
->    but `tests/testthat/test-audit-multiomic-workflows.R` does not exercise
->    it. The relevant coverage lives in (non-audit)
->    `tests/testthat/test-multiomic-workflows.R`.
->
-> If the audit safety-net contract should be extended to cover these areas,
-> add new `test_that()` blocks to the existing audit files rather than
-> creating new files — same convention as the original audit suite.
+> **Post-audit hardening update (2026-05-14).** The two previously uncovered
+> post-audit areas now have audit-level guards: `stabl_refit()` branch/schema
+> tests live in `test-audit-stabl-fit.R`, and scalar plus multinomial
+> cooperative-fusion alignment tests live in `test-audit-multiomic-workflows.R`.
 
 ## Formatting
 
@@ -49,14 +35,21 @@ two expected NAT placeholder skips.
 
 ### `tests/testthat/test-audit-stabl-fit.R`
 
-- Guards: IMPL-002, IMPL-003.
+- Guards: IMPL-002, IMPL-003, post-audit `stabl_refit()` candidates.
 - Coverage:
   - zero artificial-feature count is rejected before score accumulation.
   - positive `sample_fraction` that floors to zero is rejected before
     bootstrap sampling.
+  - `stabl_refit()` covers multinomial, Poisson, and Cox final-refit
+    prediction branches.
+  - `predict.stabl_refit()` rejects missing selected columns and invalid
+    `newdata` row IDs.
+  - `stabl_refit()` inherits the `new_hard_threshold` validator.
+  - binomial final refit reports one-class loss after alignment.
 - Seeds/tolerance:
   - `withr::local_seed(101)` for zero artificial-feature count.
   - `withr::local_seed(102)` for zero subsample count.
+  - `withr::local_seed(601)` through `605` for `stabl_refit()` guards.
 - Snapshots: none; stale bug snapshots were removed.
 
 ### `tests/testthat/test-audit-input-validation.R`
@@ -75,10 +68,14 @@ two expected NAT placeholder skips.
   - no-colname selected features propagate fallback names into selected-matrix
     construction.
   - shuffled named `y_train` is aligned before late fusion.
+  - shuffled named `y_train` is aligned before scalar cooperative fusion and
+    multinomial one-vs-rest cooperative fusion.
   - validation predictors without `y_valid` return validation-row predictions.
   - binary `stacked_multi_omic()` rejects a recycled short outcome.
+  - two-class multinomial cooperative-fusion misuse points users to
+    `family = 'binomial'`.
 - Seeds/tolerance:
-  - `withr::local_seed(201)`, `202`, and `203`.
+  - `withr::local_seed(201)`, `202`, `203`, `700`, and `701`.
 - Snapshots: none; stale bug snapshots were removed.
 
 ### `tests/testthat/test-audit-artificial-features.R`
@@ -152,7 +149,7 @@ testthat::test_dir("tests/testthat", reporter = "summary")
 - Result: passed.
 - Warnings: same two `future` package build-version warnings observed in the
   Phase 1 baseline.
-- Skips: NAT-001 and NAT-003 placeholders plus the two CRAN-gated tests.
+- Skips: NAT-001 and NAT-003 placeholders.
 
 Post-remediation check:
 
@@ -172,7 +169,5 @@ pkgdown::check_pkgdown()
 ```
 
 - Result: no problems found.
-- POST-AUDIT NOTE 2026-05-13: this check was last run BEFORE commit `5c11faa`
-  exported `stabl_refit()`. The function is not present in `_pkgdown.yml`,
-  so a fresh `pkgdown::check_pkgdown()` may reproduce the IMPL-007 missing-
-  topic pattern. Re-run is recommended before the next release.
+- POST-AUDIT UPDATE 2026-05-14: re-run after adding `stabl_refit` to
+  `_pkgdown.yml`; no problems found.

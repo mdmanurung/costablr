@@ -15,7 +15,8 @@ recorded here are fixed in the post-remediation state:
   vignette-build failure. Current recorded closure is `0 errors`, with only
   local `qpdf`, timestamp, and conda toolchain warning/note items.
 - `pkgdown::check_pkgdown()`: FIXED after adding the missing
-  `costablr-tcga-nestedcv` article index entry.
+  `costablr-tcga-nestedcv` article index entry and, later, the post-audit
+  `stabl_refit` reference topic.
 
 ## Package metadata
 
@@ -29,8 +30,9 @@ recorded here are fixed in the post-remediation state:
   `mixOmics`, `multiview`, `pkgdown`, `rmarkdown`, `sparsegl`, `survival`,
   `testthat (>= 3.0.0)`, `withr`
   - DRIFT 2026-05-13: `nnet` was added to `Suggests` by commit `5c11faa` for
-    the multinomial branch of `stabl_refit()`. `DESCRIPTION` now lists 13
-    suggested packages.
+    the multinomial branch of `stabl_refit()`. `DESCRIPTION` now lists 14
+    suggested packages (furrr, future, ggplot2, knockoff, knitr, mixOmics,
+    multiview, nnet, pkgdown, rmarkdown, sparsegl, survival, testthat, withr).
 - Encoding: UTF-8
 - testthat edition: `3`
 
@@ -51,11 +53,11 @@ Runtime preflight in `R4_51`:
 
 `NAMESPACE` exports:
 
-- Core: `stabl_fit`, `auto_lambda_grid`, `compute_fdp_plus`
-  - DRIFT 2026-05-13: `stabl_refit` was added to `NAMESPACE` by commit
-    `5c11faa`. It is the end-to-end selector-plus-unpenalized-refit entry
-    point and is documented in `man/stabl_refit.Rd`. It is **absent from
-    `_pkgdown.yml`** — recurrence of the IMPL-007 pattern.
+- Core: `stabl_fit`, `stabl_refit`, `auto_lambda_grid`, `compute_fdp_plus`
+  - DRIFT 2026-05-13 / FIXED 2026-05-14: `stabl_refit` was added to
+    `NAMESPACE` by commit `5c11faa`. It is the end-to-end
+    selector-plus-unpenalized-refit entry point, is documented in
+    `man/stabl_refit.Rd`, and is now indexed in `_pkgdown.yml`.
 - Artificial features: `make_artificial_features`
 - Learner adapters: `make_glmnet_adapter`, `make_adaptive_lasso_adapter`,
   `make_sgl_adapter`
@@ -146,9 +148,10 @@ Native registration:
 - No pre-existing snapshot directory was tracked before Phase 6.
 - DRIFT 2026-05-13: `tests/testthat/test-stabl-refit.R` (~100 lines) was added
   by commit `5c11faa`. It covers happy-path gaussian, binomial, and
-  empty-support intercept-only cases. It does NOT exercise multinomial, cox,
-  poisson, or `predict.stabl_refit()` `newdata` schema mismatch — those
-  branches in `R/stabl_refit.R` are currently untested.
+  empty-support intercept-only cases.
+- FIXED 2026-05-14: `tests/testthat/test-audit-stabl-fit.R` now exercises
+  multinomial, Cox, Poisson, `new_hard_threshold`, binomial class-loss, and
+  `predict.stabl_refit()` `newdata` schema branches.
 
 ## Documentation inventory
 

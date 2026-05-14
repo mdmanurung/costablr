@@ -138,10 +138,11 @@ narrative rewrite, parallel render validation completed as SLURM array job
 7. ~~FDR graph vignette mismatch: documented horizontal FDP target line missing from `plot_fdr_graph()`.~~ **CLOSED 2026-05-12. Helper now draws `fdr_target = 0.05` by default; targeted plotting tests green.**
 8. ~~Intro-vignette toy simulations over-selected in regression because low-penalty lambda values made noise features stable.~~ **CLOSED 2026-05-12. Binary and regression examples now use independent planted-support simulations and compact strong-penalty lambda grids; render green.**
 9. ~~Intro-vignette clarity pass for new users while preserving introductory scope.~~ **CLOSED 2026-05-12. Added input-shape orientation, smoother selected-feature interpretation, explicit plot-saving pattern, and less formulaic prose; single-vignette render green.**
-10. Keep local deterministic validation green for every forward change.
-11. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
-12. Next CRAN-prep priority: decide whether to install/fix local TeX manual tooling or defer manual PDF validation to CI/CRAN-like builders.
-13. For the AURORA baseline scratch analysis, treat
+10. ~~Post-audit `stabl_refit()` / multinomial cooperative-fusion gaps from `audit/00_summary.md`.~~ **CLOSED 2026-05-14. Added `stabl_refit` to pkgdown, centralized refit-argument validation, hardened `predict.stabl_refit()` newdata row IDs, improved class-loss/two-class cooperative diagnostics, and added audit-level guards; full local suite `FAIL 0`, `WARN 2`, `SKIP 2`, `PASS 1596`.**
+11. Keep local deterministic validation green for every forward change.
+12. Keep Python-path API compatibility in source (`stabl/`) without notebook-local monkeypatching.
+13. Next CRAN-prep priority: decide whether to install/fix local TeX manual tooling or defer manual PDF validation to CI/CRAN-like builders.
+14. For the AURORA baseline scratch analysis, treat
     `scratch/01_costablr_core_basemalvac.ipynb` as feasibility only. The current
     notebook uses multinomial elastic net to classify study group
     (`EG`, `GA`, `TU`) for the `cytof_celltype` pilot and core three-view
@@ -224,11 +225,12 @@ narrative rewrite, parallel render validation completed as SLURM array job
     **CLOSED 2026-05-13.** Fixed INT-001 through INT-006 and IMPL-001 through
     IMPL-007 in dependency order. The follow-up performance tranche fixed
     PERF-001, PERF-002, PERF-003, PERF-005, PERF-006, and NAT-002; NAT-001
-    and NAT-003 remain deferred skipped placeholders. Latest closure signal:
-    full local test directory passes with `WARN 2` and `SKIP 4`;
+    and NAT-003 remain deferred skipped placeholders. Latest closure signal
+    after post-audit hardening: full local test directory passes with
+    `FAIL 0`, `WARN 2`, `SKIP 2`, `PASS 1596`;
     `devtools::check()` has `0 errors`, with only local
     `qpdf`/timestamp/toolchain warnings/notes; `pkgdown::check_pkgdown()`
-    reports no problems.
+    reports no problems after indexing `stabl_refit`.
 20. ~~Monitor renamed scratch visualization rerun.~~ **CLOSED 2026-05-13.**
     Scratch AURORA notebooks, helpers, SLURM scripts, cache roots, and output
     roots are now `costablr_*` namespaced under the standalone repository. All
@@ -598,6 +600,13 @@ Promotion criteria:
 
 ## Maintenance Notes
 
+- 2026-05-14: Recent-changes robustness follow-up is closed for the two
+  actionable items. Compiled `src/*.o` and `src/*.so` artifacts were removed
+  from the git index and working tree, then ignored for both git and R source
+  builds. Nested-CV selected-candidate final refit now restores the
+  majority-class fallback when final refit or final prediction fails. The
+  optional OVR fold-stratification warning and MVR discriminant edge remain
+  deferred; no roadmap gate is open.
 - 2026-05-13: Predictive STABL workflows now include a compulsory
   unpenalized final refit after selection. `stabl_fit()` remains the
   low-level selector; `stabl_refit()` owns the single-matrix end-to-end

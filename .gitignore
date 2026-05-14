@@ -9,6 +9,8 @@
 **/.ipynb_checkpoints/
 *.Rcheck/
 *.tar.gz
+src/*.o
+src/*.so
 
 Sample Data/
 Notebook examples/

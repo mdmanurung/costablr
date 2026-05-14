@@ -74,21 +74,23 @@
 - Risk: callers can supply correctly named but shuffled outcomes, get correct
   STABL selection, then train downstream late-fusion predictors against
   misordered outcomes.
-- Confidence: HIGH for late fusion. Cooperative-fusion alignment has similar
-  positional call sites at `R/multiomic_workflows.R:991` and
-  `R/multiomic_workflows.R:1047`, but that branch was not dynamically verified.
+- Confidence: HIGH. Cooperative-fusion alignment has similar positional call
+  sites and is now dynamically guarded for scalar Gaussian and multinomial
+  one-vs-rest paths.
 - Suggested fix: align `y_train` and `y_valid` once to `rownames(x_train_list[[1]])`
   and validation row names immediately after validation, then use aligned
   objects for all downstream branches.
 - POST-AUDIT NOTE 2026-05-13: commit `ed84166` adds a one-vs-rest multinomial
-  cooperative branch (`R/multiomic_workflows.R:1069` and around `:1284`,
-  `:1865` in the post-`ed84166` state). The audit's "cooperative-fusion was
-  not dynamically verified" qualifier still applies and now covers a strictly
-  larger surface — the multinomial OvR path constructs binary outcome vectors
-  per class and forwards them through the same cooperative helpers. The
-  alignment fix at `multiomic_workflows.R:127` (the `y_train <-
-  .subset_outcome_by_ids(...)` rewrite) precedes the cooperative dispatch, so
-  the fix likely covers the OvR branch too, but this has not been verified.
+  cooperative branch. Anchors in the post-`ed84166` state:
+  `.cooperative_multiomic_fit` definition at `R/multiomic_workflows.R:1060`
+  with multinomial early-return at `:1069`; the dedicated OvR helper
+  `.cooperative_multiomic_fit_ovr` is defined later (≥3-class guard at
+  `:1284`, serial per-class loop at `:1315`, recursive call back into
+  `.cooperative_multiomic_fit` at `:1326`). The top-level dispatch from
+  `stabl_multiomic_train_validate()` is at `:429`. POST-AUDIT UPDATE
+  2026-05-14: scalar Gaussian cooperative fusion and multinomial OvR
+  cooperative fusion now compare ordered versus shuffled named outcomes in
+  `tests/testthat/test-audit-multiomic-workflows.R`.
 
 ## Finding INT-004: Validation predictors without `y_valid` return empty late-fusion predictions
 
@@ -159,40 +161,44 @@
 
 ## Post-audit interface drift (NOT YET FILED AS NUMBERED FINDINGS)
 
-Candidates identified during the 2026-05-13 evening re-review. None have
-dynamic verification and none have safety-net coverage.
+Candidates identified during the 2026-05-13 evening re-review. Re-reviewed
+and remediated where appropriate on 2026-05-14.
 
 ### INT-CAND-A: `predict.stabl_refit()` rejects unnamed `newdata` but does not validate row IDs
 
+- Status: FIXED 2026-05-14. `predict.stabl_refit()` now requires non-empty,
+  unique `newdata` row names while still allowing prediction for genuinely
+  new sample IDs; selected-column validation is unchanged. Guarded by
+  `tests/testthat/test-audit-stabl-fit.R`.
 - Location: `R/stabl_refit.R:434`, `R/stabl_refit.R:451`.
 - Observation: `.stabl_subset_refit_newdata()` requires `colnames(newdata)`
-  and errors if any selected feature is missing, which is good. It does not
-  call `validate_sample_alignment()` against the original training rownames,
-  so `predict.stabl_refit(fit, newdata)` accepts arbitrary row names without
-  warning. Inherits the documented STABL "row names must be sample IDs"
-  contract loosely.
-- Risk: silently mismatched row indices in downstream consumers expecting
-  ordered sample IDs.
-- Severity: LOW. Confidence: HIGH from code inspection, no dynamic check.
+  and errors if any selected feature is missing. It now also rejects missing,
+  empty, `NA`, or duplicated row names. It intentionally does not require
+  `newdata` row IDs to match training IDs, because prediction must support new
+  samples.
+- Risk: fixed for malformed row IDs; arbitrary but well-formed new sample IDs
+  remain allowed by design.
+- Severity: LOW. Confidence: HIGH.
 
 ### INT-CAND-B: `stabl_refit()` `final_model_args` validation is duplicated
 
+- Status: FIXED 2026-05-14. The named-list contract is centralized in
+  `.validate_stabl_final_model_args()` and used by both entry points.
 - Location: `R/stabl_refit.R:82-87`, `R/stabl_refit.R:190-195`.
-- Observation: the named-list check is performed both in `stabl_refit()` and
-  again in `.fit_stabl_final_model()`. The duplicate is harmless but means
-  the validation contract is not pinned in a single helper.
-- Risk: future divergence between the two copies.
+- Observation: the named-list check is now implemented once in
+  `.validate_stabl_final_model_args()` and called from both public and shared
+  final-refit entry points.
+- Risk: fixed; future changes now have one helper to update.
 - Severity: LOW. Confidence: HIGH.
 
 ### INT-CAND-C: Multinomial cooperative fusion requires ≥3 training classes
 
+- Status: FIXED 2026-05-14. The error now points two-class users to
+  `family = 'binomial'`; guarded by `tests/testthat/test-audit-multiomic-workflows.R`.
 - Location: `R/multiomic_workflows.R:1284`.
 - Observation: the OvR cooperative branch hard-errors when
-  `length(levels(droplevels(factor(y_train)))) < 3`. This is reasonable but
-  the user-facing message does not explain that 2-class data should use
-  `family = "binomial"` with cooperative fusion directly. The audit's
-  INT-005 outcome-length checking pattern would catch some related misuses
-  but not this one.
-- Risk: confusing error for users with 2-class data that they incorrectly
-  labelled multinomial.
-- Severity: LOW. Confidence: HIGH from code; no dynamic verification.
+  `length(levels(droplevels(factor(y_train)))) < 3`, and the message now
+  explains that two-class data should use `family = "binomial"` with
+  cooperative fusion directly.
+- Risk: fixed for the confusing two-class misuse message.
+- Severity: LOW. Confidence: HIGH.

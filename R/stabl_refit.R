@@ -79,12 +79,7 @@ stabl_refit <- function(
   if (!is.matrix(x) || !is.numeric(x)) {
     stop("`x` must be a numeric matrix or data.frame.", call. = FALSE)
   }
-  if (!is.list(final_model_args) ||
-      (length(final_model_args) > 0L &&
-       (is.null(names(final_model_args)) ||
-        any(is.na(names(final_model_args)) | names(final_model_args) == "")))) {
-    stop("`final_model_args` must be a named list.", call. = FALSE)
-  }
+  final_model_args <- .validate_stabl_final_model_args(final_model_args)
 
   task_type <- .stabl_refit_task_type(family)
   validate_sample_alignment(x, y, groups = NULL)
@@ -121,6 +116,7 @@ stabl_refit <- function(
       selected_train = selected_train,
       training_predictions = final_refit$training_predictions,
       outcome_levels = final_refit$levels,
+      training_sample_ids = rownames(x),
       new_hard_threshold = new_hard_threshold,
       call = match.call()
     ),
@@ -187,12 +183,7 @@ print.stabl_refit <- function(x, ...) {
                                    task_type,
                                    levels = NULL,
                                    final_model_args = list()) {
-  if (!is.list(final_model_args) ||
-      (length(final_model_args) > 0L &&
-       (is.null(names(final_model_args)) ||
-        any(is.na(names(final_model_args)) | names(final_model_args) == "")))) {
-    stop("`final_model_args` must be a named list.", call. = FALSE)
-  }
+  final_model_args <- .validate_stabl_final_model_args(final_model_args)
 
   task_type <- match.arg(
     task_type,
@@ -224,7 +215,16 @@ print.stabl_refit <- function(x, ...) {
   }
 
   if (identical(task_type, "binary")) {
+    input_levels <- if (is.factor(y_train)) levels(y_train) else NULL
     y_factor <- droplevels(factor(y_train))
+    if (!is.null(input_levels) &&
+        length(input_levels) == 2L &&
+        length(levels(y_factor)) < 2L) {
+      stop(
+        "Binomial final refit received only one observed outcome class after alignment.",
+        call. = FALSE
+      )
+    }
     if (length(levels(y_factor)) != 2L) {
       stop("Binomial final refit requires exactly two outcome classes.",
            call. = FALSE)
@@ -436,6 +436,7 @@ print.stabl_refit <- function(x, ...) {
   if (!is.matrix(newdata) || !is.numeric(newdata)) {
     stop("`newdata` must be a numeric matrix or data.frame.", call. = FALSE)
   }
+  .validate_stabl_refit_newdata_ids(newdata)
   if (length(selected_features) == 0L) {
     return(matrix(
       numeric(0L),
@@ -457,6 +458,28 @@ print.stabl_refit <- function(x, ...) {
     )
   }
   newdata[, selected_features, drop = FALSE]
+}
+
+.validate_stabl_final_model_args <- function(final_model_args) {
+  if (!is.list(final_model_args) ||
+      (length(final_model_args) > 0L &&
+       (is.null(names(final_model_args)) ||
+        any(is.na(names(final_model_args)) | names(final_model_args) == "")))) {
+    stop("`final_model_args` must be a named list.", call. = FALSE)
+  }
+  final_model_args
+}
+
+.validate_stabl_refit_newdata_ids <- function(newdata) {
+  sample_ids <- rownames(newdata)
+  if (is.null(sample_ids) || anyNA(sample_ids) || any(sample_ids == "")) {
+    stop("`newdata` must have non-empty row names used as sample ids.",
+         call. = FALSE)
+  }
+  if (anyDuplicated(sample_ids)) {
+    stop("`newdata` row names must be unique sample ids.", call. = FALSE)
+  }
+  invisible(TRUE)
 }
 
 .stabl_predictor_frame <- function(x_selected) {

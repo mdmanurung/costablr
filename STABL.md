@@ -153,6 +153,8 @@ must remain explicit in code and tests:
    - `family = "cox"` refits `survival::coxph()`.
    If no features pass the STABL threshold, the final model is still fitted as
    an intercept-only model so the final stage remains present and explicit.
+   `predict.stabl_refit(newdata = ...)` requires a numeric matrix/data frame
+   with non-empty, unique row names and all selected feature columns.
 4. `stabl_multiomic_train_validate(late_fusion = TRUE)` uses the same
    unpenalized final-refit helper per omic before stacking per-view
    predictions.

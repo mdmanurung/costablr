@@ -1,10 +1,9 @@
 # 03 Intent-vs-Implementation Findings
 
-> **Re-review note (2026-05-13 evening).** A new pkgdown drift mirroring
-> IMPL-007 has appeared since the audit closed: `stabl_refit()` is exported
-> in `NAMESPACE` and documented at `man/stabl_refit.Rd`, but is absent from
-> `_pkgdown.yml` reference sections. See IMPL-007 below for the existing
-> pattern and the post-audit drift candidates at the bottom of this file.
+> **Re-review note (2026-05-13 evening; fixed 2026-05-14).** A pkgdown drift
+> mirroring IMPL-007 appeared after audit closure when `stabl_refit()` was
+> exported and documented but not indexed in `_pkgdown.yml`. The topic is now
+> indexed, and `pkgdown::check_pkgdown()` reports no problems.
 
 ## Finding IMPL-001: `get_support()` does not validate documented threshold shape
 
@@ -153,48 +152,41 @@ Candidates identified during the 2026-05-13 evening re-review.
 
 ### IMPL-CAND-A: `stabl_refit()` is exported but not indexed in `_pkgdown.yml`
 
-- Severity: LOW (recurrence of IMPL-007).
+- Status: FIXED 2026-05-14. `stabl_refit` is indexed in the Core STABL Engine
+  reference section, and `pkgdown::check_pkgdown()` reports no problems.
+- Severity: LOW (same pattern as IMPL-007, but for an exported function
+  topic rather than a vignette).
 - Locations: `NAMESPACE` (`export(stabl_refit)`), `man/stabl_refit.Rd:1`,
-  `_pkgdown.yml:40-110` (no reference entry).
+  `_pkgdown.yml` Core STABL Engine reference section.
 - Observation: `stabl_refit()` is a new top-level public API added by commit
-  `5c11faa`. It is documented and tested, but `_pkgdown.yml` does not list
-  it under any reference section. `pkgdown::check_pkgdown()` was clean at
-  audit closure; running it now would either succeed (because pkgdown is
-  permissive about exported topics missing from the reference list) or
-  reproduce the IMPL-007 missing-topic warning, depending on configuration.
-- Risk: built site lacks the new function's reference page even though the
-  function is exported.
-- Confidence: HIGH from inspection. Not dynamically verified against
-  `pkgdown::check_pkgdown()` post-`5c11faa`.
-- Suggested fix: add `stabl_refit` to the `Core STABL Engine` section of
-  `_pkgdown.yml` (its `STABL.md`/`README.md` framing treats it as the
-  end-to-end equivalent of `stabl_fit`).
+  `5c11faa`. It is documented, tested, and now listed in `_pkgdown.yml`.
+- Risk: fixed; the built site reference index includes the exported function.
+- Confidence: HIGH from inspection and `pkgdown::check_pkgdown()`.
+- Suggested fix: complete.
 
 ### IMPL-CAND-B: `stabl_refit()` documented `(0, 1]` threshold not validated end-to-end
 
+- Status: FIXED 2026-05-14. The entry point is now pinned by an audit test
+  that verifies invalid `new_hard_threshold` values fail through the
+  `get_support()` validator.
 - Severity: LOW.
 - Locations: `R/stabl_refit.R:33-35` (docs), `R/stabl_refit.R:100-104`
   (delegation).
 - Observation: `stabl_refit()` forwards `new_hard_threshold` to
-  `get_feature_names_out()`, which uses `get_support()`, which now has the
-  IMPL-001 scalar-finite-range guard. The IMPL-001 fix therefore *does*
-  cover this entry point. However, `stabl_refit()`'s own docstring re-states
-  the `(0, 1]` contract without referencing the upstream validator. If the
-  upstream validation ever loosens, this docstring becomes a silent
-  contract drift.
-- Risk: contract drift in the future, not a current defect.
-- Confidence: HIGH from inspection.
+  `get_feature_names_out()`, which uses `get_support()`, and the audit suite
+  now asserts that invalid overrides fail through that validator.
+- Risk: fixed; the public entry point is covered directly.
+- Confidence: HIGH from inspection and audit regression coverage.
 
 ### IMPL-CAND-C: `stabl_refit()` binomial path silently calls `droplevels()`
 
+- Status: FIXED 2026-05-14. A two-level factor with only one observed class
+  now receives a diagnostic alignment/class-loss error; guarded by
+  `tests/testthat/test-audit-stabl-fit.R`.
 - Severity: LOW.
 - Location: `R/stabl_refit.R:227`.
-- Observation: binomial dispatch calls `droplevels(factor(y_train))` before
-  asserting `length(levels(...)) == 2L`. When `y_train` is already a
-  two-level factor with one level having zero rows after alignment, the
-  caller sees the "exactly two outcome classes" error rather than a more
-  diagnostic "outcome lost a class during alignment" message. The audit's
-  INT-001 duplicate-ID rejection reduces this risk but does not eliminate
-  it (e.g. validation-only outcomes restricted by `train_ids`).
-- Risk: confusing error in alignment-failure scenarios.
-- Confidence: HIGH from inspection; no dynamic check.
+- Observation: binomial dispatch now detects a two-level factor that has only
+  one observed class after alignment before falling back to the generic
+  "exactly two outcome classes" error for other invalid outcomes.
+- Risk: fixed for the alignment/class-loss scenario.
+- Confidence: HIGH from inspection and audit regression coverage.

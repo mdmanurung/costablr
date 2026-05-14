@@ -39,6 +39,56 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Post-Audit `stabl_refit()` and Cooperative-Fusion Hardening (2026-05-14)
+
+- Added `stabl_refit` to the Core STABL Engine reference section in
+  `_pkgdown.yml`; `pkgdown::check_pkgdown()` now reports no problems after the
+  post-audit API addition.
+- Centralized `final_model_args` validation in
+  `.validate_stabl_final_model_args()` and added `predict.stabl_refit()`
+  validation for non-empty, unique `newdata` row names while preserving support
+  for genuinely new sample IDs.
+- Improved diagnostics for binomial final refits that receive a two-level
+  factor with only one observed class after alignment, and for two-class data
+  sent through multinomial cooperative one-vs-rest fusion.
+- Extended the audit safety net to cover `stabl_refit()` multinomial, Poisson,
+  Cox, threshold-override, and newdata-schema paths; scalar cooperative-fusion
+  outcome alignment; and multinomial one-vs-rest cooperative-fusion outcome
+  alignment.
+- Updated `STABL.md`, audit notes, `PLAN.md`, and `HANDOFF.md` to reflect the
+  closed post-audit gaps. Remaining PERF/NAT items are still explicit deferred
+  optimization work rather than correctness blockers.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('R/stabl_refit.R')); invisible(parse('R/multiomic_workflows.R')); invisible(parse('tests/testthat/test-audit-stabl-fit.R')); invisible(parse('tests/testthat/test-audit-multiomic-workflows.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "pkgdown::check_pkgdown()"
+# -> No problems found
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-stabl-fit.R', reporter = 'summary')"
+# -> audit-stabl-fit passed; WARN 1 from testthat build-version warning
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R', reporter = 'summary')"
+# -> audit-multiomic-workflows passed; WARN 1 from testthat build-version warning
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'audit', reporter = 'summary')"
+# -> audit subset passed; SKIP 2 intentional NAT-001/NAT-003 placeholders
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-stabl-refit.R', reporter = 'summary')"
+# -> stabl-refit passed
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R', reporter = 'summary')"
+# -> multiomic-workflows passed
+
+conda run -n R4_51 Rscript -e "Sys.setenv(NOT_CRAN='true'); devtools::test('.')"
+# -> FAIL 0, WARN 2, SKIP 2, PASS 1596
+# -> warnings are existing future package build-version warnings
+# -> skips are intentional NAT-001 and NAT-003 placeholders
+```
+
 ### STABL Upstream Parity Source Audit (2026-05-13)
 
 - Audited `STABL.md` against pinned upstream Python commit
@@ -2703,4 +2753,36 @@ conda run -n R4_51 R --no-save -q -e "devtools::check('.', error_on = 'never')"
 
 conda run -n R4_51 R --no-save -q -e "pkgdown::check_pkgdown()"
 # -> No problems found
+```
+
+### Recent Changes Robustness Follow-Up (2026-05-14)
+
+- Implemented the two actionable fixes from the recent-changes robustness
+  review.
+- Removed committed compiled artifacts from the git index with
+  `git rm --cached src/*.o src/*.so`; `git ls-files src` now lists only
+  `src/RcppExports.cpp`, `src/corr_groups.cpp`, and `src/mvr_knockoff.cpp`.
+  The local generated `.o`/`.so` copies were also removed from the working tree.
+- Added `src/*.o` and `src/*.so` to `.gitignore`, and added matching
+  `.Rbuildignore` patterns so local untracked compiled artifacts do not enter
+  source builds.
+- Restored nested-CV graceful degradation around the final refit/predict step:
+  `.fit_stabl_nested_candidate()` now routes selected-feature refit prediction
+  through `.predict_stabl_nested_final_classes()`, which falls back to the
+  training majority class when `.fit_stabl_final_model()` or
+  `.predict_stabl_final_model()` errors.
+- Added focused regression coverage in `tests/testthat/test-nested-cv.R` for a
+  degenerate binomial final-refit split with only one observed training class.
+- Assumption: the low-severity optional OVR fold-stratification and MVR
+  discriminant-parity observations remain deferred because the review marked
+  items 1 and 2 as the only fixes worth changing now.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('R/nested_cv.R')); invisible(parse('tests/testthat/test-nested-cv.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-nested-cv.R', reporter = 'summary')"
+# -> nested-cv completed successfully; only the existing testthat build-version warning was emitted
 ```

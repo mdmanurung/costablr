@@ -1281,7 +1281,7 @@ stabl_multiomic_cv <- function(
   class_levels <- levels(y_train_factor)
   if (length(class_levels) < 3L) {
     stop(
-      "One-vs-rest cooperative fusion for `family = 'multinomial'` requires at least three training classes.",
+      "One-vs-rest cooperative fusion for `family = 'multinomial'` requires at least three training classes; use `family = 'binomial'` for two-class cooperative fusion.",
       call. = FALSE
     )
   }

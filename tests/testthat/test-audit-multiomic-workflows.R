@@ -121,3 +121,143 @@ test_that("AUDIT INT-005: stacked_multi_omic rejects recycled short y", {
     "one value per prediction row"
   )
 })
+
+test_that("AUDIT INT-003: shuffled y is aligned before gaussian cooperative fusion", {
+  skip_if_not_installed("multiview")
+  withr::local_seed(700)
+  ids <- paste0("s", seq_len(18L))
+  x_a <- matrix(
+    rnorm(18L * 4L),
+    nrow = 18L,
+    dimnames = list(ids, paste0("a", seq_len(4L)))
+  )
+  x_b <- matrix(
+    rnorm(18L * 4L),
+    nrow = 18L,
+    dimnames = list(ids, paste0("b", seq_len(4L)))
+  )
+  y <- setNames(1.3 * x_a[, 1L] - 0.8 * x_b[, 2L] + rnorm(18L, sd = 0.1), ids)
+  y_shuffled <- y[sample(seq_along(y))]
+
+  args <- list(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    lambda_grid = data.frame(lambda = 0.05),
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 1L,
+    sample_fraction = 1,
+    family = "gaussian",
+    random_state = 700L,
+    cooperative_fusion = TRUE,
+    rho = 0,
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  )
+  fit_ordered <- suppressWarnings(do.call(
+    stabl_multiomic_train_validate,
+    c(args, list(y_train = y))
+  ))
+  fit_shuffled <- suppressWarnings(do.call(
+    stabl_multiomic_train_validate,
+    c(args, list(y_train = y_shuffled))
+  ))
+
+  expect_equal(
+    fit_ordered$cooperative_fusion$selected_features,
+    fit_shuffled$cooperative_fusion$selected_features
+  )
+  expect_equal(
+    fit_ordered$cooperative_fusion$train_predictions,
+    fit_shuffled$cooperative_fusion$train_predictions,
+    tolerance = 1e-8,
+    ignore_attr = TRUE
+  )
+})
+
+.audit_make_three_class_omics <- function(n_per_class = 5L, seed = 701L) {
+  set.seed(seed)
+  n <- 3L * n_per_class
+  ids <- paste0("s", seq_len(n))
+  y <- setNames(factor(rep(c("A", "B", "C"), each = n_per_class)), ids)
+  signal <- model.matrix(~ y - 1)
+  x_a <- matrix(
+    rnorm(n * 4L, sd = 0.25),
+    nrow = n,
+    dimnames = list(ids, paste0("a", seq_len(4L)))
+  )
+  x_b <- matrix(
+    rnorm(n * 4L, sd = 0.25),
+    nrow = n,
+    dimnames = list(ids, paste0("b", seq_len(4L)))
+  )
+  x_a[, 1:3] <- x_a[, 1:3] + 1.2 * signal
+  x_b[, 1:3] <- x_b[, 1:3] + signal
+  list(x_a = x_a, x_b = x_b, y = y)
+}
+
+test_that("AUDIT INT-003: shuffled y is aligned before multinomial cooperative fusion", {
+  skip_if_not_installed("multiview")
+  withr::local_seed(701)
+  d <- .audit_make_three_class_omics(n_per_class = 5L, seed = 701L)
+  y_shuffled <- d$y[sample(seq_along(d$y))]
+
+  args <- list(
+    x_train_list = list(omic_a = d$x_a, omic_b = d$x_b),
+    lambda_grid = data.frame(lambda = 0.05),
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 1L,
+    sample_fraction = 1,
+    family = "multinomial",
+    random_state = 701L,
+    cooperative_fusion = TRUE,
+    rho = 0,
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  )
+  fit_ordered <- suppressWarnings(do.call(
+    stabl_multiomic_train_validate,
+    c(args, list(y_train = d$y))
+  ))
+  fit_shuffled <- suppressWarnings(do.call(
+    stabl_multiomic_train_validate,
+    c(args, list(y_train = y_shuffled))
+  ))
+
+  expect_equal(
+    fit_ordered$cooperative_fusion$selected_features,
+    fit_shuffled$cooperative_fusion$selected_features
+  )
+  expect_equal(
+    fit_ordered$cooperative_fusion$class_summary,
+    fit_shuffled$cooperative_fusion$class_summary,
+    ignore_attr = TRUE
+  )
+  expect_equal(
+    fit_ordered$cooperative_fusion$train_predictions,
+    fit_shuffled$cooperative_fusion$train_predictions,
+    tolerance = 1e-8,
+    ignore_attr = TRUE
+  )
+})
+
+test_that("AUDIT INT-CAND-C: two-class multinomial cooperative error points to binomial", {
+  ids <- paste0("s", seq_len(6L))
+  x <- matrix(
+    rnorm(6L * 3L),
+    nrow = 6L,
+    dimnames = list(ids, paste0("f", seq_len(3L)))
+  )
+  y <- setNames(factor(rep(c("A", "B"), each = 3L)), ids)
+
+  expect_error(
+    .cooperative_multiomic_fit_ovr(
+      x_train_list = list(view = x),
+      y_train = y,
+      cooperative_args = list()
+    ),
+    "family = 'binomial'"
+  )
+})
