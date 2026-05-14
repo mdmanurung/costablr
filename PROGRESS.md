@@ -39,6 +39,81 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Scratch Notebook SLURM Dashboards and Refit API Refresh (2026-05-14)
+
+- Rebuilt all five active notebooks under `scratch/` as cache-first SLURM
+  launchpad/monitor dashboards:
+  `01_costablr_baseline_groups_test.ipynb`,
+  `02_costablr_baseline_group_protection_test.ipynb`,
+  `03_costablr_baseline_study_protection_test.ipynb`,
+  `04_costablr_baseline_binary_comparisons.ipynb`, and
+  `05_costablr_baseline_groups_multinomial_ovr_test.ipynb`.
+  These scratch files are live on disk but remain ignored by the repository's
+  `scratch/` ignore rule, so they do not appear in plain `git status`.
+- The notebooks now share the same operating pattern: publication-scale
+  parameter audit, expected-artifact dashboard, missing-output audit,
+  `squeue`/`sacct` monitor, guarded nonblocking `sbatch` submission, bounded
+  log tailing, cache-only object summaries, refit/metric/confusion summaries,
+  feature-signature plots, and generated-figure galleries.
+- Heavy work remains outside notebook kernels.  The guarded submit cell only
+  submits when `COSTABLR_SUBMIT_JOBS=true`; dry-run is the default.  Fresh
+  rerun chains export `COSTABLR_FORCE_RECOMPUTE=TRUE` by default so all
+  notebook-managed caches can be regenerated deliberately from the dashboard.
+- Publication-scale defaults are now consistent across notebooks and SLURM
+  wrappers where feasible: `COSTABLR_N_BOOTSTRAPS=1000`,
+  `COSTABLR_N_LAMBDA=50`, `COSTABLR_ARTIFICIAL_TYPE=mvr_knockoff`,
+  `COSTABLR_ARTIFICIAL_PROPORTION=1`, and
+  `COSTABLR_N_ITER_LF=10000`.  Main study-group and binary dashboards use
+  `sample_fraction=0.8`; the six-label study-protection dashboard keeps
+  `sample_fraction=0.9` and smaller nested/cooperative fold defaults because
+  `TU_NP` has only 3 samples.
+- Updated scratch single-matrix model branches to use the current
+  `stabl_refit()` API.  Existing cache names remain stable
+  (`stabl_fit_bundle.rds`), but bundles now include both `fit` and `refit`;
+  branch exports also include `stabl_refit_train_predictions.csv`,
+  `stabl_refit_confusion_matrix.csv`, and `stabl_refit_metrics.csv` for
+  classification tasks.
+- Removed the study-protection direct-OVR notebook-local `glmnet` refit path
+  from the preferred execution path: OVR predictions now come from the cached
+  `stabl_refit` object, with the previous selected-feature `glmnet` fallback
+  left only for legacy cache compatibility.
+- Hardened multi-omic scratch runner calls so configured
+  `artificial_proportion`, worker count, and FDP threshold grid are forwarded
+  consistently into late-fusion, cooperative, and nested-CV branches.
+
+Validation:
+
+```bash
+python - <<'PY'
+# JSON load and code extraction for all scratch/*.ipynb
+# -> all five notebooks json ok; 27 cells each; extracted R code written to /tmp
+PY
+
+conda run -n scvi python -c "import nbformat, pathlib; [nbformat.validate(nbformat.read(str(p), as_version=4)) or print(str(p), 'nbformat ok') for p in sorted(pathlib.Path('scratch').glob('*.ipynb'))]"
+# -> all five notebooks nbformat ok
+
+conda run -n R4_51 Rscript -e "for (f in Sys.glob('/tmp/[0-9][0-9]_costablr*code.R')) { parse(f); cat(basename(f), 'parse ok\n') }"
+# -> extracted code for all five notebooks parses
+
+conda run -n R4_51 Rscript -e "files <- c('scratch/scripts/costablr_baseline_groups_helpers.R','scratch/scripts/run_costablr_baseline_groups_branch.R','scratch/scripts/costablr_baseline_group_protection_helpers.R','scratch/scripts/run_costablr_baseline_group_protection_branch.R','scratch/scripts/costablr_baseline_study_protection_helpers.R','scratch/scripts/run_costablr_baseline_study_protection_branch.R','scratch/scripts/costablr_baseline_comparisons_helpers.R','scratch/scripts/run_costablr_baseline_comparisons_branch.R'); for (f in files) parse(f); cat('script parse ok\n')"
+# -> script parse ok
+
+bash -n scratch/slurm/costablr_baseline_preprocess.slurm scratch/slurm/costablr_baseline_branches.slurm scratch/slurm/costablr_baseline_group_protection_preprocess.slurm scratch/slurm/costablr_baseline_group_protection_branches.slurm scratch/slurm/costablr_baseline_study_protection_preprocess.slurm scratch/slurm/costablr_baseline_study_protection_branches.slurm scratch/slurm/costablr_baseline_comparisons_preprocess.slurm scratch/slurm/costablr_baseline_comparisons_branches.slurm
+# -> slurm syntax ok
+
+COSTABLR_SUBMIT_JOBS=false conda run -n R4_51 Rscript /tmp/01_costablr_baseline_groups_test_code.R
+COSTABLR_SUBMIT_JOBS=false conda run -n R4_51 Rscript /tmp/02_costablr_baseline_group_protection_test_code.R
+COSTABLR_SUBMIT_JOBS=false conda run -n R4_51 Rscript /tmp/03_costablr_baseline_study_protection_test_code.R
+COSTABLR_SUBMIT_JOBS=false conda run -n R4_51 Rscript /tmp/04_costablr_baseline_binary_comparisons_code.R
+COSTABLR_SUBMIT_JOBS=false conda run -n R4_51 Rscript /tmp/05_costablr_baseline_groups_multinomial_ovr_test_code.R
+# -> all five notebooks dry-run without submitting jobs
+
+conda run -n R4_51 Rscript - <<'RS'
+# tiny synthetic stabl_refit branch smoke through scratch/scripts/costablr_baseline_groups_helpers.R
+# -> stabl_refit branch smoke exited 0 and wrote stabl_refit_train_predictions.csv
+RS
+```
+
 ### Post-Audit `stabl_refit()` and Cooperative-Fusion Hardening (2026-05-14)
 
 - Added `stabl_refit` to the Core STABL Engine reference section in
@@ -2843,4 +2918,44 @@ conda run -n R4_51 Rscript -e "invisible(parse('R/nested_cv.R')); invisible(pars
 
 conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-nested-cv.R', reporter = 'summary')"
 # -> nested-cv completed successfully; only the existing testthat build-version warning was emitted
+```
+
+### Scratch Workflow Full SLURM Resubmission (2026-05-14)
+
+- Submitted all active scratch costablr workflow chains from preprocessing
+  after the user fixed raw-data file paths.
+- Cancelled the pending previous costablr scratch workflow jobs before the
+  fresh submission to avoid duplicate cache writers:
+  `24773381`, `24773383`, `24773384`, `24773386`, `24773387`, `24773412`,
+  `24773413`, and `24773414`.
+- Left unrelated `rajive_vignettes` jobs alone because they are not one of the
+  active `scratch/slurm/costablr_*.slurm` workflow entrypoints.
+- Fresh submission uses the publication-scale rerun envelope exported through
+  Slurm: `COSTABLR_N_BOOTSTRAPS=1000`, `COSTABLR_N_LAMBDA=50`,
+  `COSTABLR_N_ITER_LF=10000`, `COSTABLR_ARTIFICIAL_TYPE=mvr_knockoff`,
+  `COSTABLR_ARTIFICIAL_PROPORTION=1`, `COSTABLR_L1_RATIO=0.5`, and
+  `COSTABLR_FORCE_RECOMPUTE=TRUE`.
+- Fresh job chains:
+  - baseline: preprocess `24773426`, branch array `24773427` (`0-18`),
+    visualize `24773428`;
+  - group protection: preprocess `24773429`, branch array `24773430`
+    (`0-51`);
+  - study protection: preprocess `24773431`, branch array `24773432`
+    (`0-26`), visualize `24773433`;
+  - binary comparisons: preprocess array `24773434` (`0-2`), branch array
+    `24773435` (`0-47`), visualize array `24773436` (`0-2`).
+- Submission manifests were recorded under
+  `scratch/cache/slurm-submissions/resubmission_all_scratch_20260514_230003.tsv`
+  and
+  `scratch/outputs/slurm-submissions/resubmission_all_scratch_20260514_230003.tsv`.
+
+Validation:
+
+```bash
+squeue -u "$USER" -o '%i|%T|%R|%j' | rg '2477342|2477343|costablr_base'
+# -> baseline/group/study preprocess jobs running and dependent branch arrays pending
+
+sacct -j 24773426,24773427,24773428,24773429,24773430,24773431,24773432,24773433,24773434,24773435,24773436 --format=JobID,JobName%45,State,ExitCode,Elapsed,Start -P
+# -> immediate post-submit check showed preprocess jobs running or pending and
+#    dependent arrays pending with no Slurm-level submission error
 ```

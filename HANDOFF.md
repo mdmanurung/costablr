@@ -174,6 +174,35 @@ For details that must not be duplicated here:
   checks, and the CyTOF beta-overlay smoke fit pass in `R4_51`; observed
   warnings are package build-version warnings and the known small-class glmnet
   bootstrap warnings.
+- Latest scratch dashboard refresh: all five active notebooks under `scratch/`
+  are now guarded SLURM launchpad/monitor dashboards rather than in-kernel
+  heavy runners. They share publication-scale defaults (`1000` bootstraps,
+  `50` lambdas, `mvr_knockoff`, artificial proportion `1`, and `10000`
+  late-fusion draws), expected-artifact dashboards, missing-output audits,
+  `squeue`/`sacct` monitors, guarded `sbatch` chains, bounded log tailing,
+  refit/metric/confusion summaries, feature plots, and generated-figure
+  galleries. The guarded submit cell remains dry-run unless
+  `COSTABLR_SUBMIT_JOBS=true`; `COSTABLR_FORCE_RECOMPUTE=TRUE` is exported by
+  default when reruns are launched.
+- Latest scratch API signal: scratch single-matrix branches now call
+  `stabl_refit()` instead of selector-only `stabl_fit()`. Existing
+  `stabl_fit_bundle.rds` cache names are preserved, but bundles now include
+  both `fit` and `refit`, and classification branches export
+  `stabl_refit_train_predictions.csv`, `stabl_refit_confusion_matrix.csv`, and
+  `stabl_refit_metrics.csv`. The six-label direct OVR path now prefers these
+  cached refit predictions, with the old selected-feature `glmnet` path left
+  only for legacy cache fallback.
+- Latest scratch SLURM submission signal: after the user fixed raw-data file
+  paths, all active costablr scratch workflows were resubmitted from
+  preprocessing at publication-scale settings. Active fresh job roots are
+  baseline `24773426` -> `24773427` -> `24773428`, group protection
+  `24773429` -> `24773430`, study protection `24773431` -> `24773432` ->
+  `24773433`, and binary comparisons `24773434` -> `24773435` ->
+  `24773436`. The manifest is recorded at
+  `scratch/cache/slurm-submissions/resubmission_all_scratch_20260514_230003.tsv`
+  and mirrored under `scratch/outputs/slurm-submissions/`. If any of these
+  jobs fail, pause and confirm with the user before choosing whether to patch,
+  cancel, or resubmit.
 - Latest guided all-view scratch notebook:
   `scratch/01_costablr_baseline_groups_test.ipynb` is now the active
   nonblocking SLURM control center for the full AURORA baseline study-group
@@ -191,15 +220,14 @@ For details that must not be duplicated here:
   branches, early fusion, late fusion, manual cooperative OVR for `EG/GA/TU`,
   and nested CV. The shared baseline helper now passes
   `stratify_bootstrap = TRUE` explicitly for single-view and early-fusion
-  `stabl_fit()` calls; all baseline fit paths use study-group bootstrap
+  `stabl_refit()` calls; all baseline fit paths use study-group bootstrap
   strata, with one-vs-rest branches also carrying outcome strata.
-  Fresh rerun submitted with `mvr_knockoff`, 500 bootstraps, 20 lambdas, and
-  sample fraction 0.8: preprocessing job `24766504`, dependent main branch
-  array `24766506`, and dependent visualization job `24766507`. Latest queue
-  check showed the main branch array running and visualization pending on
-  dependency. Latest validation: notebook JSON OK, nbformat OK, extracted R
-  parse OK, helper and runner parse OK, SLURM `bash -n` OK, and a non-heavy
-  cache-loading smoke passed with submit disabled.
+  The earlier `mvr_knockoff`, 500-bootstrap, 20-lambda rerun chain
+  (`24766504` -> `24766506` -> `24766507`) is historical context; future
+  reruns should use the refreshed dashboard defaults above. Latest validation:
+  notebook JSON OK, nbformat OK, extracted R parse OK, helper and runner parse
+  OK, SLURM `bash -n` OK, all five notebooks dry-run with submit disabled, and
+  a tiny synthetic `stabl_refit` branch smoke exits 0.
 - Latest baseline binary comparison notebook:
   `scratch/04_costablr_baseline_binary_comparisons.ipynb` is the SLURM-cached
   companion for explicit binomial contrasts. It evaluates `EG_vs_GA_TU`
@@ -319,9 +347,11 @@ For details that must not be duplicated here:
 2. Render `vignettes/costablr-tcga-nestedcv.Rmd` from the completed TCGA
    nested-CV cache and record the output path and result signal in
    `PROGRESS.md`.
-3. For any new AURORA scratch submissions, use the `costablr_*` notebooks,
-   scripts, SLURM files, and `COSTABLR_*` environment variables; legacy
-   `STABLR_*` variables are accepted only as helper-side compatibility.
+3. For the next AURORA scratch run, open the relevant refreshed notebook under
+   `scratch/`, review the missing-artifact dashboard, set
+   `COSTABLR_SUBMIT_JOBS=true` only when ready, and launch the guarded
+   publication-scale SLURM chain from the notebook so job IDs are recorded for
+   monitoring.
 
 ### Vignette runtime profile (2026-05-10)
 
@@ -444,17 +474,24 @@ conda run -n R4_51 R CMD INSTALL multiview
 - Ignored scratch notebook `scratch/01_costablr_core_basemalvac.ipynb` is now
   configured for baseline study-group multinomial elastic-net classification
   (`EG`, `GA`, `TU`) and treats P/NP status as QC-only context.
-- Scratch workflow sources are no longer blanket-ignored; generated scratch
-  artifact directories remain ignored. Bootstrap-strata data-frame/matrix row
-  names are now aligned by sample ID when numeric-looking IDs match the sample
-  set but appear in a different order.
+- `scratch/` remains blanket-ignored by `.gitignore` in this checkout, so
+  notebook/helper/SLURM edits under `scratch/` are live on disk but do not
+  appear in plain `git status`. Bootstrap-strata data-frame/matrix row names
+  are now aligned by sample ID when numeric-looking IDs match the sample set
+  but appear in a different order.
 - Current AURORA baseline execution chain:
-  - cached artifacts are present for preprocessing, CyTOF, all 11
-    single-view branches, early fusion, late fusion, cooperative OVR
-    `EG/GA/TU`, visualization, and nested CV under
+  - fresh publication-scale SLURM jobs are active for the baseline,
+    group-protection, study-protection, and binary-comparison scratch
+    workflows: `24773426` through `24773436`;
+  - cached artifacts from earlier runs remain present for preprocessing,
+    CyTOF, all 11 single-view branches, early fusion, late fusion,
+    cooperative OVR `EG/GA/TU`, visualization, and nested CV under
     `scratch/cache/costablr_baseline_groups_test/`;
-  - the active notebook now loads those branch artifacts by default and should
-    only rerun heavy work when the relevant `RUN_*` flag is explicitly set;
+  - the active notebooks now load branch artifacts by default and submit heavy
+    work only through guarded `sbatch` cells when `COSTABLR_SUBMIT_JOBS=true`;
+  - future reruns should use the refreshed `1000`-bootstrap, `50`-lambda,
+    `mvr_knockoff` defaults and should expect new `stabl_refit_*` prediction,
+    confusion, and metric exports for single-matrix branches;
   - binary comparison artifacts are generated through SLURM jobs
     `24758964` -> `24758967`, with failed visualization job `24758968`
     superseded by completed rerun `24766406`; artifacts land under
@@ -469,8 +506,9 @@ conda run -n R4_51 R CMD INSTALL multiview
   - heavy six-class, direct OVR, cooperative OVR, late-fusion, nested-CV, and
     visualization branches have entrypoints but have not been run at
     publication settings yet;
-  - use `sbatch scratch/slurm/costablr_baseline_study_protection_branches.slurm`
-    for the 27 heavy branches and then submit a dependent `visualize` branch.
+  - use the refreshed `scratch/03_costablr_baseline_study_protection_test.ipynb`
+    dashboard to submit the 27 heavy branches and dependent `visualize` branch;
+    direct OVR branch predictions now come from `stabl_refit` caches.
 - Current audit gate:
   - May 13 audit remediation is closed for INT-001 through INT-006 and
     IMPL-001 through IMPL-007; May 14 post-audit hardening closes the

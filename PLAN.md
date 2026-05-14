@@ -167,12 +167,15 @@ narrative rewrite, parallel render validation completed as SLURM array job
     early-fusion, late-fusion, manual cooperative OVR, and nested-CV branches.
     Baseline branch fits enforce stratified bootstraps through
     `stratify_bootstrap = TRUE` with explicit study-group bootstrap strata
-    (plus outcome strata for one-vs-rest branches). A rerun chain using
-    `mvr_knockoff` is live as preprocessing job `24766504`, main branch array
-    `24766506`, and dependent visualization job `24766507`; monitor these
-    jobs before interpreting refreshed caches. Before treating results as
-    biological evidence, rerun with publication-scale bootstrap/nested-CV
-    settings and document nested-CV and sensitivity results in `PROGRESS.md`.
+    (plus outcome strata for one-vs-rest branches). As of 2026-05-14 the
+    notebook and paired SLURM wrappers default to a publication-scale rerun
+    envelope (`1000` bootstraps, `50` lambdas, `mvr_knockoff`, full artificial
+    proportion, and `10000` late-fusion draws).  Single-view and early-fusion
+    branches now cache `stabl_refit()` final models and refit prediction
+    tables in addition to the selector object.  Before treating results as
+    biological evidence, launch the guarded rerun from the notebook dashboard,
+    monitor all dependent jobs there, and document nested-CV and sensitivity
+    results in `PROGRESS.md`.
 15. For AURORA baseline binary study-group comparisons, use
     `scratch/04_costablr_baseline_binary_comparisons.ipynb`. It is the
     SLURM-cached companion to the multinomial notebook and evaluates
@@ -187,10 +190,13 @@ narrative rewrite, parallel render validation completed as SLURM array job
     multinomial workflow. The notebook has been executed end-to-end in
     `R4_51`; keep the helper fallback rooted on `COSTABLR_REPO_ROOT` so
     notebook-directory execution does not create nested `scratch/scratch`
-    paths. The old visualization array `24758968` failed because `conda` was
-    not on the batch-job `PATH`; the renamed SLURM scripts now use an explicit
-    `${CONDA_EXE:-.../conda}` fallback and visualization rerun `24766406`
-    completed all three contrast tasks with exit code `0:0`.
+    paths. As of 2026-05-14 it has the same guarded SLURM dashboard,
+    publication-scale defaults, refit-artifact audit, metrics, feature plots,
+    and figure gallery as the multinomial notebook. The old visualization
+    array `24758968` failed because `conda` was not on the batch-job `PATH`;
+    the renamed SLURM scripts now use an explicit `${CONDA_EXE:-.../conda}`
+    fallback and visualization rerun `24766406` completed all three contrast
+    tasks with exit code `0:0`.
 16. For crossed AURORA study-by-protection exploration, use
     `scratch/03_costablr_baseline_study_protection_test.ipynb`. It is a copied
     cache-first all-view workflow targeting six labels (`EG_P`, `EG_NP`,
@@ -198,16 +204,20 @@ narrative rewrite, parallel render validation completed as SLURM array job
     six-class multinomial branches, direct binomial OVR branches, and
     cooperative OVR branches. Heavy work should run through
     `scratch/scripts/run_costablr_baseline_study_protection_branch.R` or
-    `scratch/slurm/costablr_baseline_study_protection_*.slurm`; notebook-local
-    refits remain opt-in. Treat this workflow as exploratory because `TU_NP`
-    has only 3 baseline samples.
+    `scratch/slurm/costablr_baseline_study_protection_*.slurm`; the notebook
+    is now a guarded SLURM launchpad/monitor and direct OVR prediction uses the
+    current `stabl_refit()` cache path. Treat this workflow as exploratory
+    because `TU_NP` has only 3 baseline samples, so its nested/cooperative fold
+    defaults remain smaller than the main three-class workflow.
 17. For the focused AURORA study-group plus P/NP request, use
     `scratch/02_costablr_baseline_group_protection_test.ipynb`. It keeps the
     exact six-class order `EG_P`, `EG_NP`, `TU_P`, `TU_NP`, `GA_P`, `GA_NP`
     and adds per-study `P` vs `NP` comparisons for `EG`, `TU`, and `GA`.
     Heavy branches should run through
     `scratch/scripts/run_costablr_baseline_group_protection_branch.R` or
-    `scratch/slurm/costablr_baseline_group_protection_*.slurm`. This workflow is
+    `scratch/slurm/costablr_baseline_group_protection_*.slurm`. As of
+    2026-05-14 it is also a guarded SLURM dashboard with refit prediction
+    audits and cache-only visualization summaries. This workflow is
     intentionally narrower than the six-group study-protection notebook:
     single-view, early-fusion, and late-fusion caches only; no cooperative OVR
     or nested CV by default.
@@ -608,6 +618,11 @@ Promotion criteria:
 
 ## Maintenance Notes
 
+- 2026-05-14: All active scratch costablr SLURM workflows were resubmitted
+  from preprocessing after raw-data file paths were fixed. Track the fresh
+  job chain `24773426` through `24773436` from the notebook dashboards or
+  Slurm directly. No new roadmap gate is open; any failed job requires user
+  confirmation before patching, cancellation, or resubmission.
 - 2026-05-14: Recent-changes robustness follow-up is closed for the two
   actionable items. Compiled `src/*.o` and `src/*.so` artifacts were removed
   from the git index and working tree, then ignored for both git and R source
