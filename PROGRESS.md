@@ -39,6 +39,297 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Python-Original STABL Parity Restoration (2026-05-18)
+
+- Restored the active selector contract to upstream Python STABL
+  `gregbellan/Stabl@1d07f85` when Python code and paper notation conflict.
+  This supersedes the earlier same-day paper-notation threshold switch below.
+- Changed `compute_fdp_plus()` so FDP+ real/artificial counts use strict
+  `>` stability-score thresholds. Ties at a candidate threshold are not
+  counted.
+- Changed `get_support.stabl_fit()` so final support extraction uses strict
+  `>`. A data-driven `fdr_min_threshold_ = 0` now selects only features with
+  positive stability scores.
+- Restored Python's `explore = TRUE` fallback: when no feature passes, the
+  cutoff is set to the `n_explore`-th largest stability score minus `0.01`,
+  then strict `>` selection is reapplied. Ties can select more than
+  `n_explore`, including all features when all scores are zero.
+- Changed `stabl_fit()` artificial-feature realization from `round()` to
+  `floor(n_features * artificial_proportion)`, matching Python. Floor-to-zero
+  artificial counts still error when artificial features are requested.
+- Added Python-shaped auto-lambda paths for gaussian, binomial, and
+  multinomial auto mode. Gaussian uses
+  `||X'Y||_inf / (n * l1_ratio)` and
+  `geomspace(lambda_max / 30, lambda_max + 5, n_lambda)`. Classification
+  approximates Python's `l1_min_c()` `C_min` to `100 * C_min` path and maps it
+  to glmnet `lambda = 1 / C`. Cox remains on the R-native glmnet path because
+  upstream Python STABL has no Cox backend.
+- Added the Python elastic-net auto-mode default
+  `l1_ratio = c(0.5, 0.7, 0.9)` when `base_learner = "elastic_net"`,
+  `lambda_grid = "auto"`, and the user does not supply `l1_ratio`.
+- Updated `STABL.md`, `PLAN.md`, `CONTEXT.md`, roxygen source comments, and
+  generated Rd pages for the restored Python-original contract.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "for (f in c('R/fdp_control.R','R/stabl_accessors.R','R/stabl_fit.R','R/learner_adapters.R','tests/testthat/test-fdp-plus-invariants.R','tests/testthat/test-audit-stabl-accessors.R','tests/testthat/test-stabl-fit.R')) { parse(f); cat(f, 'parse ok\n') }"
+# -> all seven files parsed successfully
+
+conda run -n R4_51 Rscript -e "devtools::document('.', roclets = c('rd'))"
+# -> compute_fdp_plus.Rd, auto_lambda_grid.Rd, get_support.Rd, and stabl_fit.Rd regenerated
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-fdp-plus-invariants.R', reporter = 'summary'); testthat::test_file('tests/testthat/test-audit-stabl-accessors.R', reporter = 'summary')"
+# -> fdp-plus-invariants DONE; audit-stabl-accessors DONE
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-stabl-fit.R', reporter = 'summary')"
+# -> stabl-fit DONE
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-python-parity-fixtures.R', reporter = 'summary')"
+# -> python-parity-fixtures DONE
+
+git diff --check
+# -> clean
+```
+
+### STABL Algorithm Contract Reconciliation (2026-05-18)
+
+- Supersession note: the selector-threshold details in this section were
+  superseded later on 2026-05-18 by the Python-original parity restoration
+  recorded above. Multi-Omic STABL and final-layer API decisions remain current.
+- Rewrote `STABL.md` around the Nature Biotechnology methods description as
+  the master algorithm reference, then reconciled it with repository-specific
+  parity decisions.
+- At that point, reconciled FDP+/support thresholding with the paper notation
+  and changed the repository contract to use `>=` for FDP+ counts and final
+  support. That threshold decision is no longer current; the active contract is
+  the strict-`>` Python-original behavior documented above.
+- Made explicit the other reconciled differences: configurable
+  `artificial_proportion`, `(1 / pi)` FDP+ scaling, sklearn-style
+  `bootstrap_threshold`, configurable subsampling, R artificial-feature labels,
+  and the `stabl_fit()` versus `stabl_refit()` selector/refit boundary.
+- Documented the formal distinction between early fusion, late fusion, and
+  paper-level Multi-Omic STABL. Late fusion is prediction-level fusion;
+  Multi-Omic STABL is per-view STABL selection followed by selected-feature
+  concatenation and one final predictive refit.
+- Added `CONTEXT.md` as the root domain glossary with resolved terms including
+  STABL Selector, Final Refit, Candidate/Selected Biomarker, Artificial
+  Feature, Reliability Threshold, Base SRM, Omic View, Late Fusion, and
+  Multi-Omic STABL.
+- Initially updated `PLAN.md` to track the then-missing final-layer API: the
+  package exposed per-view selected matrices and prediction-level late fusion,
+  but not a first-class Multi-Omic STABL final-layer result. This gap is closed
+  by the implementation recorded below.
+- Recorded the follow-up API decision: implement Multi-Omic STABL as
+  `stabl_multiomic_train_validate(multiomic_stabl = TRUE)` returning a
+  `$multiomic_stabl` branch, rather than overloading `late_fusion` or creating
+  a separate top-level workflow.
+- Recorded the final-layer policy decision: the `$multiomic_stabl` branch
+  should use the existing unpenalized final-refit helper and preserve the
+  intercept-only fallback when the combined selected-biomarker set is empty.
+- Recorded the selected-feature provenance decision: final-layer columns should
+  always be prefixed by Omic View using `__` and accompanied by a mapping table
+  to original view/feature names. Original feature names may contain `__`; only
+  the first `__` is the Omic View delimiter, and Omic View names must not
+  contain `__`.
+- Recorded the validation-output decision: `$multiomic_stabl$valid_predictions`
+  should be produced whenever validation Omic Views are supplied, even without
+  `y_valid`; validation metrics require validation outcomes.
+- Recorded the result-shape decision: `$multiomic_stabl` should include
+  `train_predictions` in addition to `valid_predictions` when validation Omic
+  Views are supplied.
+- Recorded the CV-wrapper decision: `stabl_multiomic_cv()` should accept and
+  forward `multiomic_stabl = TRUE` like the existing multi-omic strategy
+  toggles.
+- Recorded the nested-CV decision: defer `stabl_multiomic_nested_cv()`
+  integration because it needs an explicit Multi-Omic STABL candidate-type
+  design rather than simple flag forwarding.
+- Recorded the metrics decision: `$multiomic_stabl` should include
+  `train_metrics` whenever metrics are well-defined for the family and
+  `valid_metrics` only when `y_valid` is supplied.
+- Recorded the Cox decision: support `family = "cox"` in the first
+  Multi-Omic STABL implementation using the existing Cox final refit, with
+  risk-score predictions and no first-pass Cox metrics unless an existing
+  helper already supports them cleanly.
+
+Validation:
+
+```bash
+git diff --check
+# -> clean
+```
+
+### Paper-Notation Thresholding Switch (2026-05-18) — Superseded
+
+- Superseded later on 2026-05-18 by the Python-original parity restoration
+  recorded above. This section is retained as historical execution evidence.
+- Changed `compute_fdp_plus()` so FDP+ original/artificial counts use
+  `>=` rather than strict `>`.
+- Changed `get_support.stabl_fit()` so selected support uses
+  `max_scores >= threshold`.
+- Updated the FDP+ invariant tests to pin tie-at-threshold behavior: ties now
+  count, matching the StablSRM paper notation.
+- Added accessor coverage showing a biomarker with score exactly equal to an
+  override threshold is selected.
+- Updated `STABL.md` and `CONTEXT.md` so Selected Biomarkers are defined by
+  scores greater than or equal to the Reliability Threshold.
+- Recorded the semantic consequence that threshold `1` can select biomarkers
+  with stability score exactly `1`.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "for (f in c('R/fdp_control.R','R/stabl_accessors.R','tests/testthat/test-fdp-plus-invariants.R','tests/testthat/test-audit-stabl-accessors.R','tests/testthat/test-stabl-fit.R')) { parse(f); cat(f, 'parse ok\n') }"
+# -> all five files parsed successfully
+
+conda run -n R4_51 Rscript -e "devtools::document('.', roclets = c('rd'))"
+# -> compute_fdp_plus.Rd and get_support.Rd regenerated
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-fdp-plus-invariants.R', reporter = 'summary'); testthat::test_file('tests/testthat/test-audit-stabl-accessors.R', reporter = 'summary'); testthat::test_file('tests/testthat/test-fdp-calibration.R', reporter = 'summary')"
+# -> fdp-plus-invariants DONE; audit-stabl-accessors DONE; fdp-calibration skipped on CRAN
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-stabl-fit.R', reporter = 'summary')"
+# -> DONE
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R', reporter = 'summary')"
+# -> DONE
+
+git diff --check
+# -> clean
+```
+
+### Multi-Omic STABL Final-Layer API (2026-05-18)
+
+- Added `multiomic_stabl = FALSE` to
+  `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()`.
+- When enabled, `stabl_multiomic_train_validate()` now returns a
+  `$multiomic_stabl` branch with per-view selected features, prefixed
+  final-layer selected matrices, a feature-provenance map, one unpenalized
+  final refit, train predictions, validation predictions when validation Omic
+  Views are supplied, and metrics where outcomes make them well-defined.
+- Reused `.fit_stabl_final_model()` / `.predict_stabl_final_model()` so the
+  new branch shares the existing final-refit behavior, including
+  intercept-only fallback for empty selected support.
+- Enforced the selected-feature naming contract: final-layer columns are
+  prefixed as `<Omic View>__<original feature>`, original feature names may
+  contain `__`, and Omic View names containing `__` are rejected.
+- Preserved validation predictors without validation outcomes:
+  `$multiomic_stabl$valid_predictions` is produced from `x_valid_list` alone,
+  while `$multiomic_stabl$valid_metrics` remains `NULL` without `y_valid`.
+- Recorded result-shape semantics: `$multiomic_stabl` is additive and does not
+  replace top-level per-view `fits`, `selected_features`, `selected_train`, or
+  `refits`; the paper-level combined final estimate lives in
+  `$multiomic_stabl$refit`.
+- Recorded CV diagnostics semantics: top-level `stabl_multiomic_cv()`
+  `$diagnostics` remains per-fold/per-Omic View selector diagnostics. Combined
+  Multi-Omic STABL final-layer details remain in each
+  `fold_results[[fold]]$multiomic_stabl` branch rather than being promoted into
+  synthetic combined diagnostic rows.
+- Added `train_metrics` for gaussian, binomial, multinomial, and poisson
+  outputs; Cox produces final-refit risk predictions and omits Cox-specific
+  metrics in this first implementation.
+- Updated `print.stabl_multiomic_fit()` to summarize the Multi-Omic STABL
+  final-layer branch when present.
+- Regenerated Rd for the changed multi-omic APIs with `devtools::document()`.
+  The same roxygen pass refreshed existing artificial-feature fallback metadata
+  in `make_artificial_features()`, `make_rp_features()`, and `stabl_fit()`
+  documentation.
+- Updated the multi-omic vignette's late-fusion wording so it remains
+  prediction-level and does not imply validation-set weight training.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "for (f in c('R/multiomic_workflows.R','R/stabl_accessors.R','tests/testthat/test-multiomic-workflows.R')) { parse(f); cat(f, 'parse ok\n') }"
+# -> all three files parsed successfully
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R', reporter = 'summary')"
+# -> DONE
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R', reporter = 'summary')"
+# -> DONE
+
+conda run -n R4_51 Rscript -e "devtools::document('.', roclets = c('rd'))"
+# -> Rd documentation regenerated
+
+git diff --check
+# -> clean
+```
+
+### Early Fusion Omic View Prefixing (2026-05-18)
+
+- Updated `stabl_multiomic_train_validate(early_fusion = TRUE)` so the
+  concatenated Early Fusion matrix prefixes every candidate biomarker as
+  `<Omic View>__<original feature>` before running the single STABL Selector.
+- Reused the same prefixing delimiter policy as Multi-Omic STABL:
+  original feature names may contain `__`, while Omic View names containing
+  `__` are rejected because the first delimiter marks the Omic View boundary.
+- Added focused Early Fusion tests for duplicate original feature names across
+  Omic Views and delimiter rejection.
+- Updated `STABL.md` and roxygen documentation to make the Early Fusion
+  provenance rule explicit.
+- Added an Early Fusion lambda-grid guard: `early_fusion = TRUE` now requires
+  `lambda_grid = "auto"` or one shared `data.frame`. Named per-omic lambda
+  lists are rejected because Early Fusion fits one STABL Selector on one
+  concatenated input space.
+- Recorded the additive branch policy: Early Fusion, Late Fusion, and
+  Multi-Omic STABL may be enabled together in one workflow call, with results
+  kept separate under `$early_fusion`, `$late_fusion`, and `$multiomic_stabl`.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "for (f in c('R/multiomic_workflows.R','tests/testthat/test-multiomic-workflows.R')) { parse(f); cat(f, 'parse ok\n') }"
+# -> both files parsed successfully
+
+conda run -n R4_51 Rscript -e "devtools::document('.', roclets = c('rd'))"
+# -> stabl_multiomic_train_validate.Rd regenerated
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.'); testthat::test_file('tests/testthat/test-multiomic-workflows.R')"
+# -> FAIL 0, WARN 0, SKIP 0, PASS 190
+```
+
+### Cooperative Fusion Taxonomy Boundary (2026-05-18)
+
+- Recorded the Cooperative Fusion taxonomy boundary: `cooperative_fusion = TRUE`
+  remains a separate comparator branch outside the formal Early Fusion /
+  Late Fusion / Multi-Omic STABL taxonomy used for StablSRM method parity.
+- Updated `CONTEXT.md`, `STABL.md`, and the multi-omic roxygen/Rd documentation
+  so Cooperative Fusion is described as a comparator branch, not as Early
+  Fusion, Late Fusion, or Multi-Omic STABL.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "parse('R/multiomic_workflows.R'); cat('R/multiomic_workflows.R parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::document('.', roclets = c('rd'))"
+# -> stabl_multiomic_train_validate.Rd regenerated
+
+git diff --check
+# -> clean
+```
+
+### Deferred Cox Late Fusion (2026-05-18)
+
+- Recorded that `late_fusion = TRUE` remains intentionally unsupported for
+  `family = "cox"` in this implementation.
+- Rationale: the existing `stacked_multi_omic()` stacker optimizes binary AUC,
+  regression R^2, or multiclass log loss. Cox final refits produce risk scores
+  for censored survival outcomes, so treating them as regression predictions
+  would ignore censoring and event indicators.
+- Deferred implementation direction: reuse the non-negative weight-search and
+  weighted-risk-score combination structure, but add a survival-specific
+  objective such as concordance over `survival::Surv(time, event)` outcomes.
+
+Validation:
+
+```bash
+git diff --check
+# -> clean
+```
+
 ### TCGA Nested-CV Checkpointed SLURM Resubmission (2026-05-18)
 
 - Submitted the checkpointed TCGA nested-CV benchmark after the runner rework.
@@ -342,8 +633,9 @@ conda run -n R4_51 Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual
   FDP+ `(1 / pi)` scaling, and selector-versus-final-refit boundary.
 - Updated `STABL.md` to correct stale upstream line references for
   random-permutation artificial-feature sampling and FDP+ scaling, document
-  that Python `"knockoff"` maps to R `"modelx_knockoff"`, and record the
-  intentional R `explore = TRUE` tie-handling hardening difference.
+  that Python `"knockoff"` maps to R `"modelx_knockoff"`, and record the then
+  intentional R `explore = TRUE` tie-handling hardening difference. The explore
+  fallback was later restored to Python behavior on 2026-05-18.
 - Observed non-core metrics caveat: R metric helpers match upstream Python
   behavior for set-like selected-feature vectors. Inputs containing duplicate
   feature identifiers can differ because the R helpers de-duplicate while

@@ -24,7 +24,9 @@
 #'   `"modelx_knockoff"`, `"mvr_knockoff"`, or `NULL` (no artificial features — requires
 #'   `hard_threshold`).  Default: `"random_permutation"`.
 #' @param artificial_proportion Numeric in `(0, 1]`; fraction of original
-#'   features to inject as artificial noise.  Default: `1.0`.
+#'   features to inject as artificial noise.  The realised count is
+#'   `floor(ncol(x) * artificial_proportion)`, matching Python STABL. Default:
+#'   `1.0`.
 #' @param sample_fraction Positive numeric; fraction of samples drawn per
 #'   bootstrap.  Default: `0.5`.
 #' @param replace Logical; sample with replacement?  Default: `FALSE`.
@@ -34,9 +36,11 @@
 #' @param fdr_threshold_range Numeric vector swept when computing FDP+.
 #'   Default: `seq(0, 0.99, by = 0.01)`, matching Python STABL's
 #'   `np.arange(0., 1., .01)`.
-#' @param explore Logical; if `TRUE` and no features pass the threshold, fall
-#'   back to the top `n_explore` features.  Default: `FALSE`.
-#' @param n_explore Positive integer; fallback feature count.  Default: `5L`.
+#' @param explore Logical; if `TRUE` and no features pass the threshold,
+#'   lower the cutoff to the `n_explore`-th largest score minus `0.01`.
+#'   Default: `FALSE`.
+#' @param n_explore Positive integer; fallback rank used when `explore = TRUE`.
+#'   Tied scores can select more than this count. Default: `5L`.
 #' @param bootstrap_threshold Numeric scalar, character string, or `NULL`;
 #'   per-bootstrap feature-selection cutoff applied to absolute coefficients.
 #'   Numeric thresholds keep features with `|coef| >= bootstrap_threshold`.
@@ -61,8 +65,9 @@
 #' @param l1_ratio Numeric scalar, numeric vector, or `NULL`. Passed to
 #'   [auto_lambda_grid()] when `lambda_grid = "auto"`. Use this for
 #'   `base_learner = "elastic_net"` so the generated grid contains the
-#'   elastic-net `alpha` column. Default `NULL` preserves the lasso-like auto
-#'   grid used by existing workflows.
+#'   elastic-net `alpha` column. For `base_learner = "elastic_net"` and
+#'   `lambda_grid = "auto"`, default `NULL` expands to Python STABL's
+#'   `c(0.5, 0.7, 0.9)` auto-mode grid.
 #' @param verbose Logical; emit progress messages.  Default: `FALSE`.
 #' @param workers Positive integer; parallel workers for the bootstrap loop.
 #'   Values above `1` use a scoped `future`/`furrr` multisession plan when
@@ -248,12 +253,16 @@ stabl_fit <- function(
   # ---- Lambda grid ----------------------------------------------------------
   if (identical(lambda_grid, "auto")) {
     if (verbose) message("Computing auto lambda grid...")
+    auto_l1_ratio <- l1_ratio
+    if (identical(base_learner, "elastic_net") && is.null(auto_l1_ratio)) {
+      auto_l1_ratio <- c(0.5, 0.7, 0.9)
+    }
     lambda_grid <- auto_lambda_grid(
       x,
       y,
       family = family,
       n_lambda = n_lambda,
-      l1_ratio = l1_ratio
+      l1_ratio = auto_l1_ratio
     )
   }
   if (!is.data.frame(lambda_grid)) {
@@ -284,7 +293,7 @@ stabl_fit <- function(
   }
 
   # ---- Artificial features --------------------------------------------------
-  n_injected        <- as.integer(round(n_features * artificial_proportion))
+  n_injected        <- as.integer(floor(n_features * artificial_proportion))
   x_fit             <- x
   noise_col_indices <- NULL
   artificial_type_used <- NULL

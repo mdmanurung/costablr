@@ -199,7 +199,7 @@ let the views interact:
 | Strategy | How it works | Best when |
 |---|---|---|
 | **Early fusion** | Concatenates all omic matrices into one wide matrix, then runs a *single* STABL fit across all features jointly. | Omics are measured on the same samples; you want a unified biomarker list. |
-| **Late fusion** | Fits one STABL + downstream model per omic separately, then learns the optimal weighted combination of predictions on the validation set. | You want to know each omic's independent predictive contribution. |
+| **Late fusion** | Fits one STABL + downstream model per omic separately, then learns a weighted combination of training predictions and applies those weights to validation predictions. | You want to know each omic's independent predictive contribution. |
 
 Key arguments:
 

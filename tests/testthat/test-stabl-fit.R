@@ -72,6 +72,50 @@ test_that("FDP+ is computed when artificial_type = 'random_permutation'", {
   expect_identical(fit$artificial_type_used_, "random_permutation")
 })
 
+test_that("artificial_proportion uses Python floor count", {
+  set.seed(71)
+  n <- 24L; p <- 5L
+  x <- matrix(rnorm(n * p), n, p,
+              dimnames = list(paste0("s", seq_len(n)),
+                              paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  fit <- stabl_fit(
+    x = x,
+    y = y,
+    lambda_grid = data.frame(lambda = c(0.05, 0.1)),
+    family = "gaussian",
+    n_bootstraps = 2L,
+    artificial_type = "random_permutation",
+    artificial_proportion = 0.5,
+    random_state = 71L
+  )
+
+  expect_equal(nrow(fit$stabl_scores_artificial_), 2L)
+})
+
+test_that("floor-to-zero artificial feature count errors clearly", {
+  set.seed(72)
+  n <- 20L; p <- 3L
+  x <- matrix(rnorm(n * p), n, p,
+              dimnames = list(paste0("s", seq_len(n)),
+                              paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  expect_error(
+    stabl_fit(
+      x = x,
+      y = y,
+      lambda_grid = data.frame(lambda = 0.1),
+      family = "gaussian",
+      n_bootstraps = 1L,
+      artificial_type = "random_permutation",
+      artificial_proportion = 0.2
+    ),
+    "produces n_injected = 0"
+  )
+})
+
 test_that("get_support returns logical vector of correct length", {
   set.seed(3)
   n <- 30L; p <- 10L
@@ -135,10 +179,9 @@ test_that("bootstrap_threshold is exposed and uses sklearn-style semantics", {
   expect_identical(fit$bootstrap_threshold, "mean")
 })
 
-test_that("explore fallback selects exactly n_explore features even when all scores are tied", {
-  # When hard_threshold = 0.99, nothing passes.  With explore = TRUE and
-  # n_explore = 3, exactly 3 features should be returned regardless of score
-  # ties (e.g. all scores identical / all zero).
+test_that("explore fallback follows Python cutoff and can over-select ties", {
+  # Python STABL lowers the cutoff to the n_explore-th largest score minus 0.01.
+  # When all scores are tied at zero, that means every feature exceeds -0.01.
   set.seed(42)
   n <- 30L; p <- 10L
   x <- matrix(rnorm(n * p), n, p,
@@ -162,15 +205,10 @@ test_that("explore fallback selects exactly n_explore features even when all sco
 
   mask <- get_support(fit)
 
-  # Exactly n_explore features selected, not all p
-  expect_equal(sum(mask), 3L)
+  expect_equal(sum(mask), p)
   expect_length(mask, p)
   expect_type(mask, "logical")
-
-  # The selected features must be the top-3 by importance score
-  importances <- get_importances(fit)
-  top3_names  <- names(sort(importances, decreasing = TRUE))[seq_len(3L)]
-  expect_setequal(names(mask)[mask], top3_names)
+  expect_true(all(mask))
 })
 
 test_that("hard_threshold bypasses FDP+ path", {
@@ -195,7 +233,7 @@ test_that("hard_threshold bypasses FDP+ path", {
   expect_null(fit$fdr_min_threshold_)
   mask        <- get_support(fit)
   importances <- get_importances(fit)
-  expect_true(all(importances[mask] > 0.3))
+  expect_true(all(importances[mask] >= 0.3))
 })
 
 test_that("error when both hard_threshold and artificial_type are NULL", {
@@ -276,6 +314,11 @@ test_that("auto_lambda_grid returns data.frame with lambda column", {
   expect_s3_class(grid, "data.frame")
   expect_true("lambda" %in% names(grid))
   expect_gt(nrow(grid), 0L)
+
+  lambda_max <- max(abs(as.numeric(crossprod(x, y)))) / n
+  expected <- exp(seq(log(lambda_max / 30), log(lambda_max + 5),
+                      length.out = 10L))
+  expect_equal(grid$lambda, expected)
 })
 
 test_that("auto_lambda_grid with l1_ratio returns alpha column", {
@@ -290,6 +333,25 @@ test_that("auto_lambda_grid with l1_ratio returns alpha column", {
   expect_true("alpha" %in% names(grid))
   expect_true("lambda" %in% names(grid))
   expect_true(all(c(0.5, 0.9) %in% grid$alpha))
+})
+
+test_that("auto_lambda_grid maps classification C path to lambda scale", {
+  set.seed(121)
+  n <- 48L; p <- 7L
+  x <- matrix(rnorm(n * p), n, p)
+  y <- sample(0:1, n, replace = TRUE)
+
+  grid <- auto_lambda_grid(x = x, y = y, family = "binomial", n_lambda = 6L)
+
+  y_factor <- factor(y)
+  indicator <- stats::model.matrix(~ y_factor - 1)
+  residual <- sweep(indicator, 2L, colMeans(indicator), "-")
+  lambda_max <- max(abs(as.matrix(crossprod(x, residual)))) / n
+  c_min <- 1 / lambda_max
+  expected <- 1 / seq(c_min, c_min * 100, length.out = 6L)
+
+  expect_equal(grid$lambda, expected)
+  expect_true(all(diff(grid$lambda) < 0))
 })
 
 test_that("stabl_fit auto lambda grid forwards l1_ratio", {
@@ -317,6 +379,33 @@ test_that("stabl_fit auto lambda grid forwards l1_ratio", {
 
   expect_true("alpha" %in% names(fit$fitted_lambda_grid))
   expect_equal(sort(unique(fit$fitted_lambda_grid$alpha)), c(0.3, 0.7))
+})
+
+test_that("elastic_net auto lambda grid defaults to Python l1_ratio grid", {
+  set.seed(122)
+  n <- 30L; p <- 8L
+  x <- matrix(rnorm(n * p), n, p,
+              dimnames = list(paste0("s", seq_len(n)),
+                              paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  fit <- stabl_fit(
+    x = x,
+    y = y,
+    lambda_grid = "auto",
+    base_learner = "elastic_net",
+    family = "gaussian",
+    n_lambda = 2L,
+    n_bootstraps = 1L,
+    artificial_type = NULL,
+    hard_threshold = 1,
+    sample_fraction = 1,
+    random_state = 122L
+  )
+
+  expect_true("alpha" %in% names(fit$fitted_lambda_grid))
+  expect_equal(sort(unique(fit$fitted_lambda_grid$alpha)), c(0.5, 0.7, 0.9))
+  expect_equal(nrow(fit$fitted_lambda_grid), 6L)
 })
 
 test_that("get_feature_names_out returns character subset of feature names", {

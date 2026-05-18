@@ -23,6 +23,7 @@ stabl_multiomic_train_validate(
   early_fusion = FALSE,
   late_fusion = FALSE,
   n_iter_lf = 10000L,
+  multiomic_stabl = FALSE,
   cooperative_fusion = FALSE,
   rho = NULL,
   cooperation_selection = c("cv", "validation"),
@@ -40,7 +41,9 @@ numeric matrix), each with row names as sample IDs.}
 
 \item{lambda_grid}{Either a shared lambda grid (\code{data.frame} or \code{"auto"})
 used for all omics, or a named list mapping each omic name to its own
-lambda grid.}
+lambda grid. When \code{early_fusion = TRUE}, this must be a shared grid
+(\code{data.frame} or \code{"auto"}); per-omic lambda lists are rejected because
+Early Fusion has one concatenated input space.}
 
 \item{x_valid_list}{Optional named list of validation omic tables. When
 supplied, names must match \code{x_train_list} names.}
@@ -75,7 +78,9 @@ grids.}
 
 \item{early_fusion}{Logical.  When \code{TRUE}, a single \code{\link[=stabl_fit]{stabl_fit()}} is run on
 the column-bound concatenation of all omic matrices in addition to the
-per-omic fits.  Results are returned in the \code{early_fusion} field.}
+per-omic fits. Combined Early Fusion feature names are prefixed as
+\verb{<Omic View>__<original feature>} to preserve provenance. Results are
+returned in the \code{early_fusion} field.}
 
 \item{late_fusion}{Logical.  When \code{TRUE}, a downstream unpenalized
 predictor is fitted per omic on its selected features, and
@@ -89,11 +94,17 @@ field.}
 \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} during late fusion.  Ignored when
 \code{late_fusion = FALSE}.}
 
+\item{multiomic_stabl}{Logical. When \code{TRUE}, concatenate the per-omic
+STABL-selected biomarkers into one final-layer matrix and fit a single
+downstream unpenalized final refit on that combined selected set. This is
+distinct from late fusion, which combines prediction outputs.}
+
 \item{cooperative_fusion}{Logical. When \code{TRUE}, fit a multiview-based
-cooperative learning branch in addition to the existing per-omic STABL
-fits. For \code{family = "multinomial"}, this runs an automatic one-vs-rest
-wrapper with one binomial cooperative model per class. Requires the
-optional \code{multiview} package.}
+cooperative comparator branch in addition to the existing per-omic STABL
+fits. This branch is outside the formal Early Fusion, Late Fusion, and
+Multi-Omic STABL taxonomy. For \code{family = "multinomial"}, this runs an
+automatic one-vs-rest wrapper with one binomial cooperative model per
+class. Requires the optional \code{multiview} package.}
 
 \item{rho}{Numeric scalar or vector of non-negative cooperation strengths.
 When \code{NULL}, defaults to \code{0} following \code{\link[multiview:multiview]{multiview::multiview()}}.}
@@ -129,12 +140,17 @@ selected features (possibly 0-column).}
 \item{\code{selected_valid}}{Named list of validation matrices restricted to
 selected features, or \code{NULL} when no validation input is provided.}
 \item{\code{early_fusion}}{\code{NULL} when \code{early_fusion = FALSE}.  Otherwise a
-list with \code{fit}, \code{refit}, \code{selected_features}, \code{selected_train}, and
-\code{selected_valid} for the concatenated single-STABL run.}
+list with \code{fit}, \code{refit}, Omic View-prefixed \code{selected_features},
+\code{selected_train}, and \code{selected_valid} for the concatenated
+single-STABL run.}
 \item{\code{late_fusion}}{\code{NULL} when \code{late_fusion = FALSE}.  Otherwise a
 list with \code{weights} (data.frame), \code{train_predictions} (data.frame),
 \code{valid_predictions}, and \code{score}; multinomial tasks also include
 \code{levels}, \code{log_loss}, and classification metrics.}
+\item{\code{multiomic_stabl}}{Present only when \code{multiomic_stabl = TRUE}.
+A list containing per-view selected features, a provenance map,
+prefixed combined selected train/validation matrices, one final
+refit, train/validation predictions, and metrics where defined.}
 \item{\code{cooperative_fusion}}{Present only when
 \code{cooperative_fusion = TRUE}. For scalar families, a list containing
 the selected multiview fit, chosen \code{rho} and \code{lambda}, selected
@@ -147,6 +163,9 @@ class-specific selected features, and per-view union selections.}
 \description{
 Fits \code{\link[=stabl_fit]{stabl_fit()}} independently on each omic block from a named list,
 then returns per-omic fitted objects and selected-feature matrices for
-downstream composition. Optional early-fusion, late-fusion, and
-cooperative-fusion branches are additive to the per-omic STABL results.
+downstream composition. Optional early-fusion, late-fusion, Multi-Omic
+STABL, and cooperative-fusion branches are additive to the per-omic STABL
+results. Early Fusion, Late Fusion, and Multi-Omic STABL may be enabled in
+the same call; their outputs remain separated in \code{early_fusion},
+\code{late_fusion}, and \code{multiomic_stabl}.
 }

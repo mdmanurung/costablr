@@ -61,7 +61,9 @@ Default: \code{1000L}.}
 \code{hard_threshold}).  Default: \code{"random_permutation"}.}
 
 \item{artificial_proportion}{Numeric in \verb{(0, 1]}; fraction of original
-features to inject as artificial noise.  Default: \code{1.0}.}
+features to inject as artificial noise.  The realised count is
+\code{floor(ncol(x) * artificial_proportion)}, matching Python STABL. Default:
+\code{1.0}.}
 
 \item{sample_fraction}{Positive numeric; fraction of samples drawn per
 bootstrap.  Default: \code{0.5}.}
@@ -76,10 +78,12 @@ Default: \code{NULL}.}
 Default: \code{seq(0, 0.99, by = 0.01)}, matching Python STABL's
 \code{np.arange(0., 1., .01)}.}
 
-\item{explore}{Logical; if \code{TRUE} and no features pass the threshold, fall
-back to the top \code{n_explore} features.  Default: \code{FALSE}.}
+\item{explore}{Logical; if \code{TRUE} and no features pass the threshold,
+lower the cutoff to the \code{n_explore}-th largest score minus \code{0.01}.
+Default: \code{FALSE}.}
 
-\item{n_explore}{Positive integer; fallback feature count.  Default: \code{5L}.}
+\item{n_explore}{Positive integer; fallback rank used when \code{explore = TRUE}.
+Tied scores can select more than this count. Default: \code{5L}.}
 
 \item{bootstrap_threshold}{Numeric scalar, character string, or \code{NULL};
 per-bootstrap feature-selection cutoff applied to absolute coefficients.
@@ -110,15 +114,16 @@ Ignored otherwise.  Default: \code{30L}.}
 \item{l1_ratio}{Numeric scalar, numeric vector, or \code{NULL}. Passed to
 \code{\link[=auto_lambda_grid]{auto_lambda_grid()}} when \code{lambda_grid = "auto"}. Use this for
 \code{base_learner = "elastic_net"} so the generated grid contains the
-elastic-net \code{alpha} column. Default \code{NULL} preserves the lasso-like auto
-grid used by existing workflows.}
+elastic-net \code{alpha} column. For \code{base_learner = "elastic_net"} and
+\code{lambda_grid = "auto"}, default \code{NULL} expands to Python STABL's
+\code{c(0.5, 0.7, 0.9)} auto-mode grid.}
 
 \item{verbose}{Logical; emit progress messages.  Default: \code{FALSE}.}
 
 \item{workers}{Positive integer; parallel workers for the bootstrap loop.
-Values above \code{1} use a scoped \code{future}/\code{furrr} multisession
-plan when those optional packages are installed, and otherwise fall back to
-sequential execution with a warning. Default: \code{1L}.}
+Values above \code{1} use a scoped \code{future}/\code{furrr} multisession plan when
+those optional packages are installed, and otherwise fall back to
+sequential execution with a warning.  Default: \code{1L}.}
 
 \item{random_state}{Integer or \code{NULL}; top-level seed.  Default: \code{NULL}.}
 
@@ -152,6 +157,9 @@ actually used.}
 \item{\code{fdrs_table_}}{Per-lambda FDP+ matrix, or \code{NULL}.}
 \item{\code{hard_threshold}}{As supplied.}
 \item{\code{artificial_type}}{As supplied.}
+\item{\code{artificial_type_used_}}{Artificial-feature strategy actually
+used after any constructor fallback, or \code{NULL} when
+\code{artificial_type = NULL}.}
 \item{\code{artificial_proportion}}{As supplied.}
 \item{\code{bootstrap_threshold}}{As supplied.}
 \item{\code{explore}}{As supplied.}

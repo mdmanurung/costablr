@@ -1,13 +1,15 @@
 #' Compute FDP+ (False Discovery Proportion Upper Bound)
 #'
 #' Sweeps a grid of stability-score thresholds and computes the FDP+ estimate
-#' at each one, then identifies the threshold that minimises it.  This is a
-#' direct port of `Stabl._compute_FDPplus()` from the Python STABL library.
+#' at each one, then identifies the threshold that minimises it.  Following
+#' the StablSRM paper notation, features are counted when their stability score
+#' is greater than or equal to the candidate threshold. This intentionally
+#' differs from the upstream Python implementation's strict `>` tie behavior.
 #'
 #' The FDP+ at threshold \eqn{\tau} is estimated as:
 #' \deqn{\widehat{\text{FDP}}(\tau) =
-#'   \frac{(1/\pi) \cdot |\{j : \hat{q}_j^{\text{art}} > \tau\}| + 1}
-#'        {\max(1,\, |\{j : \hat{q}_j > \tau\}|)}}
+#'   \frac{(1/\pi) \cdot |\{j : \hat{q}_j^{\text{art}} \ge \tau\}| + 1}
+#'        {\max(1,\, |\{j : \hat{q}_j \ge \tau\}|)}}
 #' where \eqn{\pi} is `artificial_proportion`, \eqn{\hat{q}_j} are the
 #' maximum-over-lambda stability scores for real feature \eqn{j}, and
 #' \eqn{\hat{q}_j^{\text{art}}} are the scores for artificial feature \eqn{j}.
@@ -45,9 +47,9 @@ compute_fdp_plus <- function(
 
   # Vectorized FDP+ across all lambda (uses row-max scores).
   # outer() produces an (n_features × n_thresh) logical matrix; colSums gives
-  # the count of features exceeding each threshold in one pass.
-  n_real <- colSums(outer(max_scores, fdr_threshold_range, ">"))
-  n_art  <- colSums(outer(max_art,    fdr_threshold_range, ">"))
+  # the count of features meeting each threshold in one pass.
+  n_real <- colSums(outer(max_scores, fdr_threshold_range, ">="))
+  n_art  <- colSums(outer(max_art,    fdr_threshold_range, ">="))
   FDRs   <- (inv_prop * n_art + 1.0) / pmax(1.0, n_real)
 
   # Per-lambda FDP+ table: vectorized per lambda column (outer replaces inner
@@ -55,8 +57,8 @@ compute_fdp_plus <- function(
   n_lambdas  <- ncol(stabl_scores)
   fdrs_table <- matrix(0.0, nrow = n_lambdas, ncol = n_thresh)
   for (i in seq_len(n_lambdas)) {
-    nr_l <- colSums(outer(stabl_scores[, i],            fdr_threshold_range, ">"))
-    na_l <- colSums(outer(stabl_scores_artificial[, i], fdr_threshold_range, ">"))
+    nr_l <- colSums(outer(stabl_scores[, i],            fdr_threshold_range, ">="))
+    na_l <- colSums(outer(stabl_scores_artificial[, i], fdr_threshold_range, ">="))
     fdrs_table[i, ] <- (inv_prop * na_l + 1.0) / pmax(1.0, nr_l)
   }
 

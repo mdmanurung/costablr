@@ -467,6 +467,100 @@ test_that("early_fusion = TRUE with validation populates selected_valid", {
   expect_equal(ncol(ef$selected_valid), ncol(ef$selected_train))
 })
 
+test_that("early_fusion prefixes duplicate feature names with Omic View", {
+  set.seed(221)
+  n <- 24L
+  ids <- paste0("s", seq_len(n))
+  x_a <- matrix(rnorm(n * 2L), nrow = n,
+                dimnames = list(ids, c("shared", "a_signal")))
+  x_b <- matrix(rnorm(n * 2L), nrow = n,
+                dimnames = list(ids, c("shared", "b_signal")))
+  y <- setNames(x_a[, "a_signal"] - x_b[, "b_signal"] + rnorm(n, sd = 0.1), ids)
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(cytof = x_a, proteomics = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = 1e-5),
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "gaussian",
+    early_fusion = TRUE,
+    random_state = 221L
+  ))
+
+  ef <- fit$early_fusion
+  expect_equal(
+    ef$fit$feature_names,
+    c("cytof__shared", "cytof__a_signal",
+      "proteomics__shared", "proteomics__b_signal")
+  )
+  expect_equal(anyDuplicated(ef$fit$feature_names), 0L)
+  expect_true(all(ef$selected_features %in% ef$fit$feature_names))
+  expect_equal(colnames(ef$selected_train), ef$selected_features)
+})
+
+test_that("early_fusion rejects Omic View names containing delimiter", {
+  ids <- paste0("s", seq_len(8L))
+  x <- matrix(rnorm(8L * 3L), nrow = 8L,
+              dimnames = list(ids, paste0("f", seq_len(3L))))
+  y <- setNames(rnorm(8L), ids)
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list("bad__view" = x),
+      y_train = y,
+      lambda_grid = data.frame(lambda = 1),
+      artificial_type = NULL,
+      hard_threshold = 1,
+      n_bootstraps = 2L,
+      sample_fraction = 1,
+      early_fusion = TRUE
+    ),
+    "must not contain `__`"
+  )
+})
+
+test_that("early_fusion rejects per-omic lambda grids", {
+  ids <- paste0("s", seq_len(12L))
+  x_a <- matrix(rnorm(12L * 3L), nrow = 12L,
+                dimnames = list(ids, paste0("a", seq_len(3L))))
+  x_b <- matrix(rnorm(12L * 3L), nrow = 12L,
+                dimnames = list(ids, paste0("b", seq_len(3L))))
+  y <- setNames(rnorm(12L), ids)
+
+  per_omic_lambda <- list(
+    omic_a = data.frame(lambda = c(0.2, 0.1)),
+    omic_b = data.frame(lambda = c(0.3, 0.05))
+  )
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = x_a, omic_b = x_b),
+      y_train = y,
+      lambda_grid = per_omic_lambda,
+      artificial_type = NULL,
+      hard_threshold = 1,
+      n_bootstraps = 2L,
+      sample_fraction = 1,
+      early_fusion = TRUE
+    ),
+    "requires a shared `lambda_grid`"
+  )
+
+  expect_error(
+    stabl_multiomic_cv(
+      x_list = list(omic_a = x_a, omic_b = x_b),
+      y = y,
+      lambda_grid = per_omic_lambda,
+      v = 2L,
+      early_fusion = TRUE
+    ),
+    "requires a shared `lambda_grid`"
+  )
+})
+
 test_that("early_fusion = FALSE leaves early_fusion field NULL", {
   set.seed(23)
   n <- 20L
@@ -486,6 +580,255 @@ test_that("early_fusion = FALSE leaves early_fusion field NULL", {
   )
 
   expect_null(fit$early_fusion)
+})
+
+# ---------------------------------------------------------------------------
+# Multi-Omic STABL tests
+# ---------------------------------------------------------------------------
+
+test_that("multiomic_stabl = TRUE builds prefixed final layer and feature map", {
+  set.seed(241)
+  n <- 28L
+  ids <- paste0("s", seq_len(n))
+  x_a <- matrix(
+    rnorm(n * 3L),
+    nrow = n,
+    dimnames = list(ids, c("a__signal", "a_noise", "shared"))
+  )
+  x_b <- matrix(
+    rnorm(n * 3L),
+    nrow = n,
+    dimnames = list(ids, c("b_noise", "b_signal", "shared"))
+  )
+  y <- setNames(1.4 * x_a[, "a__signal"] - x_b[, "b_signal"] +
+                  rnorm(n, sd = 0.05), ids)
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(cytof = x_a, proteomics = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = 1e-5),
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "gaussian",
+    multiomic_stabl = TRUE,
+    random_state = 241L
+  ))
+
+  mos <- fit$multiomic_stabl
+  expect_false(is.null(mos))
+  expect_equal(colnames(mos$selected_train), mos$feature_map$final_feature)
+  expect_true(all(grepl("__", mos$feature_map$final_feature, fixed = TRUE)))
+  expect_true("cytof__a__signal" %in% mos$feature_map$final_feature)
+  expect_equal(
+    mos$feature_map$original_feature[
+      match("cytof__a__signal", mos$feature_map$final_feature)
+    ],
+    "a__signal"
+  )
+  expect_equal(length(mos$train_predictions), n)
+  expect_named(mos$train_metrics, "r_squared")
+})
+
+test_that("multiomic_stabl validation predictors work without y_valid", {
+  set.seed(242)
+  n_tr <- 24L
+  n_va <- 7L
+  tr_ids <- paste0("tr", seq_len(n_tr))
+  va_ids <- paste0("va", seq_len(n_va))
+  x_a_tr <- matrix(rnorm(n_tr * 3L), nrow = n_tr,
+                   dimnames = list(tr_ids, paste0("a", seq_len(3L))))
+  x_b_tr <- matrix(rnorm(n_tr * 3L), nrow = n_tr,
+                   dimnames = list(tr_ids, paste0("b", seq_len(3L))))
+  x_a_va <- matrix(rnorm(n_va * 3L), nrow = n_va,
+                   dimnames = list(va_ids, paste0("a", seq_len(3L))))
+  x_b_va <- matrix(rnorm(n_va * 3L), nrow = n_va,
+                   dimnames = list(va_ids, paste0("b", seq_len(3L))))
+  y <- setNames(x_a_tr[, 1L] - x_b_tr[, 2L] + rnorm(n_tr, sd = 0.1), tr_ids)
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(cytof = x_a_tr, proteomics = x_b_tr),
+    y_train = y,
+    lambda_grid = data.frame(lambda = 1e-5),
+    x_valid_list = list(cytof = x_a_va, proteomics = x_b_va),
+    y_valid = NULL,
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "gaussian",
+    multiomic_stabl = TRUE,
+    random_state = 242L
+  ))
+
+  expect_equal(length(fit$multiomic_stabl$valid_predictions), n_va)
+  expect_null(fit$multiomic_stabl$valid_metrics)
+})
+
+test_that("multiomic_stabl preserves intercept-only final refit for empty support", {
+  set.seed(243)
+  n <- 18L
+  ids <- paste0("s", seq_len(n))
+  x <- matrix(rnorm(n * 4L), nrow = n,
+              dimnames = list(ids, paste0("f", seq_len(4L))))
+  y <- setNames(rnorm(n), ids)
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list = list(view = x),
+    y_train = y,
+    lambda_grid = data.frame(lambda = 1),
+    artificial_type = NULL,
+    hard_threshold = 1,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "gaussian",
+    multiomic_stabl = TRUE,
+    random_state = 243L
+  )
+
+  mos <- fit$multiomic_stabl
+  expect_equal(ncol(mos$selected_train), 0L)
+  expect_equal(nrow(mos$feature_map), 0L)
+  expect_s3_class(mos$refit$model, "lm")
+  expect_equal(length(mos$train_predictions), n)
+})
+
+test_that("multiomic_stabl rejects Omic View names containing delimiter", {
+  ids <- paste0("s", seq_len(8L))
+  x <- matrix(rnorm(8L * 3L), nrow = 8L,
+              dimnames = list(ids, paste0("f", seq_len(3L))))
+  y <- setNames(rnorm(8L), ids)
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list("bad__view" = x),
+      y_train = y,
+      lambda_grid = data.frame(lambda = 1),
+      artificial_type = NULL,
+      hard_threshold = 1,
+      n_bootstraps = 2L,
+      sample_fraction = 1,
+      multiomic_stabl = TRUE
+    ),
+    "must not contain `__`"
+  )
+})
+
+test_that("multiomic_stabl returns classification metrics when outcomes are supplied", {
+  set.seed(244)
+  n_tr <- 24L
+  n_va <- 12L
+  tr_ids <- paste0("tr", seq_len(n_tr))
+  va_ids <- paste0("va", seq_len(n_va))
+  y <- setNames(factor(rep(c("control", "case"), each = n_tr / 2L)), tr_ids)
+  y_va <- setNames(factor(rep(c("control", "case"), each = n_va / 2L),
+                          levels = levels(y)), va_ids)
+  signal <- ifelse(y == "case", 1, -1)
+  x_a <- matrix(rnorm(n_tr * 4L, sd = 0.2), nrow = n_tr,
+                dimnames = list(tr_ids, paste0("a", seq_len(4L))))
+  x_b <- matrix(rnorm(n_tr * 4L, sd = 0.2), nrow = n_tr,
+                dimnames = list(tr_ids, paste0("b", seq_len(4L))))
+  x_a[, 1L] <- x_a[, 1L] + signal
+  x_b[, 2L] <- x_b[, 2L] + signal
+  x_a_va <- matrix(rnorm(n_va * 4L), nrow = n_va,
+                   dimnames = list(va_ids, paste0("a", seq_len(4L))))
+  x_b_va <- matrix(rnorm(n_va * 4L), nrow = n_va,
+                   dimnames = list(va_ids, paste0("b", seq_len(4L))))
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(cytof = x_a, proteomics = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = 1e-5),
+    x_valid_list = list(cytof = x_a_va, proteomics = x_b_va),
+    y_valid = y_va,
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "binomial",
+    multiomic_stabl = TRUE,
+    random_state = 244L
+  ))
+
+  expect_named(
+    fit$multiomic_stabl$train_metrics,
+    c("accuracy", "balanced_error_rate", "per_class_recall",
+      "macro_f1", "confusion", "auc")
+  )
+  expect_named(
+    fit$multiomic_stabl$valid_metrics,
+    c("accuracy", "balanced_error_rate", "per_class_recall",
+      "macro_f1", "confusion", "auc")
+  )
+})
+
+test_that("multiomic_stabl supports cox final refit predictions", {
+  skip_if_not_installed("survival")
+
+  set.seed(246)
+  n <- 20L
+  ids <- paste0("s", seq_len(n))
+  x_a <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(3L))))
+  x_b <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(3L))))
+  linpred <- 0.4 * x_a[, 1L] - 0.3 * x_b[, 2L]
+  y <- survival::Surv(
+    time = rexp(n, rate = exp(linpred) / 5) + 0.1,
+    event = rbinom(n, size = 1L, prob = 0.75)
+  )
+  rownames(y) <- ids
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(cytof = x_a, proteomics = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = 1),
+    artificial_type = NULL,
+    hard_threshold = 1,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "cox",
+    multiomic_stabl = TRUE,
+    random_state = 246L
+  ))
+
+  mos <- fit$multiomic_stabl
+  expect_equal(mos$refit$model_type, "coxph")
+  expect_equal(length(mos$train_predictions), n)
+  expect_true(all(is.finite(mos$train_predictions)))
+  expect_null(mos$train_metrics)
+})
+
+test_that("stabl_multiomic_cv forwards multiomic_stabl", {
+  set.seed(245)
+  n <- 18L
+  ids <- paste0("s", seq_len(n))
+  x_a <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(3L))))
+  x_b <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(3L))))
+  y <- setNames(x_a[, 1L] - x_b[, 2L] + rnorm(n, sd = 0.1), ids)
+
+  fit <- suppressWarnings(stabl_multiomic_cv(
+    x_list = list(cytof = x_a, proteomics = x_b),
+    y = y,
+    lambda_grid = data.frame(lambda = 1e-5),
+    v = 3L,
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "gaussian",
+    multiomic_stabl = TRUE,
+    random_state = 245L
+  ))
+
+  expect_false(is.null(fit$fold_results[[1L]]$multiomic_stabl))
+  expect_equal(
+    length(fit$fold_results[[1L]]$multiomic_stabl$valid_predictions),
+    length(fit$folds[[1L]]$valid_ids)
+  )
 })
 
 # ---------------------------------------------------------------------------
@@ -660,6 +1003,43 @@ test_that("print.stabl_multiomic_cv runs and reports class header", {
   )
 
   expect_output(print(fit), "stabl_multiomic_cv")
+})
+
+test_that("early, late, and multiomic STABL branches can coexist", {
+  set.seed(351)
+  n <- 24L
+  ids <- paste0("s", seq_len(n))
+  x_a <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(3L))))
+  x_b <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(3L))))
+  y <- setNames(x_a[, 1L] - x_b[, 2L] + rnorm(n, sd = 0.2), ids)
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = 1e-5),
+    artificial_type = NULL,
+    hard_threshold = 1e-9,
+    n_bootstraps = 2L,
+    sample_fraction = 1,
+    family = "gaussian",
+    random_state = 351L,
+    early_fusion = TRUE,
+    late_fusion = TRUE,
+    multiomic_stabl = TRUE,
+    n_iter_lf = 50L
+  ))
+
+  expect_false(is.null(fit$early_fusion))
+  expect_false(is.null(fit$late_fusion))
+  expect_false(is.null(fit$multiomic_stabl))
+  expect_s3_class(fit$early_fusion$fit, "stabl_fit")
+  expect_s3_class(fit$late_fusion$weights, "data.frame")
+  expect_s3_class(fit$multiomic_stabl$refit$model, "lm")
+  expect_true(all(grepl("__", fit$early_fusion$fit$feature_names, fixed = TRUE)))
+  expect_equal(nrow(fit$late_fusion$train_predictions), n)
+  expect_equal(length(fit$multiomic_stabl$train_predictions), n)
 })
 
 test_that("default multi-omic return structure is unchanged when cooperative_fusion is FALSE", {

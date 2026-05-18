@@ -38,8 +38,10 @@ per-lambda FDP+ values.}
 }
 \description{
 Sweeps a grid of stability-score thresholds and computes the FDP+ estimate
-at each one, then identifies the threshold that minimises it.  This is a
-direct port of \code{Stabl._compute_FDPplus()} from the Python STABL library.
+at each one, then identifies the threshold that minimises it.  For
+Python-original parity, features are counted only when their stability score
+is strictly greater than the candidate threshold.  This differs from the
+paper's formal \code{>=} notation.
 }
 \details{
 The FDP+ at threshold \eqn{\tau} is estimated as:

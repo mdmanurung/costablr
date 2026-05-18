@@ -2,15 +2,20 @@
 #'
 #' Fits [stabl_fit()] independently on each omic block from a named list,
 #' then returns per-omic fitted objects and selected-feature matrices for
-#' downstream composition. Optional early-fusion, late-fusion, and
-#' cooperative-fusion branches are additive to the per-omic STABL results.
+#' downstream composition. Optional early-fusion, late-fusion, Multi-Omic
+#' STABL, and cooperative-fusion branches are additive to the per-omic STABL
+#' results. Early Fusion, Late Fusion, and Multi-Omic STABL may be enabled in
+#' the same call; their outputs remain separated in `early_fusion`,
+#' `late_fusion`, and `multiomic_stabl`.
 #'
 #' @param x_train_list Named list of training omic tables (`data.frame` or
 #'   numeric matrix), each with row names as sample IDs.
 #' @param y_train Named outcome vector for training samples.
 #' @param lambda_grid Either a shared lambda grid (`data.frame` or `"auto"`)
 #'   used for all omics, or a named list mapping each omic name to its own
-#'   lambda grid.
+#'   lambda grid. When `early_fusion = TRUE`, this must be a shared grid
+#'   (`data.frame` or `"auto"`); per-omic lambda lists are rejected because
+#'   Early Fusion has one concatenated input space.
 #' @param x_valid_list Optional named list of validation omic tables. When
 #'   supplied, names must match `x_train_list` names.
 #' @param y_valid Optional named outcome vector for validation samples. When
@@ -34,7 +39,9 @@
 #'
 #' @param early_fusion Logical.  When `TRUE`, a single [stabl_fit()] is run on
 #'   the column-bound concatenation of all omic matrices in addition to the
-#'   per-omic fits.  Results are returned in the `early_fusion` field.
+#'   per-omic fits. Combined Early Fusion feature names are prefixed as
+#'   `<Omic View>__<original feature>` to preserve provenance. Results are
+#'   returned in the `early_fusion` field.
 #' @param late_fusion Logical.  When `TRUE`, a downstream unpenalized
 #'   predictor is fitted per omic on its selected features, and
 #'   [stacked_multi_omic()] combines the per-omic predictions.  If no features
@@ -45,11 +52,16 @@
 #' @param n_iter_lf Number of random weight draws passed to
 #'   [stacked_multi_omic()] during late fusion.  Ignored when
 #'   `late_fusion = FALSE`.
+#' @param multiomic_stabl Logical. When `TRUE`, concatenate the per-omic
+#'   STABL-selected biomarkers into one final-layer matrix and fit a single
+#'   downstream unpenalized final refit on that combined selected set. This is
+#'   distinct from late fusion, which combines prediction outputs.
 #' @param cooperative_fusion Logical. When `TRUE`, fit a multiview-based
-#'   cooperative learning branch in addition to the existing per-omic STABL
-#'   fits. For `family = "multinomial"`, this runs an automatic one-vs-rest
-#'   wrapper with one binomial cooperative model per class. Requires the
-#'   optional `multiview` package.
+#'   cooperative comparator branch in addition to the existing per-omic STABL
+#'   fits. This branch is outside the formal Early Fusion, Late Fusion, and
+#'   Multi-Omic STABL taxonomy. For `family = "multinomial"`, this runs an
+#'   automatic one-vs-rest wrapper with one binomial cooperative model per
+#'   class. Requires the optional `multiview` package.
 #' @param rho Numeric scalar or vector of non-negative cooperation strengths.
 #'   When `NULL`, defaults to `0` following [multiview::multiview()].
 #' @param cooperation_selection Character scalar. Either `"cv"` or
@@ -77,12 +89,17 @@
 #'     \item{`selected_valid`}{Named list of validation matrices restricted to
 #'       selected features, or `NULL` when no validation input is provided.}
 #'     \item{`early_fusion`}{`NULL` when `early_fusion = FALSE`.  Otherwise a
-#'       list with `fit`, `refit`, `selected_features`, `selected_train`, and
-#'       `selected_valid` for the concatenated single-STABL run.}
+#'       list with `fit`, `refit`, Omic View-prefixed `selected_features`,
+#'       `selected_train`, and `selected_valid` for the concatenated
+#'       single-STABL run.}
 #'     \item{`late_fusion`}{`NULL` when `late_fusion = FALSE`.  Otherwise a
 #'       list with `weights` (data.frame), `train_predictions` (data.frame),
 #'       `valid_predictions`, and `score`; multinomial tasks also include
 #'       `levels`, `log_loss`, and classification metrics.}
+#'     \item{`multiomic_stabl`}{Present only when `multiomic_stabl = TRUE`.
+#'       A list containing per-view selected features, a provenance map,
+#'       prefixed combined selected train/validation matrices, one final
+#'       refit, train/validation predictions, and metrics where defined.}
 #'     \item{`cooperative_fusion`}{Present only when
 #'       `cooperative_fusion = TRUE`. For scalar families, a list containing
 #'       the selected multiview fit, chosen `rho` and `lambda`, selected
@@ -111,6 +128,7 @@ stabl_multiomic_train_validate <- function(
     early_fusion    = FALSE,
     late_fusion     = FALSE,
     n_iter_lf       = 10000L,
+    multiomic_stabl = FALSE,
     cooperative_fusion = FALSE,
     rho             = NULL,
     cooperation_selection = c("cv", "validation"),
@@ -123,6 +141,13 @@ stabl_multiomic_train_validate <- function(
                             groups = groups_train)
 
   omic_names <- names(x_train_list)
+  if (isTRUE(early_fusion) || isTRUE(multiomic_stabl)) {
+    .validate_prefixed_omic_names(omic_names)
+  }
+  early_fusion_lambda <- NULL
+  if (isTRUE(early_fusion)) {
+    early_fusion_lambda <- .resolve_early_fusion_lambda_grid(lambda_grid)
+  }
   train_ids <- rownames(x_train_list[[omic_names[1L]]])
   y_train <- .subset_outcome_by_ids(y_train, train_ids)
   if (!is.null(groups_train)) {
@@ -266,16 +291,14 @@ stabl_multiomic_train_validate <- function(
   if (isTRUE(early_fusion)) {
     x_all_train <- do.call(cbind, lapply(omic_names, function(omic) {
       x <- x_train_list[[omic]]
-      if (is.data.frame(x)) as.matrix(x) else x
+      if (is.data.frame(x)) x <- as.matrix(x)
+      .prefix_omic_matrix(x, omic)
     }))
-
-    # Use the shared/first lambda grid for the concatenated model.
-    ef_lambda <- lambda_by_omic[[omic_names[1L]]]
 
     ef_fit <- stabl_fit(
       x            = x_all_train,
       y            = y_train,
-      lambda_grid  = ef_lambda,
+      lambda_grid  = early_fusion_lambda,
       base_learner = base_learner,
       family       = family,
       n_bootstraps = n_bootstraps,
@@ -295,7 +318,8 @@ stabl_multiomic_train_validate <- function(
     ef_valid_mat <- if (!is.null(x_valid_list)) {
       x_all_valid <- do.call(cbind, lapply(omic_names, function(omic) {
         x <- x_valid_list[[omic]]
-        if (is.data.frame(x)) as.matrix(x) else x
+        if (is.data.frame(x)) x <- as.matrix(x)
+        .prefix_omic_matrix(x, omic)
       }))
       .stabl_subset_selected_matrix(x_all_valid, ef_sel)
     } else {
@@ -423,6 +447,20 @@ stabl_multiomic_train_validate <- function(
     }
   }
 
+  # ---- Multi-Omic STABL final layer ---------------------------------------
+  mos_result <- NULL
+  if (isTRUE(multiomic_stabl)) {
+    mos_result <- .fit_multiomic_stabl_final_layer(
+      selected_train = selected_train,
+      selected_valid = selected_valid,
+      selected_features = selected_features,
+      y_train = y_train,
+      y_valid = y_valid,
+      task_type = refit_task_type,
+      levels = refit_levels
+    )
+  }
+
   # ---- Cooperative fusion --------------------------------------------------
   cf_result <- NULL
   if (isTRUE(cooperative_fusion)) {
@@ -448,6 +486,10 @@ stabl_multiomic_train_validate <- function(
     late_fusion       = lf_result
   )
 
+  if (!is.null(mos_result)) {
+    out$multiomic_stabl <- mos_result
+  }
+
   if (!is.null(cf_result)) {
     out$cooperative_fusion <- cf_result
   }
@@ -465,15 +507,18 @@ stabl_multiomic_train_validate <- function(
 #' fold-wise selection diagnostics together with selected train/validation
 #' matrices for downstream inspection.
 #'
-#' Optional early-fusion, late-fusion, and cooperative-fusion branches are
-#' forwarded to each fold-specific [stabl_multiomic_train_validate()] call.
+#' Optional early-fusion, late-fusion, Multi-Omic STABL, and
+#' cooperative-fusion branches are forwarded to each fold-specific
+#' [stabl_multiomic_train_validate()] call.
 #'
 #' @param x_list Named list of omic tables (`data.frame` or numeric matrix),
 #'   each with row names as sample IDs.
 #' @param y Named outcome vector.
 #' @param lambda_grid Either a shared lambda grid (`data.frame` or `"auto"`)
 #'   used for all omics, or a named list mapping each omic name to its own
-#'   lambda grid.
+#'   lambda grid. When `early_fusion = TRUE`, this must be a shared grid
+#'   (`data.frame` or `"auto"`); per-omic lambda lists are rejected because
+#'   Early Fusion has one concatenated input space.
 #' @param v Number of folds. Must be at least 2.
 #' @param groups Optional named grouping vector. When supplied, all samples in
 #'   the same group are assigned to the same assessment fold.
@@ -493,6 +538,7 @@ stabl_multiomic_train_validate <- function(
 #' @param late_fusion Logical.  Forwarded to each per-fold
 #'   [stabl_multiomic_train_validate()] call.
 #' @param n_iter_lf Forwarded to [stabl_multiomic_train_validate()].
+#' @param multiomic_stabl Forwarded to [stabl_multiomic_train_validate()].
 #' @param cooperative_fusion Forwarded to
 #'   [stabl_multiomic_train_validate()].
 #' @param rho Forwarded to [stabl_multiomic_train_validate()].
@@ -513,7 +559,11 @@ stabl_multiomic_train_validate <- function(
 #'     \item{`fold_results`}{Named list of per-fold
 #'       `stabl_multiomic_fit` results.}
 #'     \item{`diagnostics`}{Data frame with one row per fold/omic and columns
-#'       `fold`, `omic`, `n_selected`, `threshold`, and `max_score`.}
+#'       `fold`, `omic`, `n_selected`, `threshold`, and `max_score`. This
+#'       table summarizes the per-omic STABL selector. When
+#'       `multiomic_stabl = TRUE`, combined final-layer details remain inside
+#'       `fold_results[[fold]]$multiomic_stabl` rather than being promoted to
+#'       top-level diagnostic rows.}
 #'   }
 #' @export
 stabl_multiomic_cv <- function(
@@ -534,6 +584,7 @@ stabl_multiomic_cv <- function(
   early_fusion    = FALSE,
   late_fusion     = FALSE,
   n_iter_lf       = 10000L,
+  multiomic_stabl = FALSE,
   cooperative_fusion = FALSE,
   rho               = NULL,
   cooperation_selection = c("cv", "validation"),
@@ -543,6 +594,9 @@ stabl_multiomic_cv <- function(
   ...
 ) {
   validate_multiomic_inputs(x_list = x_list, y = y, groups = groups)
+  if (isTRUE(early_fusion)) {
+    .resolve_early_fusion_lambda_grid(lambda_grid)
+  }
 
   sample_ids <- rownames(x_list[[1L]])
   bootstrap_strata <- .subset_bootstrap_strata_by_ids(
@@ -591,6 +645,7 @@ stabl_multiomic_cv <- function(
       early_fusion    = early_fusion,
       late_fusion     = late_fusion,
       n_iter_lf       = n_iter_lf,
+      multiomic_stabl = multiomic_stabl,
       cooperative_fusion = cooperative_fusion,
       rho             = rho,
       cooperation_selection = cooperation_selection,
@@ -639,6 +694,19 @@ stabl_multiomic_cv <- function(
   }
 
   lambda_grid[omic_names]
+}
+
+.resolve_early_fusion_lambda_grid <- function(lambda_grid) {
+  if (is.data.frame(lambda_grid) || identical(lambda_grid, "auto")) {
+    return(lambda_grid)
+  }
+
+  stop(
+    "`early_fusion = TRUE` requires a shared `lambda_grid` (`data.frame` ",
+    "or \"auto\"); named per-omic lambda lists are not supported for the ",
+    "single concatenated Early Fusion input space.",
+    call. = FALSE
+  )
 }
 
 .validate_multiomic_validation_inputs <- function(x_valid_list,
@@ -703,6 +771,260 @@ stabl_multiomic_cv <- function(
   })
   names(out) <- names(x_list)
   out
+}
+
+.validate_prefixed_omic_names <- function(omic_names) {
+  bad <- omic_names[grepl("__", omic_names, fixed = TRUE)]
+  if (length(bad) > 0L) {
+    stop(
+      "Omic View names must not contain `__` when prefixed multi-omic ",
+      "feature names are required: ",
+      paste(bad, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  invisible(NULL)
+}
+
+.prefix_omic_matrix <- function(x, omic) {
+  out <- if (is.data.frame(x)) as.matrix(x) else x
+  colnames(out) <- .prefixed_omic_feature_names(omic, colnames(out))
+  if (anyDuplicated(colnames(out))) {
+    stop(
+      "Prefixed multi-omic feature names must be unique within each Omic View.",
+      call. = FALSE
+    )
+  }
+  out
+}
+
+.fit_multiomic_stabl_final_layer <- function(selected_train,
+                                             selected_valid,
+                                             selected_features,
+                                             y_train,
+                                             y_valid,
+                                             task_type,
+                                             levels) {
+  final_train <- .multiomic_stabl_bind_selected(selected_train)
+  final_valid <- if (is.null(selected_valid)) {
+    NULL
+  } else {
+    .multiomic_stabl_bind_selected(selected_valid)
+  }
+  feature_map <- .multiomic_stabl_feature_map(selected_features)
+
+  final_refit <- .fit_stabl_final_model(
+    x_train_sel = final_train,
+    y_train = y_train,
+    task_type = task_type,
+    levels = levels
+  )
+
+  train_predictions <- .multiomic_stabl_predict(
+    final_refit = final_refit,
+    x_selected = final_train
+  )
+  valid_predictions <- if (is.null(final_valid)) {
+    NULL
+  } else {
+    .multiomic_stabl_predict(
+      final_refit = final_refit,
+      x_selected = final_valid
+    )
+  }
+
+  train_metrics <- .multiomic_stabl_metrics(
+    y = y_train,
+    predictions = train_predictions,
+    final_refit = final_refit,
+    x_selected = final_train
+  )
+  valid_metrics <- if (is.null(y_valid) || is.null(final_valid)) {
+    NULL
+  } else {
+    .multiomic_stabl_metrics(
+      y = y_valid,
+      predictions = valid_predictions,
+      final_refit = final_refit,
+      x_selected = final_valid
+    )
+  }
+
+  list(
+    selected_features = selected_features,
+    final_features = colnames(final_train),
+    feature_map = feature_map,
+    selected_train = final_train,
+    selected_valid = final_valid,
+    refit = final_refit,
+    train_predictions = train_predictions,
+    valid_predictions = valid_predictions,
+    train_metrics = train_metrics,
+    valid_metrics = valid_metrics
+  )
+}
+
+.multiomic_stabl_bind_selected <- function(selected_list) {
+  omic_names <- names(selected_list)
+  n_rows <- if (length(selected_list) == 0L) {
+    0L
+  } else {
+    nrow(selected_list[[1L]])
+  }
+  row_ids <- if (length(selected_list) == 0L) {
+    NULL
+  } else {
+    rownames(selected_list[[1L]])
+  }
+
+  mats <- list()
+  for (omic in omic_names) {
+    mat <- selected_list[[omic]]
+    if (ncol(mat) == 0L) next
+    final_names <- .multiomic_stabl_feature_names(omic, colnames(mat))
+    mat <- mat[, seq_len(ncol(mat)), drop = FALSE]
+    colnames(mat) <- final_names
+    mats[[omic]] <- mat
+  }
+
+  if (length(mats) == 0L) {
+    return(matrix(
+      numeric(0L),
+      nrow = n_rows,
+      ncol = 0L,
+      dimnames = list(row_ids, character(0L))
+    ))
+  }
+
+  out <- do.call(cbind, mats)
+  if (anyDuplicated(colnames(out))) {
+    stop(
+      "Multi-Omic STABL final-layer feature names must be unique after ",
+      "Omic View prefixing.",
+      call. = FALSE
+    )
+  }
+  rownames(out) <- row_ids
+  out
+}
+
+.multiomic_stabl_feature_names <- function(omic, features) {
+  .prefixed_omic_feature_names(omic, features)
+}
+
+.prefixed_omic_feature_names <- function(omic, features) {
+  paste(omic, features, sep = "__")
+}
+
+.multiomic_stabl_feature_map <- function(selected_features) {
+  rows <- lapply(names(selected_features), function(omic) {
+    features <- selected_features[[omic]]
+    if (length(features) == 0L) {
+      return(NULL)
+    }
+    data.frame(
+      final_feature = .multiomic_stabl_feature_names(omic, features),
+      omic = omic,
+      original_feature = features,
+      stringsAsFactors = FALSE
+    )
+  })
+  rows <- Filter(Negate(is.null), rows)
+  if (length(rows) == 0L) {
+    return(data.frame(
+      final_feature = character(),
+      omic = character(),
+      original_feature = character(),
+      stringsAsFactors = FALSE
+    ))
+  }
+  out <- do.call(rbind, rows)
+  rownames(out) <- NULL
+  out
+}
+
+.multiomic_stabl_predict <- function(final_refit, x_selected) {
+  task_type <- final_refit$task_type
+  if (identical(task_type, "multiclass")) {
+    probs <- .predict_stabl_final_model(
+      final_refit,
+      x_selected,
+      type = "response"
+    )
+    return(.multiomic_stabl_prediction_frame(probs))
+  }
+  .predict_stabl_final_model(final_refit, x_selected, type = "response")
+}
+
+.multiomic_stabl_prediction_frame <- function(probabilities) {
+  probs <- as.data.frame(probabilities, check.names = FALSE)
+  names(probs) <- paste0("prob_", names(probs))
+  classes <- sub("^prob_", "", names(probs))
+  probs$predicted_class <- classes[max.col(as.matrix(probabilities),
+                                           ties.method = "first")]
+  probs
+}
+
+.multiomic_stabl_metrics <- function(y,
+                                     predictions,
+                                     final_refit,
+                                     x_selected) {
+  task_type <- final_refit$task_type
+
+  if (identical(task_type, "regression")) {
+    return(list(r_squared = .r_squared(as.numeric(y), as.numeric(predictions))))
+  }
+
+  if (identical(task_type, "binary")) {
+    predicted_class <- .predict_stabl_final_model(
+      final_refit,
+      x_selected,
+      type = "class"
+    )
+    metrics <- .classification_metrics(
+      truth = factor(y, levels = final_refit$levels),
+      predicted = factor(predicted_class, levels = final_refit$levels)
+    )
+    metrics$auc <- .r_auc(
+      as.integer(factor(y, levels = final_refit$levels) == final_refit$levels[[2L]]),
+      as.numeric(predictions)
+    )
+    return(metrics)
+  }
+
+  if (identical(task_type, "multiclass")) {
+    prob_cols <- paste0("prob_", final_refit$levels)
+    probs <- as.matrix(predictions[, prob_cols, drop = FALSE])
+    colnames(probs) <- final_refit$levels
+    metrics <- .classification_metrics(
+      truth = factor(y, levels = final_refit$levels),
+      predicted = factor(predictions$predicted_class, levels = final_refit$levels)
+    )
+    metrics$log_loss <- .multiclass_log_loss(
+      factor(y, levels = final_refit$levels),
+      probs
+    )
+    return(metrics)
+  }
+
+  if (identical(task_type, "poisson")) {
+    return(list(
+      mean_poisson_deviance = .multiomic_stabl_poisson_deviance(
+        y = as.numeric(y),
+        mu = as.numeric(predictions)
+      )
+    ))
+  }
+
+  NULL
+}
+
+.multiomic_stabl_poisson_deviance <- function(y, mu) {
+  eps <- .Machine$double.eps
+  mu <- pmax(as.numeric(mu), eps)
+  y <- as.numeric(y)
+  terms <- ifelse(y == 0, 0, y * log(pmax(y, eps) / mu))
+  mean(2 * (terms - (y - mu)))
 }
 .summarize_multiomic_fold <- function(fold_fit, fold_name) {
   omic_names <- names(fold_fit$fits)

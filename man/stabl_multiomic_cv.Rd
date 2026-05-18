@@ -22,6 +22,7 @@ stabl_multiomic_cv(
   early_fusion = FALSE,
   late_fusion = FALSE,
   n_iter_lf = 10000L,
+  multiomic_stabl = FALSE,
   cooperative_fusion = FALSE,
   rho = NULL,
   cooperation_selection = c("cv", "validation"),
@@ -39,7 +40,9 @@ each with row names as sample IDs.}
 
 \item{lambda_grid}{Either a shared lambda grid (\code{data.frame} or \code{"auto"})
 used for all omics, or a named list mapping each omic name to its own
-lambda grid.}
+lambda grid. When \code{early_fusion = TRUE}, this must be a shared grid
+(\code{data.frame} or \code{"auto"}); per-omic lambda lists are rejected because
+Early Fusion has one concatenated input space.}
 
 \item{v}{Number of folds. Must be at least 2.}
 
@@ -74,6 +77,8 @@ assignment and forwarded to each per-fold \code{\link[=stabl_fit]{stabl_fit()}} 
 
 \item{n_iter_lf}{Forwarded to \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
 
+\item{multiomic_stabl}{Forwarded to \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
 \item{cooperative_fusion}{Forwarded to
 \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
 
@@ -101,7 +106,11 @@ A list with class \code{"stabl_multiomic_cv"} containing:
 \item{\code{fold_results}}{Named list of per-fold
 \code{stabl_multiomic_fit} results.}
 \item{\code{diagnostics}}{Data frame with one row per fold/omic and columns
-\code{fold}, \code{omic}, \code{n_selected}, \code{threshold}, and \code{max_score}.}
+\code{fold}, \code{omic}, \code{n_selected}, \code{threshold}, and \code{max_score}. This
+table summarizes the per-omic STABL selector. When
+\code{multiomic_stabl = TRUE}, combined final-layer details remain inside
+\code{fold_results[[fold]]$multiomic_stabl} rather than being promoted to
+top-level diagnostic rows.}
 }
 }
 \description{
@@ -111,6 +120,7 @@ fold-wise selection diagnostics together with selected train/validation
 matrices for downstream inspection.
 }
 \details{
-Optional early-fusion, late-fusion, and cooperative-fusion branches are
-forwarded to each fold-specific \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.
+Optional early-fusion, late-fusion, Multi-Omic STABL, and
+cooperative-fusion branches are forwarded to each fold-specific
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.
 }

@@ -333,15 +333,19 @@ make_sgl_adapter <- function(
 
 #' Build a Data-Driven Lambda Grid
 #'
-#' Runs `glmnet` on the full training data to obtain a calibrated penalty
-#' sequence, returning the result as a pre-expanded `data.frame` suitable for
-#' use as the `lambda_grid` argument of [stabl_fit()].
+#' Returns a Python STABL-compatible penalty sequence as a pre-expanded
+#' `data.frame` suitable for use as the `lambda_grid` argument of
+#' [stabl_fit()].  Gaussian, binomial, and multinomial families use the
+#' upstream Python auto-mode formulas translated to glmnet's `lambda` scale.
+#' Cox remains on glmnet's native path because upstream Python STABL has no Cox
+#' backend.
 #'
-#' Choosing lambda values manually is error-prone: too large a lambda selects
-#' nothing; too small a lambda selects everything.  This function delegates
-#' the sequence computation to `glmnet`'s own warm-start path algorithm,
-#' which guarantees the grid spans from near-zero sparsity to near-full
-#' sparsity for the given data, family, and alpha.
+#' For Gaussian outcomes, the path follows Python's
+#' `||X'Y||_inf / (n * l1_ratio)` scale and returns
+#' `geomspace(lambda_max / 30, lambda_max + 5, n_lambda)`.  For classification,
+#' R approximates Python's `sklearn.svm.l1_min_c()` grid, converts the resulting
+#' `C` path to glmnet-style `lambda = 1 / C`, and returns that decreasing
+#' penalty sequence.
 #'
 #' For elastic-net models, supplying a vector of `l1_ratio` values causes the
 #' function to fit a separate path per alpha, row-bind the resulting grids,
@@ -376,27 +380,48 @@ auto_lambda_grid <- function(
     n_lambda = 30L,
     l1_ratio = NULL
 ) {
-  if (!requireNamespace("glmnet", quietly = TRUE)) {
-    stop(
-      "Package 'glmnet' is required. ",
-      "Install it with: install.packages(\"glmnet\")",
-      call. = FALSE
-    )
+  if (!is.numeric(n_lambda) || length(n_lambda) != 1L ||
+      is.na(n_lambda) || n_lambda < 1L) {
+    stop("`n_lambda` must be a positive integer.", call. = FALSE)
   }
+  n_lambda <- as.integer(n_lambda)
 
   alphas <- if (is.null(l1_ratio)) 1.0 else as.numeric(l1_ratio)
   add_alpha <- !is.null(l1_ratio)
+  if (anyNA(alphas) || any(!is.finite(alphas)) || any(alphas <= 0)) {
+    stop("`l1_ratio` must contain positive finite values.", call. = FALSE)
+  }
 
   grids <- vector("list", length(alphas))
   for (i in seq_along(alphas)) {
-    fit_tmp <- glmnet::glmnet(
-      x = x,
-      y = y,
-      family = family,
-      alpha = alphas[[i]],
-      nlambda = n_lambda
+    lam_seq <- switch(
+      family,
+      gaussian = .python_regression_lambda_grid(
+        x = x,
+        y = y,
+        l1_ratio = alphas[[i]],
+        n_lambda = n_lambda
+      ),
+      binomial = .python_classification_lambda_grid(
+        x = x,
+        y = y,
+        l1_ratio = alphas[[i]],
+        n_lambda = n_lambda
+      ),
+      multinomial = .python_classification_lambda_grid(
+        x = x,
+        y = y,
+        l1_ratio = alphas[[i]],
+        n_lambda = n_lambda
+      ),
+      .glmnet_auto_lambda_sequence(
+        x = x,
+        y = y,
+        family = family,
+        alpha = alphas[[i]],
+        n_lambda = n_lambda
+      )
     )
-    lam_seq <- fit_tmp$lambda
     grids[[i]] <- if (add_alpha) {
       data.frame(alpha = alphas[[i]], lambda = lam_seq)
     } else {
@@ -405,6 +430,64 @@ auto_lambda_grid <- function(
   }
 
   do.call(rbind, grids)
+}
+
+.python_regression_lambda_grid <- function(x, y, l1_ratio, n_lambda) {
+  x <- as.matrix(x)
+  y <- as.numeric(y)
+  lambda_max <- max(abs(as.numeric(crossprod(x, y)))) / (nrow(x) * l1_ratio)
+  lambda_max <- .positive_lambda_scale(lambda_max)
+  .geomspace(lambda_max / 30, lambda_max + 5, n_lambda)
+}
+
+.python_classification_lambda_grid <- function(x, y, l1_ratio, n_lambda) {
+  x <- as.matrix(x)
+  y_factor <- factor(y)
+  if (nlevels(y_factor) < 2L) {
+    stop("Classification auto lambda grid requires at least two outcome classes.",
+         call. = FALSE)
+  }
+
+  indicator <- stats::model.matrix(~ y_factor - 1)
+  residual <- sweep(indicator, 2L, colMeans(indicator), "-")
+  lambda_max <- max(abs(as.matrix(crossprod(x, residual)))) /
+    (nrow(x) * l1_ratio)
+  lambda_max <- .positive_lambda_scale(lambda_max)
+
+  # Python uses an increasing C grid from C_min to 100 * C_min.  glmnet consumes
+  # lambda, the inverse regularization scale, so return the decreasing 1 / C path.
+  c_min <- 1.0 / lambda_max
+  c_grid <- seq(c_min, c_min * 100, length.out = n_lambda)
+  1.0 / c_grid
+}
+
+.glmnet_auto_lambda_sequence <- function(x, y, family, alpha, n_lambda) {
+  if (!requireNamespace("glmnet", quietly = TRUE)) {
+    stop(
+      "Package 'glmnet' is required. ",
+      "Install it with: install.packages(\"glmnet\")",
+      call. = FALSE
+    )
+  }
+  fit_tmp <- glmnet::glmnet(
+    x = x,
+    y = y,
+    family = family,
+    alpha = alpha,
+    nlambda = n_lambda
+  )
+  fit_tmp$lambda
+}
+
+.positive_lambda_scale <- function(x) {
+  if (!is.finite(x) || x <= 0) {
+    return(.Machine$double.eps)
+  }
+  x
+}
+
+.geomspace <- function(from, to, length.out) {
+  exp(seq(log(from), log(to), length.out = length.out))
 }
 
 .feature_abs_coefs <- function(fit, s, family = "gaussian") {

@@ -1,9 +1,11 @@
 #' Get the Feature Selection Mask from a Fitted STABL Object
 #'
 #' Returns a named logical vector that is `TRUE` for every feature whose
-#' maximum stability score exceeds the effective threshold.  This is the
-#' primary accessor for downstream use of a fitted STABL model: index your
-#' data matrix with the returned mask, or pass the object to
+#' maximum stability score is greater than or equal to the effective threshold,
+#' matching the StablSRM paper notation. This intentionally differs from the
+#' upstream Python implementation's strict `>` tie behavior.
+#' This is the primary accessor for downstream use of a fitted STABL model:
+#' index your data matrix with the returned mask, or pass the object to
 #' [get_feature_names_out()] to obtain the names directly.
 #'
 #' @details
@@ -18,10 +20,9 @@
 #' `hard_threshold`.
 #'
 #' **Explore fallback:** When `explore = TRUE` was set during fitting and no
-#' feature's score exceeds the threshold, the function returns the top
-#' `n_explore` features instead of an all-`FALSE` vector.  This is useful in
-#' exploratory analyses where you want at least some candidates even when the
-#' signal is weak.
+#' feature's score meets the threshold, the function lowers the cutoff to the
+#' `n_explore`-th largest score minus `0.01`, then reapplies `>=` selection.
+#' This can select more than `n_explore` features when scores are tied.
 #'
 #' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
 #' @param new_hard_threshold Numeric in `(0, 1]` or `NULL`.  When supplied,
@@ -90,16 +91,14 @@ get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
   threshold <- .resolve_threshold(object, new_hard_threshold)$value
 
   max_scores <- get_importances(object)
-  mask       <- max_scores > threshold
+  mask       <- max_scores >= threshold
 
-  # explore fallback: top n_explore features if nothing passes threshold.
-  # Use direct index selection to avoid over-selecting on tied scores
-  # (the old `sort()[n_exp] - 0.01` approach selected ALL features tied at
-  # the n_exp-th score, e.g. all-zero scores produced mask = all TRUE).
+  # Keep Python's cutoff-lowering rule, then apply the paper-notation support
+  # comparator used by the rest of the R implementation.
   if (!any(mask) && isTRUE(object$explore)) {
     n_exp       <- min(object$n_explore, length(max_scores))
-    top_idx     <- order(max_scores, decreasing = TRUE)[seq_len(n_exp)]
-    mask[top_idx] <- TRUE
+    threshold   <- sort(max_scores, decreasing = TRUE)[[n_exp]] - 0.01
+    mask        <- max_scores >= threshold
   }
 
   mask
@@ -371,6 +370,10 @@ print.stabl_multiomic_fit <- function(x, ...) {
   cat("  Late fusion:     ", if (!is.null(x$late_fusion)) {
     paste0("yes (score = ", round(x$late_fusion$score, 4L), ")")
   } else "no", "\n")
+  cat("  Multi-Omic STABL:", if (!is.null(x$multiomic_stabl)) {
+    paste0(" yes (", length(x$multiomic_stabl$final_features),
+           " features in final layer)")
+  } else " no", "\n")
   if (!is.null(x$cooperative_fusion)) {
     cf <- x$cooperative_fusion
     n_cf_sel <- sum(vapply(cf$selected_features, length, integer(1L)))

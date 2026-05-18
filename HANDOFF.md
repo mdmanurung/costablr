@@ -42,6 +42,63 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
+- STABL algorithm-contract signal: `STABL.md` now treats upstream Python STABL
+  `gregbellan/Stabl@1d07f85a13cfbecb4f08ce21075bf4fbb8e34678` as the
+  executable source of truth when Python code and the Nature Biotechnology
+  paper notation conflict. The canonical `costablr` contract uses strict `>`
+  FDP+/support thresholding, `floor(p * artificial_proportion)` artificial
+  counts, `(1 / pi)` FDP+ scaling, sklearn-style per-bootstrap
+  `bootstrap_threshold >=` coefficient masks, Python's cutoff-lowering
+  `explore = TRUE` fallback, and Python-shaped gaussian/binomial/multinomial
+  auto-lambda grids. The paper's `>=` notation and `q = p` default construction
+  remain documented as method notation; `artificial_proportion = 1` still gives
+  `q = p`. Focused validation after the Python-original restoration passed
+  `test-fdp-plus-invariants.R`, `test-audit-stabl-accessors.R`,
+  `test-stabl-fit.R`, and `test-python-parity-fixtures.R`.
+- Early Fusion provenance signal: `early_fusion = TRUE` now prefixes every
+  candidate biomarker in the concatenated matrix as
+  `<Omic View>__<original feature>` before running the single STABL Selector.
+  This preserves provenance and disambiguates same-named biomarkers across
+  Omic Views. It shares the delimiter policy with Multi-Omic STABL: original
+  feature names may contain `__`, but Omic View names must not contain `__`.
+  Early Fusion also requires a shared lambda grid (`"auto"` or one
+  `data.frame`); named per-omic lambda lists are rejected because Early Fusion
+  has one concatenated input space. Early Fusion, Late Fusion, and Multi-Omic
+  STABL are additive comparison branches and may be enabled together, with
+  separate `$early_fusion`, `$late_fusion`, and `$multiomic_stabl` outputs.
+  Cooperative Fusion remains a separate comparator branch outside that formal
+  taxonomy. Focused validation after this change passed
+  `test-multiomic-workflows.R`.
+- Multi-Omic STABL implementation signal:
+  `stabl_multiomic_train_validate(multiomic_stabl = TRUE)` now returns a
+  `$multiomic_stabl` branch with prefixed final-layer selected matrices,
+  provenance mapping, one final refit, train predictions, validation
+  predictions when validation Omic Views are supplied, and metrics when
+  outcomes make them well-defined. `stabl_multiomic_cv()` forwards
+  `multiomic_stabl = TRUE` to each fold. The branch reuses the existing
+  unpenalized final-refit helper and preserves the intercept-only fallback
+  when no biomarkers are selected. It is additive: top-level per-view `fits`,
+  `selected_features`, `selected_train`, and `refits` remain available as
+  diagnostics/per-view final refits, while the paper-level combined estimate
+  lives in `$multiomic_stabl$refit`. Final-layer selected-biomarker columns are
+  prefixed with Omic View using `__`; original feature names may contain `__`;
+  Omic View names must not contain `__`. Cox uses the existing Cox final refit
+  and returns risk predictions without first-pass Cox metrics. Nested-CV
+  integration remains deferred because it needs an explicit candidate-type
+  design rather than simple flag forwarding. Top-level
+  `stabl_multiomic_cv()` diagnostics remain per-fold/per-Omic View selector
+  diagnostics; combined Multi-Omic STABL final-layer details stay in each
+  fold's `$multiomic_stabl` branch.
+- Deferred Cox Late Fusion signal: keep the current explicit
+  `late_fusion = TRUE, family = "cox"` unsupported guard. The existing stacker
+  optimizes binary AUC, regression R^2, or multiclass log loss; Cox needs
+  survival-aware weight selection over risk scores and `Surv(time, event)`
+  outcomes, for example with a concordance objective.
+- Domain-language signal: root `CONTEXT.md` now captures the project glossary
+  for STABL Selector, Final Refit, Candidate/Selected Biomarker, Artificial
+  Feature, Reliability Threshold, Base SRM, Omic View, Early/Late/Cooperative
+  Fusion, and Multi-Omic STABL. Use **Omic View** preferentially; "modality" is
+  acceptable but noncanonical.
 - Vignette narrative rewrite is in place across all six canonical sources under
   `vignettes/`.  The rewrite used an original, curiosity-driven
   scientific narrative voice and preserved executable code chunks and runtime
@@ -141,10 +198,11 @@ For details that must not be duplicated here:
   thresholding and accept `NULL`, numeric thresholds, `"mean"`, `"median"`,
   and scaled forms such as `"1.25*mean"`.  Focused `test-stabl-fit.R` passes.
 - Latest STABL parity-audit signal: `STABL.md` was checked against upstream
-  Python commit `1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`. The audit
-  confirmed core selector/FDP+ parity and refreshed documentation for stale
-  upstream line anchors, Python `"knockoff"` versus R `"modelx_knockoff"`,
-  and the intentional R `explore = TRUE` tie-handling hardening difference.
+  Python commit `1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`. The active R
+  selector now matches Python's strict FDP+/support thresholding,
+  floor-based artificial-feature count, and cutoff-lowering `explore = TRUE`
+  fallback. Python `"knockoff"` still maps to R `"modelx_knockoff"`, with
+  `"mvr_knockoff"` retained as an R extension.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
 - Cooperative fusion: promoted workflow-layer extension (non-parity-blocking). Hardening milestone CLOSED 2026-05-08 (M12); promotion accessor milestone CLOSED 2026-05-10. Public inspection surface now includes `get_cooperative_features()` and `get_cooperative_diagnostics()`.
 - Latest verified full-suite signal after post-audit `stabl_refit()` /
@@ -333,10 +391,11 @@ For details that must not be duplicated here:
   shorthand. Grouped `replace = TRUE` sampling can now reuse whole groups
   without stalling under stratified targets. Targeted helper, `stabl_fit`, and
   multiomic workflow tests are green.
-- Latest FDP+ parity signal: the R default `fdr_threshold_range` is now
+- Latest FDP+ parity signal: the R default `fdr_threshold_range` remains
   `seq(0, 0.99, by = 0.01)`, matching Python STABL's
-  `np.arange(0., 1., .01)`. The active scratch notebook is the study-group
-  multinomial elastic-net analysis noted above.
+  `np.arange(0., 1., .01)`, and FDP+ counts use Python-original strict `>`.
+  The active scratch notebook is the study-group multinomial elastic-net
+  analysis noted above.
 - Latest multi-omic API signal: auto-lambda calls now forward `l1_ratio`
   through `stabl_fit()`, `stabl_multiomic_train_validate()`,
   `stabl_multiomic_cv()`, and nested CV. Multiclass late fusion is supported

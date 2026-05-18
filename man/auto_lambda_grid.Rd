@@ -30,16 +30,20 @@ A \code{data.frame} with at least a \code{lambda} column.  An \code{alpha} colum
 is included whenever \code{l1_ratio} is not \code{NULL}.
 }
 \description{
-Runs \code{glmnet} on the full training data to obtain a calibrated penalty
-sequence, returning the result as a pre-expanded \code{data.frame} suitable for
-use as the \code{lambda_grid} argument of \code{\link[=stabl_fit]{stabl_fit()}}.
+Returns a Python STABL-compatible penalty sequence as a pre-expanded
+\code{data.frame} suitable for use as the \code{lambda_grid} argument of
+\code{\link[=stabl_fit]{stabl_fit()}}.  Gaussian, binomial, and multinomial families use the
+upstream Python auto-mode formulas translated to glmnet's \code{lambda} scale.
+Cox remains on glmnet's native path because upstream Python STABL has no Cox
+backend.
 }
 \details{
-Choosing lambda values manually is error-prone: too large a lambda selects
-nothing; too small a lambda selects everything.  This function delegates
-the sequence computation to \code{glmnet}'s own warm-start path algorithm,
-which guarantees the grid spans from near-zero sparsity to near-full
-sparsity for the given data, family, and alpha.
+For Gaussian outcomes, the path follows Python's
+\verb{||X'Y||_inf / (n * l1_ratio)} scale and returns
+\code{geomspace(lambda_max / 30, lambda_max + 5, n_lambda)}.  For classification,
+R approximates Python's \code{sklearn.svm.l1_min_c()} grid, converts the resulting
+\code{C} path to glmnet-style \code{lambda = 1 / C}, and returns that decreasing
+penalty sequence.
 
 For elastic-net models, supplying a vector of \code{l1_ratio} values causes the
 function to fit a separate path per alpha, row-bind the resulting grids,

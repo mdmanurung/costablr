@@ -74,14 +74,19 @@ The core port baseline (Phases 1-8) is complete. This plan now tracks only remai
 
 For command-level evidence and exact validation results, use `PROGRESS.md`.
 
-Current parity baseline includes Python-aligned FDP+ defaults: the R
-`fdr_threshold_range` default is `seq(0, 0.99, by = 0.01)`, matching the
-original Python `np.arange(0., 1., .01)` sweep.  The core selector also
-exposes Python's `bootstrap_threshold` control with the upstream effective
-default `1e-5` and sklearn-style per-bootstrap `>=` coefficient thresholding.
-The parity contract in `STABL.md` was source-audited on 2026-05-13 against
-upstream Python commit `1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`; no new
-core parity work item was opened.
+Current method baseline follows the upstream Python STABL implementation
+(`gregbellan/Stabl@1d07f85`) when executable code and paper notation differ.
+FDP+ counts and selected support use Python-original strict `>` thresholding,
+so ties at the reliability threshold are not counted or selected.
+Artificial-feature counts use `floor(p * artificial_proportion)`, with the
+default `artificial_proportion = 1` still recovering the paper's `q = p`
+construction. The R `fdr_threshold_range` default remains
+`seq(0, 0.99, by = 0.01)`, matching Python's `np.arange(0., 1., .01)` sweep.
+The core selector still exposes Python's `bootstrap_threshold` control with
+the upstream effective default `1e-5` and sklearn-style per-bootstrap `>=`
+coefficient thresholding. Auto-lambda mode now uses Python-shaped gaussian,
+binomial, and multinomial grids where possible, with Cox remaining an R-only
+glmnet-native path because upstream Python STABL has no Cox backend.
 
 ## Active Dependencies
 
@@ -123,6 +128,31 @@ narrative rewrite, parallel render validation completed as SLURM array job
 - pkgdown site builds to `docs/costablr` with clean metadata checks.
 
 ## Current Planning Focus (Forward Only)
+
+Paper-level **Multi-Omic STABL** final-layer parity is implemented for
+train/validation and CV workflows as of 2026-05-18:
+`stabl_multiomic_train_validate(multiomic_stabl = TRUE)` returns a
+`$multiomic_stabl` branch, and `stabl_multiomic_cv()` forwards the same flag to
+each fold. This branch is intentionally distinct from `late_fusion = TRUE`:
+late fusion stacks prediction outputs, while Multi-Omic STABL concatenates
+per-view selected biomarkers and performs one final refit. Remaining forward
+scope: `stabl_multiomic_nested_cv()` integration is deferred because nested CV
+uses its own candidate-selection abstraction; the follow-up should add an
+explicit Multi-Omic STABL candidate type rather than simple flag forwarding.
+Early Fusion now also preserves Omic View provenance by prefixing concatenated
+candidate biomarker names as `<Omic View>__<original feature>` before the
+single STABL Selector is fitted. Top-level `stabl_multiomic_cv()` diagnostics
+remain per-fold/per-Omic View selector diagnostics; combined Multi-Omic STABL
+final-layer details remain inside each fold's `$multiomic_stabl` branch. Early
+Fusion requires a shared lambda grid (`"auto"` or one `data.frame`); per-omic
+lambda-grid lists remain available for per-view STABL and Multi-Omic STABL but
+are rejected for Early Fusion. Early Fusion, Late Fusion, and Multi-Omic STABL
+remain additive comparison branches and may be enabled together in the same
+workflow call. Cooperative Fusion remains a separate comparator branch outside
+the formal Early Fusion / Late Fusion / Multi-Omic STABL taxonomy.
+Cox Late Fusion remains deferred: the current stacker handles binary AUC,
+regression R^2, and multiclass log loss, while Cox requires survival-aware
+weight selection over risk scores and `Surv(time, event)` outcomes.
 
 0. ~~**[ACTIVE] Vignette render validation after narrative rewrite.**~~
    **CLOSED 2026-05-12.** SLURM array `24752130` created HTML output for all
@@ -272,6 +302,11 @@ narrative rewrite, parallel render validation completed as SLURM array job
     and removed the dead DESCRIPTION URL. Acceptance signal: full local tests
     pass with no failures; final `rcmdcheck --no-manual --as-cran` has
     `0 errors`, with only local/release hygiene warning-note items remaining.
+24. ~~Restore Python-original STABL selector defaults.~~
+    **CLOSED 2026-05-18.** Core selector semantics now match upstream Python
+    for strict FDP+/support thresholding, floor-based artificial counts,
+    cutoff-lowering explore fallback, and Python-shaped auto-lambda grids.
+    Detailed evidence lives in `PROGRESS.md`.
 
 ## Remediation Audit Execution Status (2026-05-08)
 
@@ -324,7 +359,7 @@ narrative rewrite, parallel render validation completed as SLURM array job
 
 **Status:** ✅ Delivered. See PROGRESS.md for details.
 
-## Active Milestone: Bug-Fix Audit Findings (2026-05-08)
+## Historical Milestone: Bug-Fix Audit Findings (2026-05-08) — CLOSED
 
 Acceptance gate: all fixes landed, regression suite remains `PASS ≥326, FAIL 0`, and each fix has at least one new targeted test.
 
@@ -333,27 +368,15 @@ Run suite after each fix:
 conda run -n R4_51 Rscript -e "testthat::test_local('.')"
 ```
 
-### Fix 1 — `get_support` explore fallback over-selects on tied scores [SEVERITY 1]
+### Fix 1 — `get_support` explore fallback over-selects on tied scores [SUPERSEDED 2026-05-18]
 
-**File:** `R/stabl_accessors.R`  
-**Function:** `get_support.stabl_fit`, the `explore` fallback block (lines ~63-68).  
-**Problem:** When all features score 0 (heavily regularized), `sort(max_scores, decreasing=TRUE)[n_exp] - 0.01` produces a cutoff of `-0.01`. Then `max_scores > -0.01` is `TRUE` for all features with score 0, selecting **every** feature instead of exactly `n_explore`. Any score tie at the n_exp-th position has the same effect.  
-**Current code:**
-```r
-n_exp  <- min(object$n_explore, length(max_scores))
-cutoff <- sort(max_scores, decreasing = TRUE)[n_exp] - 0.01
-mask   <- max_scores > cutoff
-```
-**Fix:** Use direct index selection — no arithmetic on scores:
-```r
-n_exp          <- min(object$n_explore, length(max_scores))
-top_idx        <- order(max_scores, decreasing = TRUE)[seq_len(n_exp)]
-mask[top_idx]  <- TRUE
-```
-**Test to add:** In `tests/testthat/test-stabl-accessors.R` (or create `test-get-support.R`):
-- Fit with `hard_threshold = 0.99` so nothing passes. Set `explore = TRUE, n_explore = 3`.
-- Verify `sum(get_support(fit))` is exactly 3, not the full feature count.
-- Verify the 3 selected features are the ones with the highest `get_importances()` scores.
+This earlier audit finding treated Python's cutoff-lowering explore fallback as
+a bug and proposed exact top-`n_explore` selection. The 2026-05-18
+Python-original parity decision supersedes that remediation. `costablr` now
+intentionally mirrors Python: if no feature passes and `explore = TRUE`, lower
+the cutoff to the `n_explore`-th largest score minus `0.01`, then select scores
+strictly greater than that cutoff. Ties can select more than `n_explore`
+features, including all features when all stability scores are zero.
 
 ---
 

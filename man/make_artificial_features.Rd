@@ -25,7 +25,7 @@ Seeding happens exactly once in this dispatcher; the model-X helper is
 called without its direct-call seed from this path.}
 }
 \value{
-Named list with two elements:
+Named list:
 \describe{
 \item{\code{x_augmented}}{Numeric matrix of size
 (nrow(x)) \eqn{\times} (ncol(x) + n_injected) with the artificial
@@ -36,6 +36,13 @@ containing the 1-based indices into the \strong{original} \code{x} columns
 were used to build each artificial column.  Used by \code{\link[=stabl_fit]{stabl_fit()}}
 to look up sparse-group-lasso group memberships for the artificial
 block via \code{.append_noise_groups}.}
+\item{\code{type_requested}}{Artificial-feature strategy requested by
+\code{type}.}
+\item{\code{type_used}}{Artificial-feature strategy actually used.  This can
+differ from \code{type_requested} when a knockoff constructor falls back to
+random-permutation features.}
+\item{\code{fallback_used}}{Logical scalar indicating whether a fallback path
+was used while building the artificial block.}
 }
 }
 \description{

@@ -17,6 +17,10 @@ Named list:
 \item{x_augmented}{Original matrix with artificial columns appended.}
 \item{noise_col_indices}{Integer vector (1-based) of original column
 indices selected as sources for the artificial block.}
+\item{type_requested}{Artificial-feature strategy requested by caller.}
+\item{type_used}{Artificial-feature strategy actually used.}
+\item{fallback_used}{Logical scalar indicating whether a fallback path
+was used while building the artificial block.}
 }
 }
 \description{

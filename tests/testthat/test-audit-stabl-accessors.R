@@ -32,11 +32,45 @@ test_that("AUDIT IMPL-001: get_support rejects invalid thresholds", {
     get_support(object, new_hard_threshold = 0.5),
     c(a = FALSE, b = TRUE)
   )
+  expect_equal(
+    get_support(object, new_hard_threshold = 0.4),
+    c(a = TRUE, b = TRUE)
+  )
 
   object$fdr_min_threshold_ <- 0
   expect_equal(
     get_support(object),
     c(a = TRUE, b = TRUE)
+  )
+})
+
+test_that("get_support uses paper threshold ties", {
+  object <- structure(
+    list(
+      stabl_scores_ = matrix(
+        c(0, 0.4, 0.8, 0, 0.4, 0.8),
+        nrow = 3L,
+        dimnames = list(c("zero", "tie", "high"), NULL)
+      ),
+      hard_threshold = NULL,
+      fdr_min_threshold_ = 0.4,
+      explore = FALSE,
+      n_explore = 1L,
+      feature_names = c("zero", "tie", "high"),
+      n_features_in_ = 3L
+    ),
+    class = "stabl_fit"
+  )
+
+  expect_equal(
+    get_support(object),
+    c(zero = FALSE, tie = TRUE, high = TRUE)
+  )
+
+  object$fdr_min_threshold_ <- 0
+  expect_equal(
+    get_support(object),
+    c(zero = TRUE, tie = TRUE, high = TRUE)
   )
 })
 
