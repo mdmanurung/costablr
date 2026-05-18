@@ -867,7 +867,26 @@ stabl_multiomic_cv <- function(
 .make_multiomic_foldid <- function(sample_ids,
                                    groups,
                                    v,
-                                   random_state = NULL) {
+                                   random_state = NULL,
+                                   strata = NULL) {
+  if (!is.null(strata) && !is.null(groups)) {
+    warning(
+      "`strata` is ignored when `groups` is supplied; falling back to ",
+      "grouped fold assignment.",
+      call. = FALSE
+    )
+    strata <- NULL
+  }
+
+  if (!is.null(strata)) {
+    return(.stratified_multiomic_foldid(
+      sample_ids = sample_ids,
+      strata = strata,
+      v = v,
+      random_state = random_state
+    ))
+  }
+
   folds <- .make_multiomic_cv_folds(
     sample_ids = sample_ids,
     groups = groups,
@@ -880,6 +899,50 @@ stabl_multiomic_cv <- function(
 
   for (fold_index in seq_along(folds)) {
     foldid[folds[[fold_index]]$valid_ids] <- fold_index
+  }
+
+  unname(foldid[sample_ids])
+}
+
+.stratified_multiomic_foldid <- function(sample_ids, strata, v,
+                                         random_state = NULL) {
+  if (length(v) != 1L || is.na(v) || v < 2L) {
+    stop("`v` must be a single integer greater than or equal to 2.",
+         call. = FALSE)
+  }
+  if (length(strata) != length(sample_ids)) {
+    stop("`strata` must be the same length as `sample_ids`.", call. = FALSE)
+  }
+  v <- as.integer(v)
+  if (length(sample_ids) < v) {
+    stop("The number of folds cannot exceed the number of samples.",
+         call. = FALSE)
+  }
+
+  strata <- factor(strata)
+  old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  if (old_seed_exists) {
+    old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  }
+  on.exit({
+    if (old_seed_exists) {
+      assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+      rm(".Random.seed", envir = .GlobalEnv)
+    }
+  }, add = TRUE)
+  if (!is.null(random_state)) set.seed(as.integer(random_state))
+
+  foldid <- integer(length(sample_ids))
+  names(foldid) <- sample_ids
+
+  for (lvl in levels(strata)) {
+    cls_idx <- which(strata == lvl)
+    if (length(cls_idx) == 0L) next
+    shuffled <- sample(sample_ids[cls_idx])
+    start <- if (length(shuffled) >= v) 1L else sample.int(v, 1L)
+    fold_seq <- ((start - 1L + seq_along(shuffled) - 1L) %% v) + 1L
+    foldid[shuffled] <- fold_seq
   }
 
   unname(foldid[sample_ids])
@@ -1304,7 +1367,8 @@ stabl_multiomic_cv <- function(
       sample_ids = rownames(x_train_mv[[1L]]),
       groups = groups_train,
       v = cooperative_args$cooperation_nfolds,
-      random_state = random_state
+      random_state = random_state,
+      strata = if (is.null(groups_train)) y_train_factor else NULL
     )
   }
 

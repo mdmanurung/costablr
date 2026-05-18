@@ -60,10 +60,19 @@ double solve_mvr_quadratic_cpp(double cn, double cd, double sj,
     }
   } else {
     const double disc = coef1 * coef1 - 4.0 * coef2 * coef0;
-    if (disc >= -eps) {
-      const double sqrt_disc = std::sqrt(std::max(0.0, disc));
-      add_if_feasible((-coef1 + sqrt_disc) / (2.0 * coef2));
-      add_if_feasible((-coef1 - sqrt_disc) / (2.0 * coef2));
+    const double inv_2c2 = 1.0 / (2.0 * coef2);
+    if (disc >= 0.0) {
+      const double sqrt_disc = std::sqrt(disc);
+      add_if_feasible((-coef1 + sqrt_disc) * inv_2c2);
+      add_if_feasible((-coef1 - sqrt_disc) * inv_2c2);
+    } else {
+      // Match R's polyroot + abs(Im) < 1e-8 filter: the complex conjugate
+      // roots have imag = sqrt(-disc) * |inv_2c2|; accept the real part
+      // only when that imaginary magnitude is below R's tolerance.
+      const double imag = std::sqrt(-disc) * std::abs(inv_2c2);
+      if (imag < 1e-8) {
+        add_if_feasible(-coef1 * inv_2c2);
+      }
     }
   }
 

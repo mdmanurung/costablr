@@ -11,6 +11,7 @@
 *.tar.gz
 src/*.o
 src/*.so
+src/*.dll
 
 Sample Data/
 Notebook examples/
