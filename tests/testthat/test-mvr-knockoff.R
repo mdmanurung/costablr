@@ -152,4 +152,7 @@ test_that("make_mvr_knockoff_features falls back with stable schema", {
   expect_equal(dim(out$x_augmented), c(30L, 9L))
   expect_length(out$noise_col_indices, 3L)
   expect_true(all(out$noise_col_indices >= 1L & out$noise_col_indices <= 6L))
+  expect_identical(out$type_requested, "mvr_knockoff")
+  expect_identical(out$type_used, "random_permutation")
+  expect_true(out$fallback_used)
 })

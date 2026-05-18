@@ -45,13 +45,8 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
   lam_grid   <- object$fitted_lambda_grid
   n_lambda   <- ncol(scores)
 
-  threshold <- if (!is.null(new_hard_threshold)) {
-    new_hard_threshold
-  } else if (!is.null(object$hard_threshold)) {
-    object$hard_threshold
-  } else {
-    object$fdr_min_threshold_
-  }
+  threshold_info <- .resolve_threshold(object, new_hard_threshold)
+  threshold      <- threshold_info$value
 
   support <- get_support(object, new_hard_threshold = new_hard_threshold)
 
@@ -135,11 +130,9 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 
   # Threshold line
   if (!is.null(threshold)) {
-    thresh_label <- if (!is.null(object$hard_threshold) &&
-                        is.null(new_hard_threshold)) {
+    thresh_label <- if (identical(threshold_info$source, "hard_threshold")) {
       sprintf("Hard threshold = %.2f", threshold)
-    } else if (!is.null(object$fdr_min_threshold_) &&
-               is.null(new_hard_threshold)) {
+    } else if (identical(threshold_info$source, "fdr_min_threshold_")) {
       sprintf("FDP+ threshold = %.2f", threshold)
     } else {
       sprintf("Threshold = %.2f", threshold)

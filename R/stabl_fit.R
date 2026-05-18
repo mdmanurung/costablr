@@ -94,6 +94,9 @@
 #'     \item{`fdrs_table_`}{Per-lambda FDP+ matrix, or `NULL`.}
 #'     \item{`hard_threshold`}{As supplied.}
 #'     \item{`artificial_type`}{As supplied.}
+#'     \item{`artificial_type_used_`}{Artificial-feature strategy actually
+#'       used after any constructor fallback, or `NULL` when
+#'       `artificial_type = NULL`.}
 #'     \item{`artificial_proportion`}{As supplied.}
 #'     \item{`bootstrap_threshold`}{As supplied.}
 #'     \item{`explore`}{As supplied.}
@@ -281,6 +284,7 @@ stabl_fit <- function(
   n_injected        <- as.integer(round(n_features * artificial_proportion))
   x_fit             <- x
   noise_col_indices <- NULL
+  artificial_type_used <- NULL
 
   if (!is.null(artificial_type)) {
     if (n_injected < 1L) {
@@ -298,6 +302,11 @@ stabl_fit <- function(
                                                   artificial_type, art_seed)
     x_fit             <- art_result$x_augmented
     noise_col_indices <- art_result$noise_col_indices
+    artificial_type_used <- if (!is.null(art_result$type_used)) {
+      art_result$type_used
+    } else {
+      artificial_type
+    }
   }
 
   # ---- Sparse-group feature groups -----------------------------------------
@@ -482,6 +491,7 @@ stabl_fit <- function(
       fdr_threshold_range   = fdr_threshold_range,
       hard_threshold        = hard_threshold,
       artificial_type       = artificial_type,
+      artificial_type_used_ = artificial_type_used,
       artificial_proportion = artificial_proportion,
       bootstrap_threshold   = bootstrap_threshold,
       stratify_bootstrap    = !is.null(bootstrap_strata_ids),

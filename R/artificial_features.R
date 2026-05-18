@@ -12,6 +12,10 @@
 #'     \item{x_augmented}{Original matrix with artificial columns appended.}
 #'     \item{noise_col_indices}{Integer vector (1-based) of original column
 #'       indices selected as sources for the artificial block.}
+#'     \item{type_requested}{Artificial-feature strategy requested by caller.}
+#'     \item{type_used}{Artificial-feature strategy actually used.}
+#'     \item{fallback_used}{Logical scalar indicating whether a fallback path
+#'       was used while building the artificial block.}
 #'   }
 #' @keywords internal
 make_rp_features <- function(x, n_injected) {
@@ -21,10 +25,29 @@ make_rp_features <- function(x, n_injected) {
   for (i in seq_len(ncol(x_art))) {
     x_art[, i] <- sample(x_art[, i])
   }
-  list(
+  .with_artificial_type_metadata(list(
     x_augmented      = cbind(x, x_art),
     noise_col_indices = indices
-  )
+  ), type_requested = "random_permutation", type_used = "random_permutation")
+}
+
+.with_artificial_type_metadata <- function(result, type_requested, type_used,
+                                           fallback_used = FALSE) {
+  result$type_requested <- type_requested
+  result$type_used      <- type_used
+  result$fallback_used  <- isTRUE(fallback_used)
+  result
+}
+
+.artificial_type_used_label <- function(type_requested, fallback_chunks,
+                                        total_chunks) {
+  if (fallback_chunks == 0L) {
+    type_requested
+  } else if (fallback_chunks == total_chunks) {
+    "random_permutation"
+  } else {
+    paste(type_requested, "random_permutation", sep = "+")
+  }
 }
 
 # Estimate Gaussian moments with conservative shrinkage until the covariance is
@@ -100,8 +123,11 @@ make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
 
   n_features <- ncol(x)
   chunk_size <- 3000L
+  fallback_chunks <- 0L
+  total_chunks    <- 0L
 
   .make_ko_chunk <- function(x_chunk) {
+    total_chunks <<- total_chunks + 1L
     tryCatch(
       {
         moments <- .estimate_gaussian_moments(x_chunk)
@@ -113,6 +139,7 @@ make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
         )
       },
       error = function(e) {
+        fallback_chunks <<- fallback_chunks + 1L
         warning(
           "knockoff::create.gaussian failed; falling back to random ",
           "permutation for this chunk. Reason: ", conditionMessage(e),
@@ -148,12 +175,19 @@ make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
   sel_idx <- sample.int(n = ncol(x_art_full), size = n_injected, replace = FALSE)
   x_art   <- x_art_full[, sel_idx, drop = FALSE]
 
-  list(
+  .with_artificial_type_metadata(list(
     x_augmented      = cbind(x, x_art),
     # Return original-feature indices (not x_art_full indices) so that
     # .append_noise_groups in stabl_fit.R can look up SGL groups correctly.
     noise_col_indices = orig_map[sel_idx]
-  )
+  ),
+  type_requested = "modelx_knockoff",
+  type_used = .artificial_type_used_label(
+    type_requested = "modelx_knockoff",
+    fallback_chunks = fallback_chunks,
+    total_chunks = total_chunks
+  ),
+  fallback_used = fallback_chunks > 0L)
 }
 
 #' Dispatcher for Artificial Feature Generation
@@ -196,7 +230,7 @@ make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
 #'   Seeding happens exactly once in this dispatcher; the model-X helper is
 #'   called without its direct-call seed from this path.
 #'
-#' @return Named list with two elements:
+#' @return Named list:
 #'   \describe{
 #'     \item{`x_augmented`}{Numeric matrix of size
 #'       (nrow(x)) \eqn{\times} (ncol(x) + n_injected) with the artificial
@@ -207,6 +241,13 @@ make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
 #'       were used to build each artificial column.  Used by [stabl_fit()]
 #'       to look up sparse-group-lasso group memberships for the artificial
 #'       block via `.append_noise_groups`.}
+#'     \item{`type_requested`}{Artificial-feature strategy requested by
+#'       `type`.}
+#'     \item{`type_used`}{Artificial-feature strategy actually used.  This can
+#'       differ from `type_requested` when a knockoff constructor falls back to
+#'       random-permutation features.}
+#'     \item{`fallback_used`}{Logical scalar indicating whether a fallback path
+#'       was used while building the artificial block.}
 #'   }
 #'
 #' @seealso [compute_fdp_plus()] which consumes the artificial-feature scores,

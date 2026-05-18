@@ -23,6 +23,33 @@ test_that("repeated stratified folds cover all samples once per repeat", {
   }
 })
 
+test_that("nested CV warns about conflicting parallelism levels", {
+  if (requireNamespace("future", quietly = TRUE)) {
+    old_plan <- future::plan()
+    on.exit(future::plan(old_plan), add = TRUE)
+    future::plan(future::sequential)
+  }
+
+  expect_warning(
+    .warn_nested_cv_parallelism(cv_workers = 2L, workers = 2L),
+    "Avoid setting both `cv_workers` and `workers` above 1"
+  )
+  expect_silent(.warn_nested_cv_parallelism(cv_workers = 1L, workers = 2L))
+})
+
+test_that("nested CV warns about active future plan with cv_workers", {
+  skip_if_not_installed("future")
+
+  old_plan <- future::plan()
+  on.exit(future::plan(old_plan), add = TRUE)
+  future::plan(future::multisession, workers = 1L)
+
+  expect_warning(
+    .warn_nested_cv_parallelism(cv_workers = 2L, workers = 1L),
+    "future::plan\\(sequential\\)"
+  )
+})
+
 test_that("stabl_multiomic_nested_cv returns deterministic diagnostics and predictions", {
   set.seed(101)
   n <- 18L

@@ -112,6 +112,20 @@ To minimize drift and duplication, keep content in only one canonical place:
 
 When information changes, update the canonical file first and then only add short pointers in companion docs.
 
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs for this repo live in GitHub Issues for `mdmanurung/costablr`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+This repo uses the default five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repo uses the canonical documentation set described above. See `docs/agents/domain.md` for how agent skills should consume those docs.
+
 ## References
 
 - Usage and environment onboarding: [README.md](README.md)

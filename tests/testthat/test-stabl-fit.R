@@ -69,6 +69,7 @@ test_that("FDP+ is computed when artificial_type = 'random_permutation'", {
   expect_true(fit$fdr_min_threshold_ >= 0 && fit$fdr_min_threshold_ <= 1)
   expect_false(is.null(fit$stabl_scores_artificial_))
   expect_equal(nrow(fit$stabl_scores_artificial_), p)  # artificial_proportion=1
+  expect_identical(fit$artificial_type_used_, "random_permutation")
 })
 
 test_that("get_support returns logical vector of correct length", {
