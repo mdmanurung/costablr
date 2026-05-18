@@ -201,8 +201,11 @@ make_mvr_knockoff_features <- function(x, n_injected, random_state = NULL,
                                        chunk_size = 300L, ...) {
   if (!is.null(random_state)) set.seed(random_state)
   n_features <- ncol(x)
+  fallback_chunks <- 0L
+  total_chunks    <- 0L
 
   .make_mvr_chunk <- function(x_chunk) {
+    total_chunks <<- total_chunks + 1L
     tryCatch(
       {
         moments <- .estimate_gaussian_moments(x_chunk, compute_inverse = TRUE)
@@ -215,6 +218,7 @@ make_mvr_knockoff_features <- function(x, n_injected, random_state = NULL,
         )
       },
       error = function(e) {
+        fallback_chunks <<- fallback_chunks + 1L
         warning(
           "MVR knockoff generation failed; falling back to random ",
           "permutation for this chunk. Reason: ", conditionMessage(e),
@@ -246,8 +250,15 @@ make_mvr_knockoff_features <- function(x, n_injected, random_state = NULL,
 
   sel_idx <- sample.int(n = ncol(x_art_full), size = n_injected,
                         replace = FALSE)
-  list(
+  .with_artificial_type_metadata(list(
     x_augmented = cbind(x, x_art_full[, sel_idx, drop = FALSE]),
     noise_col_indices = orig_map[sel_idx]
-  )
+  ),
+  type_requested = "mvr_knockoff",
+  type_used = .artificial_type_used_label(
+    type_requested = "mvr_knockoff",
+    fallback_chunks = fallback_chunks,
+    total_chunks = total_chunks
+  ),
+  fallback_used = fallback_chunks > 0L)
 }

@@ -43,6 +43,12 @@
 #'   execution on Windows.
 #' @param ... Additional arguments passed to [stabl_fit()].
 #'
+#' @note Parallelism has two levels: `cv_workers` parallelizes outer folds in
+#'   this nested-CV wrapper, while `workers` is forwarded to [stabl_fit()] for
+#'   bootstrap-level parallelism. Avoid setting both above 1 in the same run.
+#'   When using `cv_workers > 1`, keep any active `future` plan sequential
+#'   because nested CV uses `parallel::mclapply()` rather than `future`.
+#'
 #' @return An object of class `"stabl_multiomic_nested_cv"` containing fold
 #'   definitions, inner candidate diagnostics, outer held-out predictions,
 #'   selected features, and aggregate performance.
@@ -96,6 +102,7 @@ stabl_multiomic_nested_cv <- function(
   if (cv_workers < 1L) {
     stop("`cv_workers` must be a positive integer.", call. = FALSE)
   }
+  .warn_nested_cv_parallelism(cv_workers = cv_workers, workers = workers)
   if (isTRUE(stratified) && min(table(strata_labels)) < max(outer_v, inner_v)) {
     stop("Each stratum must have at least `max(outer_v, inner_v)` samples.", call. = FALSE)
   }
@@ -323,116 +330,6 @@ stabl_multiomic_nested_cv <- function(
 
   names(out) <- sample_ids
   out
-}
-
-.make_repeated_cv_folds <- function(y, v, repeats = 1L, stratified = TRUE,
-                                    random_state = NULL) {
-  folds <- list()
-  k <- 1L
-  for (rep_i in seq_len(as.integer(repeats))) {
-    rep_seed <- .derive_nested_seed(random_state, rep_i, 10L)
-    rep_folds <- .make_cv_folds(
-      y = y,
-      v = v,
-      stratified = stratified,
-      random_state = rep_seed
-    )
-    for (fold_i in seq_along(rep_folds)) {
-      fold <- rep_folds[[fold_i]]
-      fold[["repeat"]] <- rep_i
-      fold$fold <- paste0("Fold", fold_i)
-      fold$fold_id <- paste0("Repeat", rep_i, "_Fold", fold_i)
-      folds[[k]] <- fold
-      k <- k + 1L
-    }
-  }
-  folds
-}
-
-.make_repeated_stratified_folds <- function(y, v, repeats = 1L, random_state = NULL) {
-  .make_repeated_cv_folds(
-    y = y,
-    v = v,
-    repeats = repeats,
-    stratified = TRUE,
-    random_state = random_state
-  )
-}
-
-.make_cv_folds <- function(y, v, stratified = TRUE, random_state = NULL) {
-  if (isTRUE(stratified)) {
-    return(.make_stratified_folds(y = y, v = v, random_state = random_state))
-  }
-  .make_unstratified_folds(y = y, v = v, random_state = random_state)
-}
-
-.make_stratified_folds <- function(y, v, random_state = NULL) {
-  y <- factor(y)
-  v <- as.integer(v)
-  if (min(table(y)) < v) {
-    stop("Each class must have at least `v` samples for stratified folds.", call. = FALSE)
-  }
-  if (!is.null(random_state)) {
-    old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (old_seed_exists) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    on.exit({
-      if (old_seed_exists) {
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
-      }
-    }, add = TRUE)
-    set.seed(as.integer(random_state))
-  }
-
-  ids <- names(y)
-  fold_ids <- integer(length(y))
-  names(fold_ids) <- ids
-  for (lvl in levels(y)) {
-    class_ids <- sample(ids[y == lvl])
-    fold_ids[class_ids] <- rep(seq_len(v), length.out = length(class_ids))
-  }
-
-  lapply(seq_len(v), function(i) {
-    valid_ids <- names(fold_ids)[fold_ids == i]
-    list(
-      train_ids = setdiff(ids, valid_ids),
-      valid_ids = valid_ids,
-      fold = paste0("Fold", i)
-    )
-  })
-}
-
-.make_unstratified_folds <- function(y, v, random_state = NULL) {
-  ids <- names(y)
-  v <- as.integer(v)
-  if (length(ids) < v) {
-    stop("The number of samples must be at least `v`.", call. = FALSE)
-  }
-  if (!is.null(random_state)) {
-    old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (old_seed_exists) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    on.exit({
-      if (old_seed_exists) {
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
-      }
-    }, add = TRUE)
-    set.seed(as.integer(random_state))
-  }
-
-  shuffled <- sample(ids)
-  fold_ids <- rep(seq_len(v), length.out = length(shuffled))
-  names(fold_ids) <- shuffled
-  lapply(seq_len(v), function(i) {
-    valid_ids <- names(fold_ids)[fold_ids == i]
-    list(
-      train_ids = setdiff(ids, valid_ids),
-      valid_ids = valid_ids,
-      fold = paste0("Fold", i)
-    )
-  })
 }
 
 .derive_nested_seed <- function(random_state, index, offset) {
@@ -720,4 +617,37 @@ print.stabl_multiomic_nested_cv <- function(x, ...) {
   cat("  accuracy:    ", sprintf("%.3f", x$performance$accuracy), "\n", sep = "")
   cat("  BER:         ", sprintf("%.3f", x$performance$balanced_error_rate), "\n", sep = "")
   invisible(x)
+}
+
+.warn_nested_cv_parallelism <- function(cv_workers, workers) {
+  if (is.na(cv_workers) || cv_workers <= 1L) {
+    return(invisible(NULL))
+  }
+
+  workers_int <- suppressWarnings(as.integer(workers))
+  if (length(workers_int) == 1L && is.finite(workers_int) && workers_int > 1L) {
+    warning(
+      "Avoid setting both `cv_workers` and `workers` above 1 in ",
+      "`stabl_multiomic_nested_cv()`: `cv_workers` parallelizes outer folds, ",
+      "while `workers` parallelizes STABL bootstraps inside each fold.",
+      call. = FALSE
+    )
+  }
+
+  if (requireNamespace("future", quietly = TRUE) &&
+      !isTRUE(.future_plan_is_sequential())) {
+    warning(
+      "`cv_workers > 1` uses `parallel::mclapply()` for outer folds. ",
+      "Call `future::plan(sequential)` before nested CV to avoid mixing ",
+      "parallel backends.",
+      call. = FALSE
+    )
+  }
+
+  invisible(NULL)
+}
+
+.future_plan_is_sequential <- function() {
+  plan <- tryCatch(future::plan(), error = function(e) NULL)
+  inherits(plan, "sequential")
 }

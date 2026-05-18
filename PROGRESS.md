@@ -2959,3 +2959,252 @@ sacct -j 24773426,24773427,24773428,24773429,24773430,24773431,24773432,24773433
 # -> immediate post-submit check showed preprocess jobs running or pending and
 #    dependent arrays pending with no Slurm-level submission error
 ```
+
+### Refactoring Roadmap PR-5 Threshold Resolver (2026-05-18)
+
+- Centralized STABL support-threshold fallback into private
+  `.resolve_threshold(object, new_hard_threshold)` in `R/stabl_accessors.R`.
+- `get_support.stabl_fit()` now uses the shared resolver while preserving the
+  strict `>` support rule, the `explore` fallback, and the existing allowance
+  for FDP+-derived threshold `0`.
+- `plot_stabl_path()` now uses the same resolver for its threshold line and
+  label source, avoiding separate fallback logic between accessors and
+  visualization.
+- Added direct resolver coverage in `tests/testthat/test-audit-stabl-accessors.R`
+  for override, hard-threshold, FDP+ fallback, and FDP+ zero-threshold paths.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'accessor|visualization|exports|metrics', reporter = 'summary')"
+# -> accessor-roundtrip, audit-stabl-accessors, exports, metrics, and
+#    visualization completed successfully
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'audit', reporter = 'summary')"
+# -> audit subset completed successfully with the two known NAT skips
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'audit-stabl-accessors|accessor-roundtrip|visualization', reporter = 'summary')"
+# -> accessor-roundtrip, audit-stabl-accessors, and visualization completed successfully
+```
+
+### Refactoring Roadmap PR-7 Artificial Fallback Diagnostic (2026-05-18)
+
+- Added additive artificial-feature metadata to generator results:
+  `type_requested`, `type_used`, and `fallback_used`. Existing
+  `x_augmented` and `noise_col_indices` fields are preserved.
+- `make_modelx_knockoff_features()` and `make_mvr_knockoff_features()` now
+  record whether knockoff construction fell back to random-permutation
+  features. Full fallback records `type_used = "random_permutation"`; mixed
+  chunked fallback records a combined diagnostic label.
+- `stabl_fit()` now persists the actual artificial-feature method as
+  `artificial_type_used_` while keeping `artificial_type` as the requested
+  method.
+- `print.stabl_fit()` reports `Artificial used` only when the actual method
+  differs from the requested method.
+- Added regression coverage for generator metadata, MVR fallback metadata, and
+  `stabl_fit()` propagation of `artificial_type_used_`.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('R/artificial_features.R')); invisible(parse('R/mvr_knockoff.R')); invisible(parse('R/stabl_fit.R')); invisible(parse('R/stabl_accessors.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'artificial-features|mvr-knockoff|stabl-fit', reporter = 'summary')"
+# -> artificial-features-parity, audit-artificial-features,
+#    audit-stabl-fit, mvr-knockoff, and stabl-fit completed successfully
+```
+
+### Refactoring Roadmap PR-8 Nested-CV Parallelism Warning (2026-05-18)
+
+- Added a `stabl_multiomic_nested_cv()` roxygen note documenting the two
+  parallelism levels: outer-fold `cv_workers` and STABL bootstrap `workers`.
+- Added private `.warn_nested_cv_parallelism()` and
+  `.future_plan_is_sequential()` helpers in `R/nested_cv.R`.
+- `stabl_multiomic_nested_cv()` now warns when `cv_workers > 1` is combined
+  with `workers > 1`, and when `cv_workers > 1` is combined with a non-
+  sequential active `future` plan.
+- The `future` inspection remains optional-dependency-safe and only runs when
+  `future` is installed.
+- Added targeted tests for the warning helper in `tests/testthat/test-nested-cv.R`.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('R/nested_cv.R')); invisible(parse('tests/testthat/test-nested-cv.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-nested-cv.R', reporter = 'summary')"
+# -> nested-cv completed successfully
+```
+
+### Refactoring Roadmap PR-9 Shared CV Helpers (2026-05-18)
+
+- Added `tests/testthat/test-cv-helpers.R` before moving code, pinning
+  fixed-seed assignments for multiomic fold IDs, grouped multiomic folds,
+  nested stratified/unstratified folds, and repeated nested folds.
+- Created `R/cv_helpers.R` and moved shared private fold helpers there:
+  `.make_multiomic_cv_folds()`, `.permute_for_cv()`,
+  `.make_multiomic_foldid()`, `.stratified_multiomic_foldid()`,
+  `.make_repeated_cv_folds()`, `.make_repeated_stratified_folds()`,
+  `.make_cv_folds()`, `.make_stratified_folds()`, and
+  `.make_unstratified_folds()`.
+- Removed the moved helper definitions from `R/multiomic_workflows.R` and
+  `R/nested_cv.R` without changing callers or public APIs.
+- Current line counts after extraction: `R/multiomic_workflows.R` 1809 lines,
+  `R/nested_cv.R` 653 lines, `R/cv_helpers.R` 264 lines.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-cv-helpers.R', reporter = 'summary')"
+# -> cv-helpers completed successfully before extraction
+
+conda run -n R4_51 Rscript -e "invisible(parse('R/cv_helpers.R')); invisible(parse('R/multiomic_workflows.R')); invisible(parse('R/nested_cv.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'cv-helpers|nested-cv|multiomic-workflows|multiomic-guards', reporter = 'summary')"
+# -> audit-multiomic-workflows, cv-helpers, multiomic-guards,
+#    multiomic-workflows, and nested-cv completed successfully
+```
+
+### Refactoring Roadmap PR-10 Late-Fusion Extraction (2026-05-18)
+
+- Created `R/late_fusion.R` and moved exported `stacked_multi_omic()` plus its
+  private stacking helpers there.
+- Removed the moved late-fusion block from `R/multiomic_workflows.R` without
+  changing callers, exported names, or `NAMESPACE`.
+- Current line counts after extraction: `R/multiomic_workflows.R` 1436 lines,
+  `R/late_fusion.R` 370 lines.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('R/late_fusion.R')); invisible(parse('R/multiomic_workflows.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'exports|multiomic-workflows|audit-multiomic-workflows|audit-performance-optimizations', reporter = 'summary')"
+# -> audit-multiomic-workflows, audit-performance-optimizations,
+#    exports, and multiomic-workflows completed successfully
+```
+
+### Refactoring Roadmap PR-11 Cooperative-Fusion Extraction (2026-05-18)
+
+- Created `R/cooperative_fusion.R` and moved private cooperative-fusion helpers
+  there, including multiview family/type helpers, validation metrics,
+  coefficient/feature extraction, scalar-family fitting, and multinomial
+  one-vs-rest cooperative fitting.
+- Removed the moved cooperative block from `R/multiomic_workflows.R`; public
+  orchestration and public APIs are unchanged.
+- Current line counts after extraction: `R/multiomic_workflows.R` 754 lines,
+  `R/cooperative_fusion.R` 684 lines.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('R/cooperative_fusion.R')); invisible(parse('R/multiomic_workflows.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'multiomic-workflows|multiomic-guards|cv-helpers', reporter = 'summary')"
+# -> audit-multiomic-workflows, cv-helpers, multiomic-guards,
+#    and multiomic-workflows completed successfully
+```
+
+### Refactoring Roadmap PR-2A Maintainer Documentation (2026-05-18)
+
+- Added `ARCHITECTURE.md` as the human maintainer map covering public APIs,
+  S3 classes, module responsibilities, runtime flows, dependency boundaries,
+  native code, and validation commands.
+- Added `TODO.md` as a short active maintainer queue.
+- Added `CONTRIBUTING.md` with documentation order, refactoring rules, parity
+  invariants, learner-adapter guidance, validation commands, vignette guidance,
+  and PR expectations.
+- Updated `.Rbuildignore` so root maintainer docs, optional `_archive/`, and
+  `.lintr` do not enter source builds.
+- Kept `AGENTS.md`, `STABL.md`, `PLAN.md`, `PROGRESS.md`, and `HANDOFF.md` at
+  the repository root because `AGENTS.md` defines them as canonical docs.
+  Physical archiving remains a separate confirmation-only PR-2B decision.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual"), error_on = "never"); print(res)'
+# first run -> 0 errors, 0 warnings, 1 note for .lintr entering the source tarball
+
+conda run -n R4_51 Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual"), error_on = "never"); print(res)'
+# after adding .lintr to .Rbuildignore -> Status: OK; 0 errors, 0 warnings, 0 notes
+```
+
+### Refactoring Roadmap PR-12 Safety Prep (2026-05-18)
+
+- Added `tests/testthat/test-parallel-determinism.R` before any parallel
+  backend migration.
+- The new tests pin `stabl_fit()` sequential vs `workers = 2` behavior under
+  fixed seeds.
+- The new tests pin `stabl_multiomic_nested_cv()` sequential vs
+  `cv_workers = 2` behavior under fixed seeds on Unix-like systems.
+- No execution backend was changed. PR-12 remains high-risk and pending
+  explicit maintainer confirmation.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('tests/testthat/test-parallel-determinism.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-parallel-determinism.R', reporter = 'summary')"
+# -> parallel-determinism completed successfully
+```
+
+### Refactoring Roadmap Final Validation (2026-05-18)
+
+- Fixed pkgdown metadata by adding the configured pkgdown site URL to
+  `DESCRIPTION`.
+- Final whitespace check is clean.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "Sys.setenv(NOT_CRAN='true'); devtools::test('.', reporter = 'summary')"
+# -> full test suite completed with no failures; known NAT-001/NAT-003 skips
+#    remain, and the existing future build-version warnings remain in
+#    test-rng-determinism.R
+
+conda run -n R4_51 Rscript -e "pkgdown::check_pkgdown()"
+# -> No problems found
+
+conda run -n R4_51 Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual"), error_on = "never"); print(res)'
+# -> Status: OK; 0 errors, 0 warnings, 0 notes
+
+git diff --check
+# -> clean
+```
+
+### Agent Skills Repository Configuration (2026-05-18)
+
+- Added an `## Agent skills` block to `AGENTS.md`.
+- Created `docs/agents/issue-tracker.md` documenting GitHub Issues for
+  `mdmanurung/costablr` as the issue tracker and `gh` as the expected CLI.
+- Created `docs/agents/triage-labels.md` with the default five-label mapping:
+  `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and
+  `wontfix`.
+- Created `docs/agents/domain.md` with a single-context domain-doc layout
+  using root `CONTEXT.md` and root `docs/adr/` when present.
+- Updated `PLAN.md` and `HANDOFF.md` so future engineering-skill runs know to
+  consume `docs/agents/`.
+
+Validation:
+
+```bash
+rg -n "^## Agent skills|docs/agents|Issue tracker: GitHub|Triage Labels|Domain Docs|Agent-skills repository configuration|Latest agent-skills setup|Agent Skills Repository Configuration" AGENTS.md docs/agents PLAN.md PROGRESS.md HANDOFF.md
+# -> expected Agent skills block, docs/agents files, PLAN entry, and HANDOFF
+#    snapshot entry found
+
+find docs/agents -maxdepth 1 -type f -print | sort
+# -> docs/agents/domain.md
+# -> docs/agents/issue-tracker.md
+# -> docs/agents/triage-labels.md
+
+git diff --check -- AGENTS.md docs/agents/issue-tracker.md docs/agents/triage-labels.md docs/agents/domain.md PLAN.md PROGRESS.md HANDOFF.md
+# -> clean
+```

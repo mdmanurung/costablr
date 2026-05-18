@@ -37,10 +37,7 @@ get_support <- function(object, new_hard_threshold = NULL) {
   UseMethod("get_support")
 }
 
-#' @export
-get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
-  .check_fitted_stabl(object)
-
+.resolve_threshold <- function(object, new_hard_threshold = NULL) {
   threshold_source <- if (!is.null(new_hard_threshold)) {
     "new_hard_threshold"
   } else if (!is.null(object$hard_threshold)) {
@@ -82,6 +79,15 @@ get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
       call. = FALSE
     )
   }
+
+  list(value = threshold, source = threshold_source)
+}
+
+#' @export
+get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
+  .check_fitted_stabl(object)
+
+  threshold <- .resolve_threshold(object, new_hard_threshold)$value
 
   max_scores <- get_importances(object)
   mask       <- max_scores > threshold
@@ -339,6 +345,10 @@ print.stabl_fit <- function(x, ...) {
   }
   cat("  Artificial:      ", if (is.null(x$artificial_type)) "none"
                              else x$artificial_type, "\n")
+  if (!is.null(x$artificial_type_used_) &&
+      !identical(x$artificial_type_used_, x$artificial_type)) {
+    cat("  Artificial used: ", x$artificial_type_used_, "\n")
+  }
   invisible(x)
 }
 

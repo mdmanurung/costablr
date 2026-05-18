@@ -618,6 +618,51 @@ Promotion criteria:
 
 ## Maintenance Notes
 
+- 2026-05-18: Refactoring roadmap PR-5 is closed. Threshold resolution for
+  STABL support selection now lives in private `.resolve_threshold()` and is
+  shared by `get_support.stabl_fit()` and `plot_stabl_path()`. The next
+  roadmap item remains the additive artificial-feature fallback diagnostic
+  (PR-7); no algorithm-semantic change is open.
+- 2026-05-18: Refactoring roadmap PR-7 is closed. Artificial-feature
+  generators now preserve existing return fields and add diagnostic metadata;
+  `stabl_fit()` records the actual method as `artificial_type_used_`. The next
+  roadmap item is PR-8 nested-CV parallelism documentation/warning.
+- 2026-05-18: Refactoring roadmap PR-8 is closed. Nested CV now documents and
+  warns about combining fold-level `cv_workers` with STABL bootstrap
+  `workers` or a non-sequential active `future` plan. The next roadmap item
+  is PR-9 extraction of shared CV helpers after characterization tests.
+- 2026-05-18: Refactoring roadmap PR-9 is closed. Shared multiomic and nested
+  fold helpers now live in `R/cv_helpers.R`, with fixed-seed characterization
+  tests in `tests/testthat/test-cv-helpers.R`. The next roadmap item is PR-10
+  extraction of late-fusion/stacking helpers.
+- 2026-05-18: Refactoring roadmap PR-10 is closed. Exported
+  `stacked_multi_omic()` and late-fusion/stacking helpers now live in
+  `R/late_fusion.R`. The next roadmap item is PR-11 cooperative-fusion
+  extraction.
+- 2026-05-18: Refactoring roadmap PR-11 is closed. Cooperative-fusion helpers
+  now live in `R/cooperative_fusion.R`, and `R/multiomic_workflows.R` is below
+  the <800-line target. The next documentation step is the safer PR-2A
+  architecture/TODO/contributing consolidation without moving canonical agent
+  docs.
+- 2026-05-18: Refactoring roadmap PR-2A is closed. `ARCHITECTURE.md`,
+  `TODO.md`, and `CONTRIBUTING.md` now provide human-facing maintainer docs,
+  and source-package check is clean with 0 errors, 0 warnings, and 0 notes.
+  Physical archiving of canonical session docs remains deferred pending
+  explicit maintainer confirmation.
+- 2026-05-18: PR-12 safety prep is complete. Parallel determinism tests now
+  pin `stabl_fit()` `workers = 1` vs `workers = 2` and nested CV
+  `cv_workers = 1` vs `cv_workers = 2`. No backend migration has been made;
+  PR-12 remains pending explicit confirmation because it is high risk.
+- 2026-05-18: Final validation for the refactoring roadmap pass is complete:
+  full `devtools::test()` has no failures, `pkgdown::check_pkgdown()` reports
+  no problems, `rcmdcheck --no-manual` is clean with 0 errors, 0 warnings, and
+  0 notes, and `git diff --check` is clean.
+- 2026-05-18: Agent-skills repository configuration is in place for future
+  engineering-skill runs. Skills such as `to-issues`, `triage`, `to-prd`,
+  `diagnose`, `tdd`, `improve-codebase-architecture`, and `zoom-out` should
+  read `docs/agents/` for the GitHub issue tracker, default triage labels,
+  and single-context domain-doc layout; no roadmap gate is open from this
+  setup-only change.
 - 2026-05-14: All active scratch costablr SLURM workflows were resubmitted
   from preprocessing after raw-data file paths were fixed. Track the fresh
   job chain `24773426` through `24773436` from the notebook dashboards or

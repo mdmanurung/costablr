@@ -102,7 +102,37 @@ For details that must not be duplicated here:
   and replaced by `"modelx_knockoff"`; `"mvr_knockoff"` uses a
   RcppArmadillo-backed Gaussian MVR solver with a pure-R reference fallback.
   The direct model-X helper now honors its `random_state` argument with scoped
-  RNG restoration; targeted artificial-feature tests pass.
+  RNG restoration. Refactoring PR-7 is closed: artificial-feature generators
+  now add `type_requested`, `type_used`, and `fallback_used`, and `stabl_fit()`
+  persists `artificial_type_used_`; targeted artificial/MVR/STABL tests pass.
+- Latest refactoring-roadmap signal: PR-5 is closed. Private
+  `.resolve_threshold()` now owns support-threshold fallback and validation for
+  `get_support.stabl_fit()` and `plot_stabl_path()`. Targeted accessor,
+  visualization, and audit tests pass in `R4_51`.
+- Nested-CV parallelism signal: refactoring PR-8 is closed. Nested CV now
+  documents and warns about combining outer-fold `cv_workers` with STABL
+  bootstrap `workers` or an active non-sequential `future` plan.
+- CV-helper refactoring signal: PR-9 is closed. Shared private fold helpers
+  now live in `R/cv_helpers.R`; `tests/testthat/test-cv-helpers.R` pins
+  fixed-seed assignments for multiomic, grouped, nested, and repeated folds.
+- Late-fusion refactoring signal: PR-10 is closed. Exported
+  `stacked_multi_omic()` and private stacking helpers now live in
+  `R/late_fusion.R`; `multiomic_workflows.R` is down to 1436 lines.
+- Cooperative-fusion refactoring signal: PR-11 is closed. Cooperative helpers
+  now live in `R/cooperative_fusion.R`; `multiomic_workflows.R` is down to
+  754 lines while public workflow APIs are unchanged.
+- Maintainer-docs signal: PR-2A is closed. `ARCHITECTURE.md`, `TODO.md`, and
+  `CONTRIBUTING.md` provide the human-facing codebase map and contribution
+  rules without moving canonical agent/session docs. `rcmdcheck --no-manual`
+  is clean with 0 errors, 0 warnings, and 0 notes.
+- Parallelism signal: PR-12 safety prep is complete. New
+  `tests/testthat/test-parallel-determinism.R` pins `stabl_fit()` workers and
+  nested-CV `cv_workers` determinism. Backend unification has not been
+  implemented and still requires explicit confirmation.
+- Latest validation signal: the refactoring roadmap pass has full
+  `devtools::test()` with no failures, `pkgdown::check_pkgdown()` with no
+  problems, `rcmdcheck --no-manual` with 0 errors, 0 warnings, and 0 notes,
+  and clean `git diff --check`.
 - Latest bootstrap-threshold parity signal: `stabl_fit()` now exposes
   `bootstrap_threshold` with Python STABL's effective default `1e-5`.  The
   learner adapters use sklearn-style `>=` per-bootstrap coefficient
@@ -138,6 +168,11 @@ For details that must not be duplicated here:
 - Latest verified documentation-site signal: `pkgdown::check_pkgdown()` reports
   no problems after adding the post-audit `stabl_refit` reference topic to
   `_pkgdown.yml`.
+- Latest agent-skills setup signal: `AGENTS.md` now points engineering skills
+  to `docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and
+  `docs/agents/domain.md`. The configured defaults are GitHub Issues for
+  `mdmanurung/costablr`, the canonical five triage labels, and a
+  single-context domain-doc layout.
 - Latest targeted plotting signal: `test-phase7.R` passes against local source
   (`PASS 83`, `FAIL 0`, `WARN 0`, `SKIP 0`).
 - Latest intro-vignette signal: `costablr-intro.Rmd` renders successfully after a

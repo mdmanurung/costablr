@@ -31,6 +31,9 @@ test_that("make_artificial_features random_permutation preserves no-duplicate so
   expect_length(out$noise_col_indices, 6L)
   expect_equal(length(unique(out$noise_col_indices)), 6L)
   expect_true(all(out$noise_col_indices >= 1L & out$noise_col_indices <= ncol(x)))
+  expect_identical(out$type_requested, "random_permutation")
+  expect_identical(out$type_used, "random_permutation")
+  expect_false(out$fallback_used)
 })
 
 test_that("make_modelx_knockoff_features uses Gaussian model-X construction", {
@@ -47,6 +50,9 @@ test_that("make_modelx_knockoff_features uses Gaussian model-X construction", {
   expect_equal(dim(out$x_augmented), c(30L, 50L))
   expect_length(out$noise_col_indices, 10L)
   expect_true(all(out$noise_col_indices >= 1L & out$noise_col_indices <= ncol(x)))
+  expect_identical(out$type_requested, "modelx_knockoff")
+  expect_identical(out$type_used, "modelx_knockoff")
+  expect_false(out$fallback_used)
   expect_false(isTRUE(all.equal(
     out$x_augmented[, seq.int(ncol(x) + 1L, ncol(x) + 10L), drop = FALSE],
     x[, out$noise_col_indices, drop = FALSE],

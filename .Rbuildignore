@@ -7,15 +7,20 @@
 ^src/.*[.]o$
 ^src/.*[.]so$
 ^_pkgdown[.]yml$
+^[.]lintr$
 ^[.]claude(/|$)
 ^[.]vscode(/|$)
 ^AGENTS[.]md$
 ^HANDOFF[.]md$
 ^PLAN[.]md$
 ^PROGRESS[.]md$
+^REFACTORING[.]md$
 ^STABL[.]md$
+^ARCHITECTURE[.]md$
+^TODO[.]md$
+^CONTRIBUTING[.]md$
+^_archive(/|$)
 ^audit(/|$)
-^audits(/|$)
 ^docs$
 ^Notebook examples(/|$)
 ^Sample Data(/|$)
