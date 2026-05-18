@@ -150,6 +150,37 @@ git diff --check
 # -> clean
 ```
 
+### All-Vignette Parallel Render Validation (2026-05-19)
+
+- Rendered all six canonical source vignettes concurrently from the current
+  source tree using `parallel::mclapply()` with six workers.
+- Loaded the package source with `devtools::load_all(".", quiet = TRUE)` before
+  rendering so the vignettes were checked against the in-tree API rather than a
+  potentially stale installed package.
+- Forced a knitr cache rebuild for this validation pass because
+  `costablr-python-parity.Rmd` has cached plot chunks and `html_vignette`
+  rendering can otherwise leave pandoc pointing at cleaned figure paths.
+- HTML outputs were written under `vignettes/` and are ignored build artifacts.
+  The render itself cleaned the tracked legacy
+  `costablr-python-parity.knit.md` and figure intermediates; those generated
+  tracked artifacts were restored after validation to avoid leaving unrelated
+  deletions in the worktree.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e 'Sys.setenv(OMP_NUM_THREADS = "1", OPENBLAS_NUM_THREADS = "1", MKL_NUM_THREADS = "1"); devtools::load_all(".", quiet = TRUE); knitr::opts_chunk$set(cache.rebuild = TRUE); files <- sort(list.files("vignettes", pattern = "[.]Rmd$", full.names = TRUE)); workers <- min(length(files), 6L); render_one <- function(f) { started <- Sys.time(); out <- tryCatch({ rmarkdown::render(f, output_dir = "vignettes", quiet = TRUE); list(file = basename(f), ok = TRUE, seconds = as.numeric(difftime(Sys.time(), started, units = "secs")), error = NA_character_) }, error = function(e) { list(file = basename(f), ok = FALSE, seconds = as.numeric(difftime(Sys.time(), started, units = "secs")), error = conditionMessage(e)) }); out }; res <- parallel::mclapply(files, render_one, mc.cores = workers); tab <- do.call(rbind, lapply(res, as.data.frame)); print(tab, row.names = FALSE); if (any(!tab$ok)) stop("At least one vignette render failed", call. = FALSE)'
+# -> costablr-cooperative.Rmd TRUE 5.56s
+# -> costablr-intro.Rmd TRUE 12.21s
+# -> costablr-multiomic.Rmd TRUE 298.56s
+# -> costablr-python-parity.Rmd TRUE 306.76s
+# -> costablr-tcga-nestedcv.Rmd TRUE 1.95s
+# -> costablr-tcga.Rmd TRUE 32.96s
+
+git diff --check
+# -> clean
+```
+
 ### Base-SRM Consensus Design Deferred (2026-05-18)
 
 - Resolved exploratory terminology for a future robust-biomarker feature:

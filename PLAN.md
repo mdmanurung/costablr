@@ -96,7 +96,7 @@ compact source-of-truth ledger for these choices is the
 - Python reference scripts remain the behavior anchor for parity checks where tests are not yet frozen.
 - Current workspace scope (2026-05-03): CI workflow implementation is deferred; validation is performed via local R test suites.
 
-## Vignette Status (as of 2026-05-18) — Source API Alignment and Render Pass Complete
+## Vignette Status (as of 2026-05-19) — Source API Alignment and Render Pass Complete
 
 All 6 costablr vignette sources have canonical source under
 `vignettes/`.  Generated `doc/` output is build output, not the
@@ -109,7 +109,12 @@ API: STABL-selected workflows now teach `stabl_per_omic()` followed by
 `stabl_late_fusion()`, `stabl_multiomics()`, or `stabl_cooperative()`, while
 raw Early Fusion and canonical Late Fusion remain wrapper-based baselines.
 The follow-up audit rendered all six Rmd files to temporary HTML outputs,
-without updating tracked generated HTML.
+without updating tracked generated HTML. On 2026-05-19, all six canonical
+source vignettes were rendered concurrently with `parallel::mclapply()` against
+the current in-tree package source. The resulting `vignettes/*.html` files are
+ignored build artifacts. The nested-CV vignette render confirms source
+executability only; rendering it from completed TCGA nested-CV benchmark
+results remains tied to the separate SLURM cache workflow.
 
 - `costablr-intro.Rmd` ✅ — simulated-data introduction with clearer input
   contract, selected-feature interpretation, and single-omic scope boundaries.

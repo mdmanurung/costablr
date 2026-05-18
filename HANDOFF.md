@@ -240,10 +240,16 @@ For details that must not be duplicated here:
   'never')` has `0 errors`, `1 WARNING`, and `2 NOTEs`; remaining items are
   missing local `qpdf`, timestamp verification, and the conda `-march=nocona`
   compile flag.
-- Latest verified vignette signal: all 5 non-nested canonical source vignettes
-  rendered successfully in SLURM array job `24752130` after the narrative
-  rewrite (`costablr-cooperative`, `costablr-intro`, `costablr-multiomic`,
-  `costablr-python-parity`, `costablr-tcga`).
+- Latest verified vignette signal: all six canonical source vignettes rendered
+  successfully in one local parallel pass on 2026-05-19 using
+  `parallel::mclapply()` with the current package source loaded by
+  `devtools::load_all(".", quiet = TRUE)` and a forced knitr cache rebuild.
+  The checked sources were `costablr-cooperative.Rmd`, `costablr-intro.Rmd`,
+  `costablr-multiomic.Rmd`, `costablr-python-parity.Rmd`,
+  `costablr-tcga-nestedcv.Rmd`, and `costablr-tcga.Rmd`. The generated
+  `vignettes/*.html` files are ignored build artifacts. The nested-CV vignette
+  render confirms source executability; rendering it from completed benchmark
+  results still depends on the separate TCGA nested-CV SLURM cache workflow.
 - Latest verified documentation-site signal: `pkgdown::check_pkgdown()` reports
   no problems after adding the post-audit `stabl_refit` reference topic to
   `_pkgdown.yml`.
