@@ -691,6 +691,58 @@ conda run -n R4_51 R CMD INSTALL multiview
     multinomial one-vs-rest wrapper;
   - arbitrary-learner one-view-at-a-time cooperative learning is documented as
     background methodology only, not current package behavior.
+- Latest object-consuming API signal:
+  - `stabl_per_omic()` is now exported as the rich reusable per-Omic View STABL
+    selection artifact;
+  - `stabl_late_fusion(per_omic)`, `stabl_multiomics(per_omic)`, and
+    `stabl_cooperative(per_omic)` consume that artifact rather than rerunning
+    per-omic selection from raw inputs;
+  - `stabl_per_omic()` rejects downstream fusion arguments passed through `...`
+    and directs callers to the object-consuming methods;
+  - `stabl_per_omic()` now preserves nullable metadata fields such as
+    `y_valid = NULL`, so downstream methods see a stable object schema even
+    without validation outcomes;
+  - `stabl_multiomics(per_omic)` now enforces the same `__` Omic View
+    delimiter guard as the flag-driven `$multiomic_stabl` branch before
+    creating prefixed final-layer feature names;
+  - `get_cooperative_features()` and `get_cooperative_diagnostics()` work
+    directly on `stabl_cooperative()` results as well as the legacy
+    `$cooperative_fusion` branch and CV wrappers;
+  - print methods exist for `stabl_per_omic`, `stabl_late_fusion`,
+    `stabl_multiomics`, and `stabl_cooperative`;
+  - README, pkgdown grouping, package-level docs, and source vignettes now
+    foreground the object-consuming surface while documenting
+    `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()` as
+    still-supported orchestration/compatibility wrappers;
+  - source vignettes were re-audited on 2026-05-18: `costablr-multiomic.Rmd`,
+    `costablr-tcga.Rmd`, and `costablr-cooperative.Rmd` now use
+    `stabl_per_omic()` before `stabl_late_fusion()`, `stabl_multiomics()`, or
+    `stabl_cooperative()`, and Early Fusion examples use a shared lambda grid
+    rather than a per-omic lambda-list;
+  - the follow-up vignette pass keeps Cooperative STABL centered on
+    `stabl_cooperative(per_omic)` only; the raw `cooperative_fusion = TRUE`
+    wrapper example was removed from the cooperative vignette to avoid
+    re-centering the old multiview comparator branch;
+  - OOL multi-omic/cooperative vignettes now standardize omic matrices using
+    training-split statistics before auto lambda-grid construction, and the
+    cooperative vignette documents its permissive tutorial `hard_threshold`
+    needed to keep at least two selected Omic Views available for the final
+    cooperative layer;
+  - `STABL.md`, `CONTEXT.md`, and `PLAN.md` record the CV leakage rule: a
+    `stabl_per_omic()` object can be reused for a fixed train/validation split,
+    but CV performance estimation must rebuild it inside each outer fold;
+  - Rd pages exist for all four new public functions;
+  - focused validation passed after the consistency pass:
+    `test-multiomic-workflows.R` DONE, `test-audit-multiomic-workflows.R`
+    DONE, `test-multiomic-guards.R` DONE, `test-fdp-calibration.R` DONE, and
+    new exports/S3 methods present;
+  - full `devtools::test('.', reporter = 'summary')` is DONE with only the
+    existing NAT-001/NAT-003 skips and package build-version warnings.
+  - latest vignette-source validation after the Rmd API alignment: all six Rmd
+    files purl/parse successfully, all six rendered to temporary HTML outputs,
+    a low-bootstrap object-consuming OOL smoke test and a Cooperative STABL
+    smoke test pass, and `git diff --check` is clean; tracked generated HTML
+    was not updated.
 
 ## Update protocol
 

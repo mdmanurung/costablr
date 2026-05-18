@@ -39,6 +39,117 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Object-Consuming API Consistency Pass (2026-05-18)
+
+- Audited package R code, tests, roxygen docs, README, pkgdown reference
+  grouping, and source vignettes for the recent multi-omic API cleanup.
+- Enforced the `__` Omic View delimiter contract on the object-consuming
+  `stabl_multiomics(per_omic)` path, matching the existing
+  `multiomic_stabl = TRUE` guard.
+- Fixed `stabl_per_omic()` object construction so nullable metadata fields
+  such as `y_valid = NULL` remain present in the result object instead of
+  being dropped by R's `$<- NULL` list-assignment behavior.
+- Added direct cooperative accessors for `stabl_cooperative()` results:
+  `get_cooperative_features.stabl_cooperative()` and
+  `get_cooperative_diagnostics.stabl_cooperative()`.
+- Added print methods for the new object-consuming downstream result classes:
+  `stabl_late_fusion`, `stabl_multiomics`, and `stabl_cooperative`.
+- Updated `README.md`, `_pkgdown.yml`, package-level roxygen docs, and source
+  vignettes so the preferred STABL-selected public surface is
+  `stabl_per_omic()` followed by `stabl_late_fusion()`,
+  `stabl_multiomics()`, or `stabl_cooperative()`, while the older
+  `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()` wrappers are
+  documented as still-supported orchestration/compatibility surfaces.
+- Regenerated package-level and cooperative-accessor Rd pages.
+- Updated the null FDP+ calibration test to match the paper-method `>=`
+  threshold comparator: it now asserts positive-threshold/no-collapse
+  invariants instead of the stale strict-comparator expectation that the null
+  threshold must be at least `0.8`.
+- Left generated vignette HTML and scratch analysis artifacts untouched; their
+  cleanup remains deferred per the existing scratch policy.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "invisible(parse('R/multiomic_workflows.R')); invisible(parse('R/stabl_accessors.R')); invisible(parse('R/input_validation.R')); invisible(parse('tests/testthat/test-multiomic-workflows.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::document(roclets = c('rd', 'namespace'))"
+# -> regenerated costablr-package.Rd, get_cooperative_features.Rd, and
+#    get_cooperative_diagnostics.Rd; manual NAMESPACE was skipped as expected
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); cat(paste(c('stabl_per_omic','stabl_late_fusion','stabl_multiomics','stabl_cooperative') %in% getNamespaceExports('costablr'), collapse=' '), '\n'); cat(is.function(getS3method('get_cooperative_features','stabl_cooperative')), is.function(getS3method('print','stabl_multiomics')), '\n')"
+# -> TRUE TRUE TRUE TRUE
+# -> TRUE TRUE
+
+conda run -n R4_51 Rscript -e "invisible(parse('R/multiomic_workflows.R')); devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R', reporter = 'summary')"
+# -> multiomic-workflows DONE
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R', reporter = 'summary')"
+# -> audit-multiomic-workflows DONE
+
+conda run -n R4_51 Rscript -e "invisible(parse('R/input_validation.R')); devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-multiomic-guards.R', reporter = 'summary')"
+# -> multiomic-guards DONE
+
+conda run -n R4_51 Rscript -e "Sys.setenv(NOT_CRAN='true'); devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-fdp-calibration.R', reporter='summary')"
+# -> fdp-calibration DONE
+
+conda run -n R4_51 Rscript -e "devtools::test('.', reporter = 'summary')"
+# -> DONE; skipped NAT-001/NAT-003 deferred placeholders; warnings only from
+#    package build-version notices for testthat/future
+
+git diff --check
+# -> clean
+```
+
+### Further Vignette Audit and Render Pass (2026-05-18)
+
+- Re-audited all six source vignettes after the object-consuming API update.
+- `costablr-multiomic.Rmd` now standardizes each OOL omic with training-split
+  statistics before automatic lambda-grid construction, applies the same
+  transform to validation, removes the previous inconsistent scaled/unscaled
+  proteomics fit, and names Multi-Omic STABL in the workflow overview.
+- `costablr-cooperative.Rmd` now presents only the public
+  `stabl_cooperative(per_omic)` path for Cooperative STABL. The older raw
+  `cooperative_fusion = TRUE` wrapper example was removed from the vignette to
+  avoid implying that the multiview comparator is the preferred user-facing
+  API. The vignette still documents `multiview` as the optional backend
+  dependency.
+- `costablr-cooperative.Rmd` now uses training-split standardization and an
+  explicitly documented permissive tutorial `hard_threshold = 0.01`, because
+  the bundled OOL subset can otherwise leave fewer than two Omic Views with
+  selected features and make the cooperative final layer undefined.
+- `costablr-python-parity.Rmd` now gates the COVID-19 extended run behind
+  `COSTABLR_RUN_EXTENDED_VIGNETTES=true`, matching the text that describes the
+  COVID-19 section as optional.
+- `costablr-tcga.Rmd` now skips cleanly when optional `mixOmics` is absent,
+  uses robust binary confusion-matrix levels, and avoids suggesting that the
+  TCGA vignette includes Cooperative STABL.
+- `costablr-tcga-nestedcv.Rmd` now states that the cached SLURM benchmark uses
+  its explicit nested-CV candidate abstraction, not the newer
+  object-consuming tutorial path; adding Multi-Omic STABL as a nested-CV
+  candidate remains a separate implementation task.
+- The tracked `costablr-python-parity.knit.md` intermediate was restored after
+  validation so the source pass does not leave broken temporary figure paths.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "files <- list.files('vignettes', pattern = '[.]Rmd$', full.names = TRUE); for (f in files) { out <- tempfile(fileext = '.R'); knitr::purl(f, output = out, quiet = TRUE); parse(out); cat('purl ok:', f, '\n') }"
+# -> purl/parse ok for all six Rmd files
+
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); rmarkdown::render("vignettes/costablr-intro.Rmd", output_file = tempfile(fileext = ".html"), quiet = TRUE); cat("intro render ok\n")'
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); rmarkdown::render("vignettes/costablr-multiomic.Rmd", output_file = tempfile(fileext = ".html"), quiet = TRUE); cat("multiomic render ok\n")'
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); rmarkdown::render("vignettes/costablr-python-parity.Rmd", output_file = tempfile(fileext = ".html"), quiet = TRUE); cat("python parity render ok\n")'
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); rmarkdown::render("vignettes/costablr-tcga.Rmd", output_file = tempfile(fileext = ".html"), quiet = TRUE); cat("tcga render ok\n")'
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); rmarkdown::render("vignettes/costablr-cooperative.Rmd", output_file = tempfile(fileext = ".html"), quiet = TRUE); cat("cooperative render ok\n")'
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); rmarkdown::render("vignettes/costablr-tcga-nestedcv.Rmd", output_file = tempfile(fileext = ".html"), quiet = TRUE); cat("nestedcv render ok\n")'
+# -> all six rendered to temporary HTML outputs
+
+git diff --check
+# -> clean
+```
+
 ### Base-SRM Consensus Design Deferred (2026-05-18)
 
 - Resolved exploratory terminology for a future robust-biomarker feature:
@@ -84,6 +195,57 @@ conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::
 
 git diff --check
 # -> clean
+```
+
+### Object-Consuming STABL Multi-Omic API Boundary (2026-05-18)
+
+- Added `stabl_per_omic()` as the rich reusable per-omic selection artifact:
+  independent per-Omic View STABL selectors, per-view final refits,
+  selected-feature matrices, aligned outcomes, sample ids, family/task metadata,
+  and optional validation selected matrices.
+- Added object-consuming downstream methods:
+  - `stabl_late_fusion(per_omic)` for STABL-Selected Late Fusion via per-view
+    final-refit prediction stacking.
+  - `stabl_multiomics(per_omic)` for paper-level Multi-Omic STABL via selected
+    biomarker concatenation and one combined final refit.
+  - `stabl_cooperative(per_omic)` for Cooperative STABL, fitting the multiview
+    cooperative final layer only on STABL-selected biomarkers.
+- Preserved the existing `stabl_multiomic_train_validate()` flag-driven
+  workflow surface for compatibility in this pass.
+- Added a guard so `stabl_per_omic()` rejects downstream fusion arguments in
+  `...` and points callers to the object-consuming fusion methods.
+- Added `print.stabl_per_omic()` and exported the new public functions.
+- Generated new Rd pages for `stabl_per_omic()`, `stabl_late_fusion()`,
+  `stabl_multiomics()`, and `stabl_cooperative()`.
+- Updated `STABL.md`, `CONTEXT.md`, and `PLAN.md` to record the object boundary
+  and the leakage rule: `stabl_per_omic()` can be reused for a fixed
+  train/validation split, but must be rebuilt inside each CV fold for
+  performance estimation.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "parse('R/multiomic_workflows.R'); parse('R/stabl_accessors.R'); parse('tests/testthat/test-multiomic-workflows.R'); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-multiomic-workflows.R', reporter = 'summary')"
+# -> multiomic-workflows DONE
+
+conda run -n R4_51 Rscript -e "invisible(parse('R/multiomic_workflows.R')); invisible(parse('tests/testthat/test-multiomic-workflows.R')); cat('parse ok\n')"
+# -> parse ok after downstream-argument guard
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R', reporter = 'summary')"
+# -> audit-multiomic-workflows DONE
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); cat(paste(c('stabl_per_omic','stabl_late_fusion','stabl_multiomics','stabl_cooperative') %in% getNamespaceExports('costablr'), collapse=' '), '\n')"
+# -> TRUE TRUE TRUE TRUE
+
+git diff --check
+# -> clean
+
+conda run -n R4_51 Rscript -e "devtools::document(roclets = c('rd', 'namespace'))"
+# -> generated new STABL object-consuming API Rd pages; existing manual NAMESPACE
+#    and manual Rd files were skipped by roxygen2
 ```
 
 ### Paper-Notation FDP+/Support Restoration (2026-05-18)
@@ -3873,6 +4035,44 @@ Validation:
 ```bash
 conda run -n R4_51 Rscript -e "if (requireNamespace('multiview', quietly=TRUE)) { print(args(multiview::multiview)); print(args(multiview::cv.multiview)) } else { cat('multiview not installed\n') }"
 # -> confirmed multiview defaults include standardize = TRUE and intercept = TRUE
+
+git diff --check
+# -> clean
+```
+
+### Vignette API Alignment (2026-05-18)
+
+- Updated the source notebooks under `vignettes/` for the current public
+  multi-omic API.
+- `costablr-multiomic.Rmd` now teaches the object-consuming path explicitly:
+  build `per_omic <- stabl_per_omic(...)`, then call
+  `stabl_late_fusion(per_omic)` and `stabl_multiomics(per_omic)`.
+- `costablr-tcga.Rmd` now uses the same object-consuming path for
+  STABL-Selected Late Fusion and Multi-Omic STABL, while keeping raw Early
+  Fusion and canonical Late Fusion as wrapper-based baselines.
+- `costablr-cooperative.Rmd` now uses `stabl_per_omic()` followed by
+  `stabl_cooperative()`, uses the public cooperative accessors in examples,
+  and clarifies that `cooperative_fusion = TRUE` is the raw cooperative
+  comparator branch, not Cooperative STABL.
+- Corrected vignette Early Fusion examples to pass a shared lambda grid instead
+  of a named per-omic lambda-grid list. This matches the current contract that
+  Early Fusion has one concatenated input space.
+- Audited the remaining vignettes. `costablr-intro.Rmd`,
+  `costablr-python-parity.Rmd`, and `costablr-tcga-nestedcv.Rmd` did not have
+  stale object-consuming API examples requiring edits in this pass.
+- Generated HTML files were intentionally not regenerated; the edited Rmd files
+  are the canonical source.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "files <- list.files('vignettes', pattern = '[.]Rmd$', full.names = TRUE); for (f in files) { out <- tempfile(fileext = '.R'); knitr::purl(f, output = out, quiet = TRUE); parse(out); cat('purl ok:', f, '\n') }"
+# -> purl/parse ok for all six Rmd files
+# -> knitr emitted expected option-evaluation messages for chunks gated by
+#    eval_covid/has_results because those flags are defined at render time.
+
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); ool_train <- load_ool_data("train"); ool_valid <- load_ool_data("valid"); lambda_list <- list(cytof = auto_lambda_grid(ool_train$x_list$cytof, ool_train$y, family = "gaussian", n_lambda = 3), proteomics = auto_lambda_grid(ool_train$x_list$proteomics, ool_train$y, family = "gaussian", n_lambda = 3)); lambda_shared <- auto_lambda_grid(do.call(cbind, ool_train$x_list), ool_train$y, family = "gaussian", n_lambda = 3); per_omic <- stabl_per_omic(x_train_list = ool_train$x_list, y_train = ool_train$y, lambda_grid = lambda_list, x_valid_list = ool_valid$x_list, y_valid = ool_valid$y, family = "gaussian", n_bootstraps = 3L, artificial_type = "random_permutation", hard_threshold = 0.01, random_state = 42L); stabl_lf <- stabl_late_fusion(per_omic, n_iter_stacking = 10L, random_state = 42L); multiomics <- stabl_multiomics(per_omic); baseline_fit <- stabl_multiomic_train_validate(x_train_list = ool_train$x_list, y_train = ool_train$y, lambda_grid = lambda_shared, x_valid_list = ool_valid$x_list, y_valid = ool_valid$y, family = "gaussian", n_bootstraps = 3L, artificial_type = "random_permutation", hard_threshold = 0.01, early_fusion = TRUE, late_fusion = TRUE, n_iter_stacking = 10L, random_state = 42L); stopifnot(inherits(per_omic, "stabl_per_omic"), inherits(stabl_lf, "stabl_late_fusion"), inherits(multiomics, "stabl_multiomics"), !is.null(baseline_fit$early_fusion), !is.null(baseline_fit$late_fusion)); cat("smoke ok\n")'
+# -> smoke ok
 
 git diff --check
 # -> clean

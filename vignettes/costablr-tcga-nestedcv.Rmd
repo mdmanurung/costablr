@@ -105,6 +105,12 @@ features.  The candidate workflows are mRNA-only, miRNA-only, and early fusion
 across mRNA and miRNA.  Candidate choice is based on inner-CV balanced error
 rate.
 
+This benchmark uses the nested-CV runner's explicit candidate abstraction, not
+the newer `stabl_per_omic()` object-consuming tutorial path. Adding a
+Multi-Omic STABL nested-CV candidate is intentionally a separate implementation
+task because the selected candidate must be rebuilt inside every outer fold and
+compared under the same inner-CV selection rule.
+
 DIABLO uses the mixOmics multiblock sPLS-DA workflow: `block.plsda()` and
 `perf()` choose the number of components, `tune.block.splsda()` tunes `keepX`,
 and the locked outer-fold model is evaluated with weighted-vote

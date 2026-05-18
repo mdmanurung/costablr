@@ -68,9 +68,13 @@ case:
 2. building a compact penalty grid with `auto_lambda_grid()`;
 3. fitting a small binary or regression example;
 4. extracting selected features (`get_support()`) and stability scores
-   (`get_importances()`).
+   (`get_importances()`);
 5. reading the stability-path and FDP diagnostic plots;
 6. switching between lasso, adaptive lasso, and elastic-net base learners.
+
+`stabl_fit()` is the selector-level API. If you need a predictive model after
+selection, use `stabl_refit()` or one of the multi-omic workflow helpers so the
+final refit is explicit.
 
 ## Basic input shape
 
@@ -414,5 +418,7 @@ survives, and calibrate that survival against decoys.  From here:
   small values used here.
 - Use `vignette("costablr-multiomic")` when your data contain multiple omics
   views.
+- Use `stabl_refit()` when you need a single-matrix final predictive model
+  after STABL selection.
 - Use `?save_stabl_results` when you are ready to export scores, plots, and
   selected-feature tables to disk.

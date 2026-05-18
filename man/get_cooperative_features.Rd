@@ -7,9 +7,10 @@
 get_cooperative_features(object, view = NULL, class_level = NULL)
 }
 \arguments{
-\item{object}{A fitted \code{"stabl_multiomic_fit"} object returned by
-\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} with \code{cooperative_fusion = TRUE}, or a
-\code{"stabl_multiomic_cv"} object returned by \code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} with
+\item{object}{A \code{"stabl_cooperative"} object returned by
+\code{\link[=stabl_cooperative]{stabl_cooperative()}}, a fitted \code{"stabl_multiomic_fit"} object returned
+by \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} with \code{cooperative_fusion = TRUE},
+or a \code{"stabl_multiomic_cv"} object returned by \code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} with
 \code{cooperative_fusion = TRUE}.}
 
 \item{view}{Optional character scalar naming one omic view.  When supplied
@@ -22,17 +23,18 @@ selected features are returned instead of the default union across
 classes.}
 }
 \value{
-For \code{"stabl_multiomic_fit"}, a named list of character vectors, or
-a character vector when \code{view} is supplied.  For \code{"stabl_multiomic_cv"}, a
-named list keyed by fold, where each element has the same structure as the
-\code{"stabl_multiomic_fit"} method.
+For \code{"stabl_cooperative"} and \code{"stabl_multiomic_fit"}, a named list
+of character vectors, or a character vector when \code{view} is supplied. For
+\code{"stabl_multiomic_cv"}, a named list keyed by fold, where each element has
+the same structure as the \code{"stabl_multiomic_fit"} method.
 }
 \description{
-Returns the feature names selected by the cooperative-fusion branch of a
-fitted multi-omic workflow.  This accessor gives downstream code a stable
-public surface instead of reaching into \verb{$cooperative_fusion} directly.
+Returns the feature names selected by cooperative fusion. This accessor
+gives downstream code a stable public surface instead of reaching into
+\verb{$cooperative_fusion} or the result internals directly.
 }
 \seealso{
 \code{\link[=get_cooperative_diagnostics]{get_cooperative_diagnostics()}},
-\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}, \code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}}
+\code{\link[=stabl_cooperative]{stabl_cooperative()}}, \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}},
+\code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}}
 }

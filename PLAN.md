@@ -96,7 +96,7 @@ compact source-of-truth ledger for these choices is the
 - Python reference scripts remain the behavior anchor for parity checks where tests are not yet frozen.
 - Current workspace scope (2026-05-03): CI workflow implementation is deferred; validation is performed via local R test suites.
 
-## Vignette Status (as of 2026-05-12) — Rewrite Render Validation Complete
+## Vignette Status (as of 2026-05-18) — Source API Alignment and Render Pass Complete
 
 All 6 costablr vignette sources have canonical source under
 `vignettes/`.  Generated `doc/` output is build output, not the
@@ -104,6 +104,12 @@ edit source.  The five non-nested-CV vignettes previously rebuilt successfully
 via `devtools::build_vignettes('.')`; after the 2026-05-12
 narrative rewrite, parallel render validation completed as SLURM array job
 `24752130` with HTML output created for all five non-nested-CV vignettes.
+On 2026-05-18, the source Rmd files were aligned to the current object-consuming
+API: STABL-selected workflows now teach `stabl_per_omic()` followed by
+`stabl_late_fusion()`, `stabl_multiomics()`, or `stabl_cooperative()`, while
+raw Early Fusion and canonical Late Fusion remain wrapper-based baselines.
+The follow-up audit rendered all six Rmd files to temporary HTML outputs,
+without updating tracked generated HTML.
 
 - `costablr-intro.Rmd` ✅ — simulated-data introduction with clearer input
   contract, selected-feature interpretation, and single-omic scope boundaries.
@@ -146,6 +152,19 @@ independently trained per-view penalized glmnet predictors plus the shared
 hybrid because it first runs per-view STABL selection before stacking per-view
 final-refit predictions; preserving it as a separate comparator is useful, but
 it is not the canonical paper baseline.
+
+Breaking API cleanup is now moving toward an object-consuming public surface.
+`stabl_per_omic()` is the canonical reusable per-omic selection artifact.
+`stabl_late_fusion(per_omic)`, `stabl_multiomics(per_omic)`, and
+`stabl_cooperative(per_omic)` consume that artifact instead of rerunning
+per-omic selection from raw inputs. This object can be reused for a fixed
+train/validation analysis; CV wrappers must construct it inside each fold to
+avoid feature-selection leakage. Package-facing source docs, Rd pages, README,
+pkgdown grouping, and source vignettes now foreground this object-consuming
+surface. The older flag-driven train/validation and CV wrappers remain
+supported orchestration surfaces, not the preferred naming model for new
+STABL-selected downstream code.
+
 Remaining forward scope: `stabl_multiomic_nested_cv()` integration is deferred
 because nested CV uses its own candidate-selection abstraction; the follow-up
 should add an explicit Multi-Omic STABL candidate type rather than simple flag

@@ -11,9 +11,17 @@
 #' @section Main workflows:
 #' \itemize{
 #'   \item [stabl_fit()] fits the core single-matrix STABL selector.
+#'   \item [stabl_per_omic()] fits independent per-omic STABL selectors and
+#'     returns the preferred object boundary for STABL-selected downstream
+#'     fusion.
+#'   \item [stabl_late_fusion()], [stabl_multiomics()], and
+#'     [stabl_cooperative()] consume a [stabl_per_omic()] object for
+#'     STABL-selected prediction stacking, paper-level Multi-Omic STABL, and
+#'     Cooperative STABL respectively.
 #'   \item [stabl_multiomic_train_validate()] runs train/validation multi-omic
 #'     workflows with optional Early Fusion, canonical Late Fusion,
-#'     STABL-Selected Late Fusion, Multi-Omic STABL, and Cooperative Fusion.
+#'     STABL-Selected Late Fusion, Multi-Omic STABL, and Cooperative Fusion
+#'     branches.
 #'   \item [stabl_multiomic_cv()] runs outer cross-validation for named
 #'     multi-omic inputs, preserving optional group structure.
 #' }
@@ -30,8 +38,9 @@
 #' paths, FDP+ curves, ROC/PRC plots, selected-feature visualizations, and CSV
 #' output.
 #'
-#' @seealso [stabl_fit()], [stabl_multiomic_train_validate()],
-#'   [get_support()], [get_importances()], [plot_stabl_path()]
+#' @seealso [stabl_fit()], [stabl_per_omic()],
+#'   [stabl_multiomic_train_validate()], [get_support()],
+#'   [get_importances()], [plot_stabl_path()]
 #'
 #' @useDynLib costablr, .registration = TRUE
 #' @importFrom Rcpp evalCpp
@@ -282,7 +291,7 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
 
   if (!.has_multiview()) {
     stop(
-      "`cooperative_fusion = TRUE` requires the optional 'multiview' package to be installed.",
+      "Cooperative fusion requires the optional 'multiview' package to be installed.",
       call. = FALSE
     )
   }

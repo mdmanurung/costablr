@@ -104,13 +104,28 @@ Important arguments:
 
 ### Multi-Omic Workflows
 
-Use `stabl_multiomic_train_validate()` for named omic lists with optional
-validation data. Enable `early_fusion`, canonical prediction-level
-`late_fusion`, `stabl_selected_late_fusion`, and `multiomic_stabl`
-independently, with `cooperative_fusion` available as a separate comparator.
-Use `stabl_multiomic_cv()` when no fixed validation split is available.
-Per-omic STABL results include final refits on the selected features, and
-early-fusion results include the same final-refit stage when enabled.
+For STABL-selected multi-omic workflows, prefer the explicit object-consuming
+API:
+
+```r
+per_omic <- stabl_per_omic(x_train_list, y_train, lambda_grid,
+                           x_valid_list = x_valid_list, y_valid = y_valid)
+stabl_late_fusion(per_omic)
+stabl_multiomics(per_omic)
+stabl_cooperative(per_omic)
+```
+
+`stabl_per_omic()` runs independent STABL selection per Omic View and returns a
+reusable selection artifact for a fixed train/validation analysis. Build a fresh
+`stabl_per_omic()` object inside each outer CV training fold when estimating
+generalization.
+
+The older orchestration wrappers remain available. Use
+`stabl_multiomic_train_validate()` for named omic lists with optional
+validation data, and `stabl_multiomic_cv()` when no fixed validation split is
+available. Their optional branches are additive: `early_fusion`,
+canonical prediction-level `late_fusion`, `stabl_selected_late_fusion`,
+`multiomic_stabl`, and `cooperative_fusion`.
 
 Cooperative-fusion results can be inspected with:
 
@@ -146,6 +161,8 @@ Accessors:
 
 Multi-omic workflows:
 
+- `stabl_per_omic()`, `stabl_late_fusion()`, `stabl_multiomics()`,
+  `stabl_cooperative()`
 - `stabl_multiomic_train_validate()`, `stabl_multiomic_cv()`
 - `stacked_multi_omic()`, `load_ool_data()`
 

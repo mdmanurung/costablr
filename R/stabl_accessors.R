@@ -169,13 +169,14 @@ get_feature_names_out.stabl_fit <- function(object, new_hard_threshold = NULL) {
 
 #' Get Cooperative-Fusion Selected Features
 #'
-#' Returns the feature names selected by the cooperative-fusion branch of a
-#' fitted multi-omic workflow.  This accessor gives downstream code a stable
-#' public surface instead of reaching into `$cooperative_fusion` directly.
+#' Returns the feature names selected by cooperative fusion. This accessor
+#' gives downstream code a stable public surface instead of reaching into
+#' `$cooperative_fusion` or the result internals directly.
 #'
-#' @param object A fitted `"stabl_multiomic_fit"` object returned by
-#'   [stabl_multiomic_train_validate()] with `cooperative_fusion = TRUE`, or a
-#'   `"stabl_multiomic_cv"` object returned by [stabl_multiomic_cv()] with
+#' @param object A `"stabl_cooperative"` object returned by
+#'   [stabl_cooperative()], a fitted `"stabl_multiomic_fit"` object returned
+#'   by [stabl_multiomic_train_validate()] with `cooperative_fusion = TRUE`,
+#'   or a `"stabl_multiomic_cv"` object returned by [stabl_multiomic_cv()] with
 #'   `cooperative_fusion = TRUE`.
 #' @param view Optional character scalar naming one omic view.  When supplied
 #'   for a `"stabl_multiomic_fit"`, only that view's cooperative feature names
@@ -185,16 +186,29 @@ get_feature_names_out.stabl_fit <- function(object, new_hard_threshold = NULL) {
 #'   selected features are returned instead of the default union across
 #'   classes.
 #'
-#' @return For `"stabl_multiomic_fit"`, a named list of character vectors, or
-#'   a character vector when `view` is supplied.  For `"stabl_multiomic_cv"`, a
-#'   named list keyed by fold, where each element has the same structure as the
-#'   `"stabl_multiomic_fit"` method.
+#' @return For `"stabl_cooperative"` and `"stabl_multiomic_fit"`, a named list
+#'   of character vectors, or a character vector when `view` is supplied. For
+#'   `"stabl_multiomic_cv"`, a named list keyed by fold, where each element has
+#'   the same structure as the `"stabl_multiomic_fit"` method.
 #'
 #' @seealso [get_cooperative_diagnostics()],
-#'   [stabl_multiomic_train_validate()], [stabl_multiomic_cv()]
+#'   [stabl_cooperative()], [stabl_multiomic_train_validate()],
+#'   [stabl_multiomic_cv()]
 #' @export
 get_cooperative_features <- function(object, view = NULL, class_level = NULL) {
   UseMethod("get_cooperative_features")
+}
+
+#' @export
+get_cooperative_features.stabl_cooperative <- function(object,
+                                                       view = NULL,
+                                                       class_level = NULL) {
+  cf <- .check_cooperative_result(object)
+  .cooperative_features_from_result(
+    cf = cf,
+    view = view,
+    class_level = class_level
+  )
 }
 
 #' @export
@@ -202,6 +216,15 @@ get_cooperative_features.stabl_multiomic_fit <- function(object,
                                                         view = NULL,
                                                         class_level = NULL) {
   cf <- .check_cooperative_branch(object)
+  .cooperative_features_from_result(
+    cf = cf,
+    view = view,
+    class_level = class_level
+  )
+}
+
+.cooperative_features_from_result <- function(cf, view = NULL,
+                                              class_level = NULL) {
   features <- cf$selected_features
 
   if (!is.null(class_level)) {
@@ -251,13 +274,13 @@ get_cooperative_features.stabl_multiomic_cv <- function(object,
 
 #' Get Cooperative-Fusion Tuning Diagnostics
 #'
-#' Returns the cooperative-fusion tuning diagnostics from a fitted multi-omic
-#' workflow.  For train/validation fits this is the per-candidate tuning table;
-#' for outer cross-validation fits this is the fold diagnostics table restricted
-#' to cooperative diagnostic columns.
+#' Returns cooperative-fusion tuning diagnostics. For train/validation and
+#' object-consuming cooperative fits this is the per-candidate tuning table;
+#' for outer cross-validation fits this is the fold diagnostics table
+#' restricted to cooperative diagnostic columns.
 #'
-#' @param object A `"stabl_multiomic_fit"` or `"stabl_multiomic_cv"` object
-#'   with cooperative fusion enabled.
+#' @param object A `"stabl_cooperative"`, `"stabl_multiomic_fit"`, or
+#'   `"stabl_multiomic_cv"` object with cooperative fusion enabled.
 #'
 #' @return A `data.frame` of cooperative tuning diagnostics.
 #'
@@ -266,6 +289,12 @@ get_cooperative_features.stabl_multiomic_cv <- function(object,
 #' @export
 get_cooperative_diagnostics <- function(object) {
   UseMethod("get_cooperative_diagnostics")
+}
+
+#' @export
+get_cooperative_diagnostics.stabl_cooperative <- function(object) {
+  cf <- .check_cooperative_result(object)
+  cf$diagnostics
 }
 
 #' @export
@@ -353,6 +382,78 @@ print.stabl_fit <- function(x, ...) {
 }
 
 #' @export
+print.stabl_per_omic <- function(x, ...) {
+  omic_names <- x$omic_names %||% names(x$fits)
+  cat("<stabl_per_omic>\n")
+  cat("  Omics:           ", length(omic_names), " (",
+      paste(omic_names, collapse = ", "), ")\n", sep = "")
+  cat("  Family:          ", x$family %||% "unknown", "\n", sep = "")
+  cat("  Per-omic selected features:\n")
+  for (omic in omic_names) {
+    n_sel <- length(x$selected_features[[omic]])
+    cat("    ", omic, ": ", n_sel, "\n", sep = "")
+  }
+  cat("  Final refits:    ", if (!is.null(x$refits)) "yes" else "no", "\n")
+  cat("  Validation data: ", if (!is.null(x$selected_valid)) "yes" else "no", "\n")
+  invisible(x)
+}
+
+#' @export
+print.stabl_late_fusion <- function(x, ...) {
+  cat("<stabl_late_fusion>\n")
+  cat("  Task:            ", x$task_type %||% "unknown", "\n", sep = "")
+  if (!is.null(x$weights)) {
+    cat("  Omics:           ", nrow(x$weights), "\n", sep = "")
+  }
+  if (!is.null(x$score) && is.finite(x$score)) {
+    cat("  Score:           ", round(x$score, 4L), "\n", sep = "")
+  }
+  cat("  Validation data: ", if (!is.null(x$valid_predictions)) "yes" else "no", "\n")
+  invisible(x)
+}
+
+#' @export
+print.stabl_multiomics <- function(x, ...) {
+  omic_names <- names(x$selected_features)
+  cat("<stabl_multiomics>\n")
+  cat("  Omics:           ", length(omic_names), " (",
+      paste(omic_names, collapse = ", "), ")\n", sep = "")
+  cat("  Final features:  ", length(x$final_features %||% character(0)), "\n", sep = "")
+  cat("  Final refit:     ", x$refit$model_type %||% "unknown", "\n", sep = "")
+  cat("  Validation data: ", if (!is.null(x$selected_valid)) "yes" else "no", "\n")
+  invisible(x)
+}
+
+#' @export
+print.stabl_cooperative <- function(x, ...) {
+  omic_names <- names(x$selected_features)
+  n_selected <- sum(vapply(x$selected_features, length, integer(1L)))
+  cat("<stabl_cooperative>\n")
+  cat("  Omics:           ", length(omic_names), " (",
+      paste(omic_names, collapse = ", "), ")\n", sep = "")
+  if (!is.null(x$stabl_selected_views)) {
+    cat("  Fitted views:    ", length(x$stabl_selected_views), " (",
+        paste(x$stabl_selected_views, collapse = ", "), ")\n", sep = "")
+  }
+  if (identical(x$task_type, "multiclass_ovr")) {
+    cat("  Task:            one-vs-rest multinomial\n")
+    cat("  Classes:         ", paste(x$levels, collapse = ", "), "\n", sep = "")
+    if (!is.null(x$log_loss) && is.finite(x$log_loss)) {
+      cat("  Log loss:        ", round(x$log_loss, 4L), "\n", sep = "")
+    }
+  } else {
+    cat("  Selection:       ", x$selection %||% "unknown", "\n", sep = "")
+    cat("  Rho:             ", x$rho %||% "unknown", "\n", sep = "")
+    if (!is.null(x$score) && is.finite(x$score)) {
+      cat("  Score:           ", round(x$score, 4L), "\n", sep = "")
+    }
+  }
+  cat("  Selected feats:  ", n_selected, "\n", sep = "")
+  cat("  Validation data: ", if (!is.null(x$valid_predictions)) "yes" else "no", "\n")
+  invisible(x)
+}
+
+#' @export
 print.stabl_multiomic_fit <- function(x, ...) {
   omic_names <- names(x$fits)
   cat("<stabl_multiomic_fit>\n")
@@ -430,6 +531,17 @@ print.stabl_multiomic_cv <- function(x, ...) {
   invisible(NULL)
 }
 
+.check_cooperative_result <- function(object) {
+  if (is.null(object$selected_features) || is.null(object$diagnostics)) {
+    stop(
+      "Malformed cooperative-fusion result: expected `selected_features` and `diagnostics`.",
+      call. = FALSE
+    )
+  }
+
+  object
+}
+
 .check_cooperative_branch <- function(object) {
   if (is.null(object$cooperative_fusion)) {
     stop(
@@ -438,15 +550,7 @@ print.stabl_multiomic_cv <- function(x, ...) {
     )
   }
 
-  if (is.null(object$cooperative_fusion$selected_features) ||
-      is.null(object$cooperative_fusion$diagnostics)) {
-    stop(
-      "Malformed cooperative-fusion branch: expected `selected_features` and `diagnostics`.",
-      call. = FALSE
-    )
-  }
-
-  object$cooperative_fusion
+  .check_cooperative_result(object$cooperative_fusion)
 }
 
 # Null-coalescing helper (package-internal)

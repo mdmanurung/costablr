@@ -56,14 +56,18 @@ render_n_bootstraps_covid <- 1000L
 render_n_lambda <- 10L
 render_artificial_type_ool <- "modelx_knockoff"
 render_artificial_type_covid <- "random_permutation"
-run_extended <- TRUE
+run_extended <- identical(
+  tolower(Sys.getenv("COSTABLR_RUN_EXTENDED_VIGNETTES", "false")),
+  "true"
+)
 ```
 
 The rendered OOL configuration uses `r render_n_bootstraps_ool` bootstraps,
 `r render_n_lambda` lambda values, and knockoffs.  The rendered COVID-19
 configuration uses `r render_n_bootstraps_covid` bootstraps, `r render_n_lambda`
-lambda values, and random-permutation artificial features, matching the
-notebook's default STABL classifier settings.
+lambda values, and random-permutation artificial features when
+`COSTABLR_RUN_EXTENDED_VIGNETTES=true`, matching the notebook's default STABL
+classifier settings.
 
 ---
 

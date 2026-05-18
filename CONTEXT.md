@@ -89,6 +89,17 @@ _Avoid_: multiview model, cooperative learning branch
 ## Relationships
 
 - A **STABL Selector** produces zero or more selected biomarkers.
+- `stabl_fit()` is the canonical public API for a single-view **STABL Selector**.
+- `stabl_per_omic()` is the canonical public API for fitting independent **STABL Selectors** across multiple **Omic Views**.
+- `stabl_multiomics()` is the canonical public API name for paper-level **Multi-Omic STABL**.
+- `stabl_late_fusion()` is the canonical public API name for **STABL-Selected Late Fusion**.
+- `stabl_cooperative()` is the canonical public API name for **Cooperative STABL**.
+- A **STABL Selector** does not own multi-omic fusion behavior.
+- `stabl_per_omic()` may include independent per-omic **Final Refits** for downstream prediction, but those refits are not multi-omic fusion.
+- Downstream STABL fusion functions consume a `stabl_per_omic()` result rather than rerunning per-omic selection from raw inputs.
+- A `stabl_per_omic()` result is reusable for fixed train/validation analysis, but it must be created inside each training fold for cross-validation performance estimation.
+- Public modeling functions should each represent one clear method or evaluation target; avoid functions whose behavior is primarily controlled by many fusion flags.
+- Public STABL method names use `multiomic` rather than `multiview`; use **Omic View** in prose and reserve `multiview` for the external package or general machine-learning literature.
 - A **Final Refit** is trained after exactly one **STABL Selector** result.
 - A **SuperLearner Final Refit** is a type of **Final Refit**, not a **Base SRM**.
 - A **Consensus Biomarker Set** is derived from two or more **STABL Selector** runs.

@@ -1,3 +1,270 @@
+#' Fit STABL Separately Per Omic View
+#'
+#' Fits [stabl_fit()] independently on each Omic View and returns a reusable
+#' per-omic selection artifact. This object is the intended input boundary for
+#' STABL-selected downstream fusion methods: [stabl_late_fusion()],
+#' [stabl_multiomics()], and [stabl_cooperative()].
+#'
+#' `stabl_per_omic()` does not estimate out-of-sample performance by itself.
+#' For cross-validation, create a fresh `stabl_per_omic()` object inside each
+#' training fold so that validation samples do not influence feature selection.
+#'
+#' @inheritParams stabl_multiomic_train_validate
+#'
+#' @return A list with class `"stabl_per_omic"` containing per-omic `fits`,
+#'   per-omic final `refits`, selected feature names and matrices, aligned
+#'   outcomes, sample ids, family/task metadata, and optional validation
+#'   selected matrices.
+#' @export
+stabl_per_omic <- function(
+    x_train_list,
+    y_train,
+    lambda_grid,
+    x_valid_list    = NULL,
+    y_valid         = NULL,
+    groups_train    = NULL,
+    base_learner    = "lasso",
+    family          = "gaussian",
+    n_bootstraps    = 100L,
+    artificial_type = "random_permutation",
+    hard_threshold  = NULL,
+    stratify_bootstrap = FALSE,
+    bootstrap_strata_train = NULL,
+    l1_ratio        = NULL,
+    random_state    = NULL,
+    ...
+) {
+  .reject_stabl_per_omic_fusion_args(list(...))
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list = x_train_list,
+    y_train = y_train,
+    lambda_grid = lambda_grid,
+    x_valid_list = x_valid_list,
+    y_valid = y_valid,
+    groups_train = groups_train,
+    base_learner = base_learner,
+    family = family,
+    n_bootstraps = n_bootstraps,
+    artificial_type = artificial_type,
+    hard_threshold = hard_threshold,
+    stratify_bootstrap = stratify_bootstrap,
+    bootstrap_strata_train = bootstrap_strata_train,
+    l1_ratio = l1_ratio,
+    random_state = random_state,
+    early_fusion = FALSE,
+    late_fusion = FALSE,
+    stabl_selected_late_fusion = FALSE,
+    multiomic_stabl = FALSE,
+    cooperative_fusion = FALSE,
+    ...
+  )
+
+  omic_names <- names(x_train_list)
+  train_ids <- rownames(x_train_list[[omic_names[[1L]]]])
+  y_train <- .subset_outcome_by_ids(y_train, train_ids)
+  if (!is.null(groups_train)) {
+    groups_train <- groups_train[train_ids]
+  }
+
+  valid_ids <- NULL
+  if (!is.null(x_valid_list)) {
+    valid_ids <- rownames(x_valid_list[[omic_names[[1L]]]])
+    if (!is.null(y_valid)) {
+      y_valid <- .subset_outcome_by_ids(y_valid, valid_ids)
+    }
+  }
+
+  refit_task_type <- .stabl_refit_task_type(family)
+  fit$omic_names <- omic_names
+  fit$train_ids <- train_ids
+  fit$y_train <- y_train
+  fit$family <- family
+  fit$task_type <- refit_task_type
+  fit$stacking_task_type <- .family_to_task_type(family)
+  refit_levels <- if (identical(refit_task_type, "multiclass")) {
+    levels(factor(y_train))
+  } else {
+    NULL
+  }
+  fit[c("valid_ids", "y_valid", "groups_train", "levels", "random_state")] <- list(
+    valid_ids,
+    y_valid,
+    groups_train,
+    refit_levels,
+    random_state
+  )
+  fit$call <- match.call()
+
+  class(fit) <- c("stabl_per_omic", "stabl_multiomic_fit")
+  fit
+}
+
+#' STABL-Selected Late Fusion from a Per-Omic STABL Artifact
+#'
+#' Combines predictions from independent per-omic final refits stored in a
+#' [stabl_per_omic()] result. This is a STABL-selected prediction-level fusion
+#' method: it does not concatenate selected biomarkers into one feature matrix.
+#'
+#' @param per_omic A `"stabl_per_omic"` object returned by [stabl_per_omic()].
+#' @param n_iter_stacking Number of random non-negative weight draws passed to
+#'   [stacked_multi_omic()].
+#' @param random_state Optional integer seed for the stacking weight search.
+#'   Defaults to the seed stored in `per_omic`.
+#'
+#' @return A list with stacking `weights`, train/validation predictions,
+#'   task-specific score, and task metadata.
+#' @export
+stabl_late_fusion <- function(per_omic,
+                              n_iter_stacking = 10000L,
+                              random_state = NULL) {
+  per_omic <- .check_stabl_per_omic(per_omic)
+  if (identical(per_omic$task_type, "cox")) {
+    stop(
+      "`stabl_late_fusion()` does not support `family = 'cox'` until a censoring-aware stacking objective is implemented.",
+      call. = FALSE
+    )
+  }
+  if (is.null(random_state)) {
+    random_state <- per_omic$random_state
+  }
+
+  out <- .stack_per_view_predictions(
+    per_view_models = per_omic$refits,
+    omic_names = per_omic$omic_names,
+    y_train = per_omic$y_train,
+    y_valid = per_omic$y_valid,
+    valid_ids = per_omic$valid_ids,
+    task_type = per_omic$stacking_task_type,
+    n_iter_stacking = n_iter_stacking,
+    random_state = random_state
+  )
+  structure(out, class = c("stabl_late_fusion", "list"))
+}
+
+#' Multi-Omic STABL from a Per-Omic STABL Artifact
+#'
+#' Concatenates only the STABL-selected biomarkers from each Omic View and fits
+#' one final refit on the combined selected feature layer. This is the
+#' paper-level Multi-Omic STABL integration strategy.
+#'
+#' @param per_omic A `"stabl_per_omic"` object returned by [stabl_per_omic()].
+#'
+#' @return A list containing the combined selected train/validation matrices,
+#'   final-layer feature map, final refit, predictions, and metrics where
+#'   defined.
+#' @export
+stabl_multiomics <- function(per_omic) {
+  per_omic <- .check_stabl_per_omic(per_omic)
+  .validate_prefixed_omic_names(per_omic$omic_names)
+
+  out <- .fit_multiomic_stabl_final_layer(
+    selected_train = per_omic$selected_train,
+    selected_valid = per_omic$selected_valid,
+    selected_features = per_omic$selected_features,
+    y_train = per_omic$y_train,
+    y_valid = per_omic$y_valid,
+    task_type = per_omic$task_type,
+    levels = per_omic$levels
+  )
+  structure(out, class = c("stabl_multiomics", "list"))
+}
+
+#' Cooperative STABL from a Per-Omic STABL Artifact
+#'
+#' Fits cooperative fusion after per-omic STABL selection. The cooperative model
+#' receives only the selected biomarkers in each Omic View, preserving STABL's
+#' view-specific reliability-threshold boundary while adding an agreement
+#' penalty in the final predictive layer.
+#'
+#' @param per_omic A `"stabl_per_omic"` object returned by [stabl_per_omic()].
+#' @param rho Numeric scalar or vector of non-negative cooperation strengths.
+#' @param cooperation_selection Character scalar, `"cv"` or `"validation"`.
+#' @param cooperation_selector Character scalar, `"lambda.min"` or
+#'   `"lambda.1se"`.
+#' @param cooperation_type_measure Cooperative tuning metric. `"default"` uses
+#'   the package default for the active family.
+#' @param cooperation_nfolds Number of inner folds when
+#'   `cooperation_selection = "cv"`.
+#' @param random_state Optional integer seed. Defaults to the seed stored in
+#'   `per_omic`.
+#'
+#' @return A cooperative-fusion result list, with selected features expanded
+#'   back to all Omic Views from `per_omic`.
+#' @export
+stabl_cooperative <- function(per_omic,
+                              rho = NULL,
+                              cooperation_selection = c("cv", "validation"),
+                              cooperation_selector = c("lambda.min", "lambda.1se"),
+                              cooperation_type_measure = "default",
+                              cooperation_nfolds = 5L,
+                              random_state = NULL) {
+  per_omic <- .check_stabl_per_omic(per_omic)
+  if (is.null(random_state)) {
+    random_state <- per_omic$random_state
+  }
+
+  keep <- vapply(per_omic$selected_train, ncol, integer(1L)) > 0L
+  if (sum(keep) < 2L) {
+    stop(
+      "`stabl_cooperative()` requires at least two Omic Views with at least one STABL-selected feature.",
+      call. = FALSE
+    )
+  }
+
+  x_train_selected <- per_omic$selected_train[keep]
+  x_valid_selected <- if (is.null(per_omic$selected_valid)) {
+    NULL
+  } else {
+    per_omic$selected_valid[keep]
+  }
+
+  cooperative_args <- .normalize_cooperative_multiomic_args(
+    x_list = x_train_selected,
+    family = per_omic$family,
+    rho = rho,
+    cooperative_selection = cooperation_selection,
+    cooperation_selector = cooperation_selector,
+    cooperation_type_measure = cooperation_type_measure,
+    cooperation_nfolds = cooperation_nfolds,
+    x_valid_list = x_valid_selected,
+    y_valid = per_omic$y_valid
+  )
+
+  out <- .cooperative_multiomic_fit(
+    x_train_list = x_train_selected,
+    y_train = per_omic$y_train,
+    x_valid_list = x_valid_selected,
+    y_valid = per_omic$y_valid,
+    groups_train = per_omic$groups_train,
+    family = per_omic$family,
+    random_state = random_state,
+    cooperative_args = cooperative_args
+  )
+
+  out$selected_features <- .expand_stabl_per_omic_list(
+    out$selected_features,
+    names = per_omic$omic_names,
+    default = character(0)
+  )
+  out$selected_train <- .expand_stabl_per_omic_matrices(
+    out$selected_train,
+    template = per_omic$selected_train
+  )
+  out$selected_valid <- if (is.null(per_omic$selected_valid)) {
+    NULL
+  } else {
+    .expand_stabl_per_omic_matrices(
+      out$selected_valid,
+      template = per_omic$selected_valid
+    )
+  }
+  out$stabl_selected_views <- names(x_train_selected)
+  out$input <- "stabl_per_omic"
+
+  structure(out, class = c("stabl_cooperative", "list"))
+}
+
 #' Multi-Omic STABL Train/Validation Workflow
 #'
 #' Fits [stabl_fit()] independently on each omic block from a named list,
@@ -679,6 +946,29 @@ stabl_multiomic_cv <- function(
       ". `late_fusion` now names canonical prediction-level fusion; use ",
       "`stabl_selected_late_fusion` for the STABL-selected hybrid."
     ),
+    call. = FALSE
+  )
+}
+
+.reject_stabl_per_omic_fusion_args <- function(args) {
+  fusion_args <- c(
+    "early_fusion", "late_fusion", "stabl_selected_late_fusion",
+    "multiomic_stabl", "cooperative_fusion", "n_iter_stacking", "n_iter_lf",
+    "rho", "cooperation_selection", "cooperation_selector",
+    "cooperation_type_measure", "cooperation_nfolds"
+  )
+  supplied <- intersect(names(args), fusion_args)
+  if (length(supplied) == 0L) {
+    return(invisible(NULL))
+  }
+
+  stop(
+    "`stabl_per_omic()` fits only the per-omic STABL selection artifact. ",
+    "Run downstream fusion with `stabl_late_fusion()`, `stabl_multiomics()`, ",
+    "or `stabl_cooperative()` after creating the artifact. Unsupported ",
+    "argument(s): ",
+    paste(sprintf("`%s`", supplied), collapse = ", "),
+    ".",
     call. = FALSE
   )
 }
@@ -1431,6 +1721,44 @@ stabl_multiomic_cv <- function(
   }
 
   NA_real_
+}
+
+.check_stabl_per_omic <- function(object) {
+  if (!inherits(object, "stabl_per_omic")) {
+    stop("`per_omic` must be a `stabl_per_omic()` result.", call. = FALSE)
+  }
+
+  required <- c(
+    "fits", "refits", "selected_features", "selected_train", "selected_valid",
+    "y_train", "y_valid", "omic_names", "family", "task_type",
+    "stacking_task_type"
+  )
+  missing <- setdiff(required, names(object))
+  if (length(missing) > 0L) {
+    stop(
+      "Malformed `stabl_per_omic` object; missing fields: ",
+      paste(missing, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  object
+}
+
+.expand_stabl_per_omic_list <- function(x, names, default) {
+  out <- setNames(vector("list", length(names)), names)
+  for (name in names) {
+    out[[name]] <- if (name %in% names(x)) x[[name]] else default
+  }
+  out
+}
+
+.expand_stabl_per_omic_matrices <- function(x, template) {
+  out <- template
+  for (name in intersect(names(out), names(x))) {
+    out[[name]] <- x[[name]]
+  }
+  out
 }
 
 .coerce_multiomic_matrix_list <- function(x_list) {

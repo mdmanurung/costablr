@@ -7,17 +7,17 @@
 get_cooperative_diagnostics(object)
 }
 \arguments{
-\item{object}{A \code{"stabl_multiomic_fit"} or \code{"stabl_multiomic_cv"} object
-with cooperative fusion enabled.}
+\item{object}{A \code{"stabl_cooperative"}, \code{"stabl_multiomic_fit"}, or
+\code{"stabl_multiomic_cv"} object with cooperative fusion enabled.}
 }
 \value{
 A \code{data.frame} of cooperative tuning diagnostics.
 }
 \description{
-Returns the cooperative-fusion tuning diagnostics from a fitted multi-omic
-workflow.  For train/validation fits this is the per-candidate tuning table;
-for outer cross-validation fits this is the fold diagnostics table restricted
-to cooperative diagnostic columns.
+Returns cooperative-fusion tuning diagnostics. For train/validation and
+object-consuming cooperative fits this is the per-candidate tuning table;
+for outer cross-validation fits this is the fold diagnostics table
+restricted to cooperative diagnostic columns.
 }
 \seealso{
 \code{\link[=get_cooperative_features]{get_cooperative_features()}},

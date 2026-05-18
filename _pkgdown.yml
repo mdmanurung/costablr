@@ -76,6 +76,10 @@ reference:
 
 - title: Multi-Omic Workflows
   contents:
+  - stabl_per_omic
+  - stabl_late_fusion
+  - stabl_multiomics
+  - stabl_cooperative
   - stabl_multiomic_train_validate
   - stabl_multiomic_cv
   - stabl_multiomic_nested_cv

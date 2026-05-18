@@ -18,9 +18,17 @@ analyses.
 
 \itemize{
 \item \code{\link[=stabl_fit]{stabl_fit()}} fits the core single-matrix STABL selector.
+\item \code{\link[=stabl_per_omic]{stabl_per_omic()}} fits independent per-omic STABL selectors and
+returns the preferred object boundary for STABL-selected downstream
+fusion.
+\item \code{\link[=stabl_late_fusion]{stabl_late_fusion()}}, \code{\link[=stabl_multiomics]{stabl_multiomics()}}, and
+\code{\link[=stabl_cooperative]{stabl_cooperative()}} consume a \code{\link[=stabl_per_omic]{stabl_per_omic()}} object for
+STABL-selected prediction stacking, paper-level Multi-Omic STABL, and
+Cooperative STABL respectively.
 \item \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} runs train/validation multi-omic
 workflows with optional Early Fusion, canonical Late Fusion,
-STABL-Selected Late Fusion, Multi-Omic STABL, and Cooperative Fusion.
+STABL-Selected Late Fusion, Multi-Omic STABL, and Cooperative Fusion
+branches.
 \item \code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} runs outer cross-validation for named
 multi-omic inputs, preserving optional group structure.
 }
@@ -43,8 +51,9 @@ output.
 }
 
 \seealso{
-\code{\link[=stabl_fit]{stabl_fit()}}, \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}},
-\code{\link[=get_support]{get_support()}}, \code{\link[=get_importances]{get_importances()}}, \code{\link[=plot_stabl_path]{plot_stabl_path()}}
+\code{\link[=stabl_fit]{stabl_fit()}}, \code{\link[=stabl_per_omic]{stabl_per_omic()}},
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}, \code{\link[=get_support]{get_support()}},
+\code{\link[=get_importances]{get_importances()}}, \code{\link[=plot_stabl_path]{plot_stabl_path()}}
 }
 \author{
 \strong{Maintainer}: costablr contributors \email{maintainer@example.org}

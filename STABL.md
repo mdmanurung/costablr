@@ -273,6 +273,36 @@ In `costablr`:
 
 Let `X_1, ..., X_M` be aligned omic views measured on the same samples.
 
+### Object Boundary and Cross-Validation Rule
+
+`stabl_per_omic()` is the canonical object boundary for STABL-selected
+multi-omic workflows in `costablr`. It runs Steps 1-5 independently inside each
+omic view, stores each per-view selector, selected-feature matrix, and per-view
+Final Refit, and carries aligned outcome/sample metadata needed by downstream
+methods.
+
+Downstream STABL-selected fusion functions consume this object rather than
+rerunning selection from raw inputs:
+
+- `stabl_late_fusion(per_omic)` combines predictions from the per-view Final
+  Refits stored in the `stabl_per_omic()` object.
+- `stabl_multiomics(per_omic)` concatenates the per-view selected biomarkers
+  and fits one combined Final Refit. This is the paper-level Multi-Omic STABL
+  method.
+- `stabl_cooperative(per_omic)` fits a cooperative agreement-penalized final
+  layer after per-view STABL selection. This is a `costablr` comparator, not a
+  paper-level StablSRM method.
+
+This boundary is reusable for a fixed train/validation analysis. It must not be
+constructed once on all samples and then reused inside cross-validation. For
+performance estimation, every outer fold must build a fresh `stabl_per_omic()`
+object on that fold's training samples only, then apply the resulting selected
+feature structure and downstream final model to that fold's validation samples.
+The internal STABL bootstrap/subsampling and artificial-feature FDP+ mechanism
+estimate selection reliability; they are not a substitute for outer
+cross-validation or an external validation set when estimating predictive
+generalization.
+
 ### Early Fusion
 
 Early fusion concatenates all omic views before selection or prediction:
@@ -334,6 +364,11 @@ non-negative view weights. This is useful as a hybrid comparator, but it should
 not be described as the canonical Late Fusion baseline when contrasting the
 paper's Early Fusion, Late Fusion, and Multi-Omic STABL methods.
 
+The public object-consuming spelling for this STABL-selected hybrid is
+`stabl_late_fusion(per_omic)`, where `per_omic` is a `stabl_per_omic()` result.
+The name is intentionally scoped with the `stabl_` prefix to distinguish it from
+canonical raw Late Fusion.
+
 STABL-Selected Late Fusion for `family = "cox"` is intentionally unsupported in
 the current implementation. The existing stacker optimizes binary AUC,
 regression R^2, or multiclass log loss; treating Cox risk scores as ordinary
@@ -381,12 +416,13 @@ This selected-biomarker final layer must not be described as late fusion:
 late fusion combines predictions, while Multi-Omic STABL combines selected
 features before the final predictive refit.
 
-Current implementation note: the `multiomic_stabl = TRUE` option on
-`stabl_multiomic_train_validate()` exposes this selected-feature final layer as
-the `$multiomic_stabl` result branch. `stabl_multiomic_cv()` forwards the same
-flag to fold-specific train/validation fits. Nested-CV integration is
-intentionally separate because `stabl_multiomic_nested_cv()` uses an explicit
-candidate-type abstraction.
+Current implementation note: `stabl_multiomics(per_omic)` exposes this
+selected-feature final layer as an object-consuming method. The legacy
+`multiomic_stabl = TRUE` option on `stabl_multiomic_train_validate()` continues
+to expose the same result shape under the `$multiomic_stabl` branch.
+`stabl_multiomic_cv()` forwards the same flag to fold-specific train/validation
+fits. Nested-CV integration is intentionally separate because
+`stabl_multiomic_nested_cv()` uses an explicit candidate-type abstraction.
 
 The `$multiomic_stabl` branch is additive. Enabling it does not replace the
 top-level per-view `fits`, `selected_features`, `selected_train`, or `refits`.
@@ -502,6 +538,13 @@ When enabled, `cooperative_fusion = TRUE` remains an additive branch. Its
 results live under `$cooperative_fusion` and do not replace `$early_fusion`,
 `$late_fusion`, `$stabl_selected_late_fusion`, `$multiomic_stabl`, or the
 top-level per-view STABL Selector outputs.
+
+`stabl_cooperative(per_omic)` is the STABL-selected cooperative variant. It
+consumes a `stabl_per_omic()` object and passes only STABL-selected biomarkers
+to the cooperative final layer. Omic Views with no selected biomarkers are not
+passed into the cooperative optimizer; their selected-feature outputs are
+reported as empty in the returned result. At least two Omic Views must retain at
+least one selected biomarker for cooperative fitting to be well-defined.
 
 Cooperative Fusion can outperform Early Fusion or Late Fusion when omic views
 contain correlated signal and the agreement penalty suppresses view-specific

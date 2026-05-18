@@ -39,6 +39,99 @@ test_that("stabl_multiomic_train_validate fits each omic and returns selected ma
   expect_true(all(vapply(fit$selected_features, is.character, logical(1L))))
 })
 
+test_that("stabl_per_omic returns reusable artifact for downstream STABL fusion", {
+  set.seed(103)
+  n <- 28L
+  ids <- paste0("s", seq_len(n))
+  valid_ids <- paste0("v", seq_len(8L))
+
+  x_a <- matrix(rnorm(n * 5L), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(5L))))
+  x_b <- matrix(rnorm(n * 5L), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(5L))))
+  x_valid_a <- matrix(rnorm(8L * 5L), nrow = 8L,
+                      dimnames = list(valid_ids, colnames(x_a)))
+  x_valid_b <- matrix(rnorm(8L * 5L), nrow = 8L,
+                      dimnames = list(valid_ids, colnames(x_b)))
+  y <- setNames(0.7 * x_a[, 1L] - 0.5 * x_b[, 2L] + rnorm(n, sd = 0.4), ids)
+  y_valid <- setNames(rnorm(8L), valid_ids)
+
+  per_omic <- stabl_per_omic(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = c(0.2, 0.1, 0.05)),
+    x_valid_list = list(omic_a = x_valid_a, omic_b = x_valid_b),
+    y_valid = y_valid,
+    artificial_type = NULL,
+    hard_threshold = 0.25,
+    n_bootstraps = 5L,
+    family = "gaussian",
+    random_state = 103L
+  )
+
+  expect_s3_class(per_omic, "stabl_per_omic")
+  expect_named(per_omic$fits, c("omic_a", "omic_b"))
+  expect_equal(per_omic$train_ids, ids)
+  expect_equal(per_omic$valid_ids, valid_ids)
+  expect_equal(names(per_omic$y_train), ids)
+  expect_equal(names(per_omic$y_valid), valid_ids)
+  expect_equal(per_omic$family, "gaussian")
+  expect_equal(per_omic$task_type, "regression")
+
+  late <- stabl_late_fusion(per_omic, n_iter_stacking = 25L, random_state = 104L)
+  expect_s3_class(late, "stabl_late_fusion")
+  expect_s3_class(late$weights, "data.frame")
+  expect_equal(nrow(late$train_predictions), n)
+  expect_length(late$valid_predictions, length(valid_ids))
+
+  multiomics <- stabl_multiomics(per_omic)
+  expect_s3_class(multiomics, "stabl_multiomics")
+  expect_equal(multiomics$refit$model_type, "lm")
+  expect_equal(length(multiomics$train_predictions), n)
+  expect_equal(length(multiomics$valid_predictions), length(valid_ids))
+})
+
+test_that("stabl_per_omic rejects downstream fusion arguments", {
+  x <- matrix(rnorm(30), nrow = 10,
+              dimnames = list(paste0("s", 1:10), paste0("f", 1:3)))
+  y <- setNames(rnorm(10), rownames(x))
+
+  expect_error(
+    stabl_per_omic(
+      x_train_list = list(omic_a = x),
+      y_train = y,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 2L,
+      late_fusion = TRUE
+    ),
+    "downstream fusion"
+  )
+})
+
+test_that("stabl_multiomics rejects ambiguous per-omic view delimiters", {
+  ids <- paste0("s", seq_len(8L))
+  x <- matrix(rnorm(8L * 3L), nrow = 8L,
+              dimnames = list(ids, paste0("f", seq_len(3L))))
+  y <- setNames(rnorm(8L), ids)
+
+  per_omic <- stabl_per_omic(
+    x_train_list = list("bad__view" = x),
+    y_train = y,
+    lambda_grid = data.frame(lambda = 1),
+    artificial_type = NULL,
+    hard_threshold = 1,
+    n_bootstraps = 2L,
+    sample_fraction = 1
+  )
+
+  expect_error(
+    stabl_multiomics(per_omic),
+    "must not contain `__`"
+  )
+})
+
 test_that("stabl_multiomic_train_validate errors on misaligned train samples", {
   x_a <- matrix(rnorm(20), nrow = 10,
                 dimnames = list(paste0("s", 1:10), paste0("a", 1:2)))
@@ -1818,6 +1911,29 @@ test_that("cooperative accessors expose selected features and diagnostics", {
   expect_equal(get_cooperative_diagnostics(fit), diagnostics)
   expect_error(get_cooperative_features(fit, view = "missing"), "view")
   expect_error(get_cooperative_features(fit, class_level = "A"), "one-vs-rest")
+})
+
+test_that("cooperative accessors support stabl_cooperative objects", {
+  diagnostics <- data.frame(
+    rho = c(0, 0.3),
+    lambda = c(0.12, 0.08),
+    metric_value = c(0.4, 0.2),
+    selected = c(FALSE, TRUE)
+  )
+  fit <- structure(
+    list(
+      selected_features = list(omic_a = "a1", omic_b = character(0)),
+      diagnostics = diagnostics
+    ),
+    class = c("stabl_cooperative", "list")
+  )
+
+  expect_equal(
+    get_cooperative_features(fit),
+    list(omic_a = "a1", omic_b = character(0))
+  )
+  expect_equal(get_cooperative_features(fit, view = "omic_a"), "a1")
+  expect_equal(get_cooperative_diagnostics(fit), diagnostics)
 })
 
 test_that("cooperative accessors expose one-vs-rest class-specific features", {

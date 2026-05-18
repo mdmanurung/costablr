@@ -23,7 +23,7 @@ knitr::opts_chunk$set(
 Breast cancer subtype is a molecular label, but it is also a test of
 integration.  The same tumour is measured by mRNA and miRNA assays.  Some
 signals should be visible in one view, some in the other, and some only when the
-views are allowed to compete or cooperate.
+views are allowed to compete or be fused.
 
 This vignette translates the **mixOmics N-Integration Chapter 6** case study
 into the `costablr` idiom.  The original mixOmics workflow uses sparse
@@ -46,13 +46,16 @@ count and lambda-grid size before treating the result as publication evidence.
 
 ```{r prerequisites}
 if (!requireNamespace("mixOmics", quietly = TRUE)) {
-  stop(
-    "This vignette requires mixOmics (Bioconductor). ",
-    "Install with: BiocManager::install('mixOmics')"
+  knitr::opts_chunk$set(eval = FALSE)
+  message(
+    "The 'mixOmics' package is not installed. ",
+    "Code chunks will be displayed but not evaluated. ",
+    "Install with: BiocManager::install('mixOmics')."
   )
+} else {
+  library(costablr)
+  library(mixOmics)
 }
-library(costablr)
-library(mixOmics)
 ```
 
 ## 1. Load and prepare data
@@ -149,11 +152,18 @@ print(plot_stabl_path(fit_mirna, title = "miRNA - stability path"))
 
 ## 3. Integrated multi-omic pipeline
 
-The integrated workflow repeats the per-omic fits inside a common pipeline,
-adds early fusion on the concatenated matrix, and learns a STABL-selected
-late-fusion validation predictor.  In other words, it asks three related questions:
-what is stable in each view, what is stable when all features compete, and how
-much does each view help prediction on held-out tumours?
+The integrated workflow now keeps the STABL-selected API explicit. First,
+`stabl_per_omic()` runs one selector per omic view and stores the selected
+matrices, final per-view refits, and validation metadata. Then
+`stabl_late_fusion()` combines the per-view predictions, while
+`stabl_multiomics()` concatenates only selected biomarkers into one final
+paper-level Multi-Omic STABL model.
+
+Raw Early Fusion and canonical Late Fusion remain useful baselines. Those are
+requested through the train/validation wrapper because they start from the raw
+input matrices rather than from the STABL-selected artifact. Because the wrapper
+call below includes Early Fusion, it uses a shared lambda grid for the
+concatenated input space.
 
 ```{r integrated-fit}
 lambda_list <- list(
@@ -161,44 +171,79 @@ lambda_list <- list(
   mirna = lambda_mirna
 )
 
-multi_fit <- stabl_multiomic_train_validate(
-  x_train_list    = list(mrna = X_train_mrna,  mirna = X_train_mirna),
-  x_valid_list    = list(mrna = X_test_mrna,   mirna = X_test_mirna),
+x_train_list <- list(mrna = X_train_mrna, mirna = X_train_mirna)
+x_valid_list <- list(mrna = X_test_mrna,  mirna = X_test_mirna)
+
+lambda_shared <- auto_lambda_grid(
+  do.call(cbind, x_train_list),
+  y_train,
+  family = "binomial",
+  n_lambda = 12
+)
+
+per_omic <- stabl_per_omic(
+  x_train_list    = x_train_list,
+  x_valid_list    = x_valid_list,
   y_train         = y_train,
   y_valid         = y_test,
   lambda_grid     = lambda_list,
   family          = "binomial",
   n_bootstraps    = 30L,
   artificial_type = "random_permutation",
+  random_state    = 42L
+)
+
+stabl_lf <- stabl_late_fusion(
+  per_omic,
+  n_iter_stacking = 500L,
+  random_state = 42L
+)
+
+multiomics <- stabl_multiomics(per_omic)
+
+baseline_fit <- stabl_multiomic_train_validate(
+  x_train_list    = x_train_list,
+  x_valid_list    = x_valid_list,
+  y_train         = y_train,
+  y_valid         = y_test,
+  lambda_grid     = lambda_shared,
+  family          = "binomial",
+  n_bootstraps    = 30L,
+  artificial_type = "random_permutation",
   random_state    = 42L,
   early_fusion    = TRUE,
   late_fusion     = TRUE,
-  stabl_selected_late_fusion = TRUE,
   n_iter_stacking = 500L
 )
-multi_fit
+
+per_omic
+stabl_lf
+multiomics
 ```
 
 ```{r integrated-results}
 cat("mRNA (integrated):\n")
-print(get_support(multi_fit$fits$mrna))
+print(get_support(per_omic$fits$mrna))
 
 cat("\nmiRNA (integrated):\n")
-print(get_support(multi_fit$fits$mirna))
+print(get_support(per_omic$fits$mirna))
 
 cat("\nEarly fusion selected features:\n")
-print(get_support(multi_fit$early_fusion$fit))
+print(get_support(baseline_fit$early_fusion$fit))
 
 cat("\nLate-fusion omic weights:\n")
-print(multi_fit$late_fusion$weights)
+print(baseline_fit$late_fusion$weights)
 
 cat("\nSTABL-selected late-fusion omic weights:\n")
-print(multi_fit$stabl_selected_late_fusion$weights)
+print(stabl_lf$weights)
+
+cat("\nMulti-Omic STABL final-layer feature map:\n")
+print(head(multiomics$feature_map, 10))
 ```
 
 ```{r integrated-paths, fig.alt = "Integrated mRNA and miRNA stability paths"}
-print(plot_stabl_path(multi_fit$fits$mrna,  title = "Integrated - mRNA"))
-print(plot_stabl_path(multi_fit$fits$mirna, title = "Integrated - miRNA"))
+print(plot_stabl_path(per_omic$fits$mrna,  title = "Integrated - mRNA"))
+print(plot_stabl_path(per_omic$fits$mirna, title = "Integrated - miRNA"))
 ```
 
 ## 4. Validation performance
@@ -208,15 +253,16 @@ whether the selected features and fusion weights carry predictive information
 outside the training data.
 
 ```{r validation-performance}
-lf_preds <- multi_fit$stabl_selected_late_fusion$valid_predictions
+lf_preds <- stabl_lf$valid_predictions
 
 plot_roc(y_true = y_test, y_preds = lf_preds,
          title = "STABL-selected late fusion - ROC curve (test set)")
 plot_prc(y_true = y_test, y_preds = lf_preds,
          title = "STABL-selected late fusion - PRC curve (test set)")
 
-pred_class <- as.integer(lf_preds >= 0.5)
-conf_mat   <- table(Predicted = pred_class, Actual = y_test)
+pred_class <- factor(as.integer(lf_preds >= 0.5), levels = 0:1)
+actual_class <- factor(y_test, levels = 0:1)
+conf_mat   <- table(Predicted = pred_class, Actual = actual_class)
 print(conf_mat)
 
 sensitivity <- conf_mat["1", "1"] / sum(conf_mat[, "1"])
@@ -229,7 +275,7 @@ cat(sprintf("Balanced Error Rate:     %.3f\n", ber))
 ```
 
 ```{r feature-boxplots, fig.alt = "Distribution of selected mRNA features"}
-mrna_feats <- names(which(get_support(multi_fit$fits$mrna)))
+mrna_feats <- names(which(get_support(per_omic$fits$mrna)))
 if (length(mrna_feats) > 0) {
   boxplot_features(
     features = mrna_feats,
@@ -249,8 +295,8 @@ bridge to notebooks, review tables, and downstream biological interpretation.
 
 ```{r export-results}
 tcga_out_dir <- file.path(tempdir(), "costablr_tcga_results")
-export_stabl_to_csv(multi_fit$fits$mrna,  path = file.path(tcga_out_dir, "mrna"))
-export_stabl_to_csv(multi_fit$fits$mirna, path = file.path(tcga_out_dir, "mirna"))
+export_stabl_to_csv(per_omic$fits$mrna,  path = file.path(tcga_out_dir, "mrna"))
+export_stabl_to_csv(per_omic$fits$mirna, path = file.path(tcga_out_dir, "mirna"))
 list.files(tcga_out_dir, recursive = TRUE)
 ```
 
@@ -264,7 +310,7 @@ calibrates selection stability against decoys.
 |---|---|---|
 | Method | Sparse CCA + LDA | Bootstrap-stability lasso |
 | Feature selection | L1 penalty tuned by CV | FDP-controlled stability threshold |
-| Integration | Joint latent-space optimisation | Early, Late, STABL-selected late, or Multi-Omic STABL |
+| Integration | Joint latent-space optimisation | Early Fusion, canonical Late Fusion, STABL-Selected Late Fusion, or Multi-Omic STABL |
 | Primary metric | BER on test set | FDP+ stability score |
 | Output | Components + loadings | Feature names + stability scores |
 
