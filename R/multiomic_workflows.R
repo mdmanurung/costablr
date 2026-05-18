@@ -1589,26 +1589,6 @@ stabl_multiomic_cv <- function(
 }
 
 # ---------------------------------------------------------------------------
-# AUC and R-squared helpers (no external dependencies)
-# ---------------------------------------------------------------------------
-
-# Wilcoxon rank-sum based AUC.  y must be 0/1.
-.r_auc <- function(y, scores) {
-  pos <- which(y == 1L)
-  n1 <- length(pos)
-  n0 <- length(y) - n1
-  if (n1 == 0L || n0 == 0L) return(0.5)
-  r <- rank(scores, ties.method = "average")
-  (sum(r[pos]) - n1 * (n1 + 1L) / 2L) / (n1 * n0)
-}
-
-.r_squared <- function(y, y_hat) {
-  ss_tot <- sum((y - mean(y))^2)
-  if (ss_tot == 0) return(0)
-  1 - sum((y - y_hat)^2) / ss_tot
-}
-
-# ---------------------------------------------------------------------------
 # stacked_multi_omic
 # ---------------------------------------------------------------------------
 

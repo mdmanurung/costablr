@@ -1,0 +1,33 @@
+linters: linters_with_defaults(
+  # Line length: 120 to match the complex multi-omic function signatures
+  line_length_linter(120L),
+
+  # Object naming: snake_case is standard; the .dot-prefix convention for
+  # internal helpers is intentional and should not be flagged
+  object_name_linter = NULL,
+
+  # Cyclomatic complexity: multiomic_workflows.R and nested_cv.R contain
+  # intentionally complex orchestration functions; suppress until Stage 2
+  # refactor (extract-cv-helpers, extract-cooperative-fusion) is complete
+  cyclocomp_linter = NULL,
+
+  # These linters are explicitly enabled (defaults kept)
+  assignment_linter(),
+  commented_code_linter(),
+  equals_na_linter(),
+  function_argument_linter(),
+  implicit_integer_linter(),
+  indentation_linter(),
+  missing_argument_linter(),
+  namespace_linter(),
+  quotes_linter(),
+  semicolon_linter(),
+  trailing_whitespace_linter(),
+  vector_logic_linter()
+)
+
+# Exclude generated files and archived session logs
+exclusions: list(
+  "R/RcppExports.R",
+  "_archive"
+)

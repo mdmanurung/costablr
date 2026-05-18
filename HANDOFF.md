@@ -71,7 +71,7 @@ For details that must not be duplicated here:
   - full SLURM job `24750538` is running as of the latest check.
 - Workspace mode: May 13 audit remediation is closed; local package checks now
   have 0 errors, with only environment/toolchain warning/note items remaining.
-- Latest package robustness audit signal: `audits/PACKAGE_ROBUSTNESS_AUDIT.md`
+- Latest package robustness audit signal: `audit/PACKAGE_ROBUSTNESS_AUDIT.md`
   was added. CRIT-001 is fixed in `stacked_multi_omic()` so binary stacking
   now normalizes numeric/logical 0/1 and two-level factor/character outcomes,
   preserving missing-outcome skip behavior. Targeted audit tests and the full
