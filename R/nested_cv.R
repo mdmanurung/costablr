@@ -38,16 +38,17 @@
 #'   Use this with `base_learner = "elastic_net"` to generate alpha-aware
 #'   train-fold grids.
 #' @param workers Passed to [stabl_fit()] for bootstrap-level parallelism.
-#' @param cv_workers Number of outer folds to evaluate in parallel. Uses
-#'   `parallel::mclapply()` on Unix-like systems and falls back to sequential
-#'   execution on Windows.
+#' @param cv_workers Number of outer folds to evaluate in parallel. Values
+#'   above `1` use a scoped `future`/`furrr` multisession plan when those
+#'   optional packages are installed, and otherwise fall back to sequential
+#'   execution with a warning.
 #' @param ... Additional arguments passed to [stabl_fit()].
 #'
 #' @note Parallelism has two levels: `cv_workers` parallelizes outer folds in
 #'   this nested-CV wrapper, while `workers` is forwarded to [stabl_fit()] for
-#'   bootstrap-level parallelism. Avoid setting both above 1 in the same run.
-#'   When using `cv_workers > 1`, keep any active `future` plan sequential
-#'   because nested CV uses `parallel::mclapply()` rather than `future`.
+#'   bootstrap-level parallelism. Both levels use the same scoped
+#'   `future`/`furrr` backend. Avoid setting both above 1 in the same run
+#'   because that can oversubscribe local resources.
 #'
 #' @return An object of class `"stabl_multiomic_nested_cv"` containing fold
 #'   definitions, inner candidate diagnostics, outer held-out predictions,
@@ -95,12 +96,10 @@ stabl_multiomic_nested_cv <- function(
   outer_v <- as.integer(outer_v)
   outer_repeats <- as.integer(outer_repeats)
   inner_v <- as.integer(inner_v)
-  cv_workers <- as.integer(cv_workers)
+  workers <- .normalize_worker_count(workers)
+  cv_workers <- .normalize_worker_count(cv_workers, arg = "cv_workers")
   if (outer_v < 2L || outer_repeats < 1L || inner_v < 2L) {
     stop("`outer_v`, `outer_repeats`, and `inner_v` must define valid CV folds.", call. = FALSE)
-  }
-  if (cv_workers < 1L) {
-    stop("`cv_workers` must be a positive integer.", call. = FALSE)
   }
   .warn_nested_cv_parallelism(cv_workers = cv_workers, workers = workers)
   if (isTRUE(stratified) && min(table(strata_labels)) < max(outer_v, inner_v)) {
@@ -208,11 +207,13 @@ stabl_multiomic_nested_cv <- function(
     )
   }
 
-  if (cv_workers > 1L && .Platform$OS.type != "windows") {
-    outer_results <- parallel::mclapply(
+  if (cv_workers > 1L) {
+    outer_results <- .future_map_or_lapply(
       seq_along(outer_folds),
       process_outer_fold,
-      mc.cores = min(cv_workers, length(outer_folds))
+      workers = min(cv_workers, length(outer_folds)),
+      seed = TRUE,
+      arg = "cv_workers"
     )
   } else {
     outer_results <- lapply(seq_along(outer_folds), process_outer_fold)
@@ -634,20 +635,5 @@ print.stabl_multiomic_nested_cv <- function(x, ...) {
     )
   }
 
-  if (requireNamespace("future", quietly = TRUE) &&
-      !isTRUE(.future_plan_is_sequential())) {
-    warning(
-      "`cv_workers > 1` uses `parallel::mclapply()` for outer folds. ",
-      "Call `future::plan(sequential)` before nested CV to avoid mixing ",
-      "parallel backends.",
-      call. = FALSE
-    )
-  }
-
   invisible(NULL)
-}
-
-.future_plan_is_sequential <- function() {
-  plan <- tryCatch(future::plan(), error = function(e) NULL)
-  inherits(plan, "sequential")
 }

@@ -65,7 +65,10 @@ stabl_multiomic_nested_cv(
 
 \item{workers}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} for bootstrap-level parallelism.}
 
-\item{cv_workers}{Number of outer folds to evaluate in parallel. Uses \code{parallel::mclapply()} on Unix-like systems and falls back to sequential execution on Windows.}
+\item{cv_workers}{Number of outer folds to evaluate in parallel. Values
+above \code{1} use a scoped \code{future}/\code{furrr} multisession plan when
+those optional packages are installed, and otherwise fall back to sequential
+execution with a warning.}
 
 \item{...}{Additional arguments passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 }

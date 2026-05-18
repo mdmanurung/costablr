@@ -127,9 +127,12 @@ narrative rewrite, parallel render validation completed as SLURM array job
 0. ~~**[ACTIVE] Vignette render validation after narrative rewrite.**~~
    **CLOSED 2026-05-12.** SLURM array `24752130` created HTML output for all
    five non-nested-CV vignettes; see `PROGRESS.md`.
-1. **[ACTIVE] TCGA nested-CV head-to-head analysis.** Full SLURM job submitted
-   for cached costablr-vs-DIABLO three-class TCGA benchmark; monitor job
-   `24750538` and render `costablr-tcga-nestedcv.Rmd` from the resulting cache.
+1. **[ACTIVE] TCGA nested-CV head-to-head analysis.** Full SLURM job
+   `24750538` timed out before writing
+   `inst/analysis/cache/tcga_nestedcv_results.rds`. The checkpointed runner is
+   now resubmitted as job `24812727`; next action is to monitor completion,
+   confirm the final RDS/CSV cache artifacts, then render
+   `costablr-tcga-nestedcv.Rmd` from the completed cache.
 2. ~~**[ACTIVE] Bug-fix milestone — audit findings (2026-05-08).**~~ **CLOSED 2026-05-08. All 7 fixes landed; PASS 356, FAIL 0, SKIP 3.**
 3. ~~Harden cooperative fusion behavior.~~ **CLOSED 2026-05-08 (M12).**
 4. ~~Promote cooperative fusion before CRAN-prep hardening.~~ **CLOSED 2026-05-10. Public cooperative accessors added and targeted suite green.**
@@ -649,10 +652,12 @@ Promotion criteria:
   and source-package check is clean with 0 errors, 0 warnings, and 0 notes.
   Physical archiving of canonical session docs remains deferred pending
   explicit maintainer confirmation.
-- 2026-05-18: PR-12 safety prep is complete. Parallel determinism tests now
-  pin `stabl_fit()` `workers = 1` vs `workers = 2` and nested CV
-  `cv_workers = 1` vs `cv_workers = 2`. No backend migration has been made;
-  PR-12 remains pending explicit confirmation because it is high risk.
+- 2026-05-18: PR-12 is closed. `stabl_fit()` and
+  `stabl_multiomic_nested_cv()` now share a scoped `future`/`furrr`
+  multisession backend for `workers > 1` and `cv_workers > 1`. The old
+  nested-CV `parallel::mclapply()` backend and active-future-plan warning were
+  removed; the oversubscription warning for setting both worker levels above
+  one remains.
 - 2026-05-18: Final validation for the refactoring roadmap pass is complete:
   full `devtools::test()` has no failures, `pkgdown::check_pkgdown()` reports
   no problems, `rcmdcheck --no-manual` is clean with 0 errors, 0 warnings, and

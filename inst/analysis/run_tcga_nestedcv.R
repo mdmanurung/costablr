@@ -17,6 +17,17 @@ tcga_cache_complete <- function(path) {
     nrow(obj$performance) > 0L
 }
 
+tcga_checkpoint_complete <- function(path, required_names) {
+  if (!file.exists(path)) return(FALSE)
+  obj <- tryCatch(readRDS(path), error = function(e) NULL)
+  is.list(obj) && all(required_names %in% names(obj))
+}
+
+tcga_checkpoint_name <- function(prefix, fold_id) {
+  fold_id <- gsub("[^A-Za-z0-9_.-]+", "_", fold_id)
+  paste0(prefix, "_", fold_id, ".rds")
+}
+
 tcga_load_two_block <- function() {
   if (!requireNamespace("mixOmics", quietly = TRUE)) {
     stop("mixOmics is required for the TCGA nested-CV analysis.", call. = FALSE)
@@ -82,6 +93,7 @@ tcga_diablo_design <- function(block_names, weight = 0.1) {
 tcga_choose_diablo_ncomp <- function(x_train, y_train, design, ncomp_grid,
                                      inner_v, inner_repeats, seed) {
   max_ncomp <- max(ncomp_grid)
+  set.seed(seed)
   fit <- mixOmics::block.plsda(x_train, y_train, ncomp = max_ncomp, design = design)
   perf <- tryCatch(
     mixOmics::perf(
@@ -163,7 +175,9 @@ tcga_extract_diablo_features <- function(fit, blocks, ncomp, repeat_id, fold_id)
 tcga_run_diablo_nested <- function(x_list, y, outer_folds, inner_v = 5L,
                                    inner_repeats = 10L, ncomp_grid = 1:5,
                                    keepx_grid = NULL, workers = 6L,
-                                   random_state = 42L) {
+                                   random_state = 42L,
+                                   checkpoint_dir = NULL,
+                                   force = FALSE) {
   if (!requireNamespace("mixOmics", quietly = TRUE)) {
     stop("mixOmics is required for DIABLO.", call. = FALSE)
   }
@@ -184,6 +198,28 @@ tcga_run_diablo_nested <- function(x_list, y, outer_folds, inner_v = 5L,
 
   for (i in seq_along(outer_folds)) {
     fold <- outer_folds[[i]]
+    fold_path <- NULL
+    if (!is.null(checkpoint_dir)) {
+      dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
+      fold_path <- file.path(
+        checkpoint_dir,
+        tcga_checkpoint_name("diablo_fold", fold$fold_id)
+      )
+      if (!force && tcga_checkpoint_complete(
+        fold_path,
+        c("prediction", "diagnostics", "features")
+      )) {
+        message("DIABLO fold checkpoint complete: ", fold_path)
+        saved <- readRDS(fold_path)
+        predictions[[i]] <- saved$prediction
+        diagnostics[[i]] <- saved$diagnostics
+        features[[i]] <- saved$features
+        next
+      }
+    }
+
+    message("Running DIABLO outer fold ", i, "/", length(outer_folds),
+            " (", fold$fold_id, ")")
     train_ids <- fold$train_ids
     valid_ids <- fold$valid_ids
     x_train <- lapply(x_list, function(x) x[train_ids, , drop = FALSE])
@@ -202,21 +238,24 @@ tcga_run_diablo_nested <- function(x_list, y, outer_folds, inner_v = 5L,
     )
 
     bp <- BiocParallel::SnowParam(workers = workers, type = "SOCK")
-    tune <- mixOmics::tune.block.splsda(
-      X = x_train,
-      Y = y_train,
-      ncomp = ncomp,
-      test.keepX = keepx_grid,
-      design = design,
-      validation = "Mfold",
-      folds = inner_v,
-      nrepeat = inner_repeats,
-      dist = "centroids.dist",
-      measure = "BER",
-      weighted = TRUE,
-      progressBar = FALSE,
-      BPPARAM = bp,
-      seed = random_state + i * 2003L
+    tune <- tryCatch(
+      mixOmics::tune.block.splsda(
+        X = x_train,
+        Y = y_train,
+        ncomp = ncomp,
+        test.keepX = keepx_grid,
+        design = design,
+        validation = "Mfold",
+        folds = inner_v,
+        nrepeat = inner_repeats,
+        dist = "centroids.dist",
+        measure = "BER",
+        weighted = TRUE,
+        progressBar = FALSE,
+        BPPARAM = bp,
+        seed = random_state + i * 2003L
+      ),
+      finally = try(BiocParallel::bpstop(bp), silent = TRUE)
     )
     keepx <- tune$choice.keepX
 
@@ -230,7 +269,7 @@ tcga_run_diablo_nested <- function(x_list, y, outer_folds, inner_v = 5L,
     pred <- predict(fit, newdata = x_valid)
     pred_class <- as.character(pred$WeightedVote$centroids.dist[, ncomp])
 
-    predictions[[i]] <- data.frame(
+    prediction <- data.frame(
       repeat_id = fold[["repeat"]],
       fold = fold$fold,
       fold_id = fold$fold_id,
@@ -240,7 +279,7 @@ tcga_run_diablo_nested <- function(x_list, y, outer_folds, inner_v = 5L,
       selected_candidate = "DIABLO",
       stringsAsFactors = FALSE
     )
-    diagnostics[[i]] <- data.frame(
+    diagnostic <- data.frame(
       repeat_id = fold[["repeat"]],
       fold = fold$fold,
       fold_id = fold$fold_id,
@@ -249,13 +288,28 @@ tcga_run_diablo_nested <- function(x_list, y, outer_folds, inner_v = 5L,
                     sep = "=", collapse = ";"),
       stringsAsFactors = FALSE
     )
-    features[[i]] <- tcga_extract_diablo_features(
+    feature <- tcga_extract_diablo_features(
       fit = fit,
       blocks = names(x_list),
       ncomp = ncomp,
       repeat_id = fold[["repeat"]],
       fold_id = fold$fold_id
     )
+
+    predictions[[i]] <- prediction
+    diagnostics[[i]] <- diagnostic
+    features[[i]] <- feature
+    if (!is.null(fold_path)) {
+      saveRDS(
+        list(
+          prediction = prediction,
+          diagnostics = diagnostic,
+          features = feature
+        ),
+        fold_path
+      )
+      message("Saved DIABLO fold checkpoint: ", fold_path)
+    }
   }
 
   pred_df <- do.call(rbind, predictions)
@@ -265,6 +319,233 @@ tcga_run_diablo_nested <- function(x_list, y, outer_folds, inner_v = 5L,
     selected_features = do.call(rbind, features),
     performance = tcga_metrics(pred_df$truth, pred_df$predicted)
   )
+}
+
+tcga_ns <- function(name) {
+  get(name, envir = asNamespace("costablr"), inherits = FALSE)
+}
+
+tcga_run_costablr_nested_checkpointed <- function(x_list, y,
+                                                  candidates = NULL,
+                                                  lambda_grid = "auto",
+                                                  outer_v = 5L,
+                                                  outer_repeats = 1L,
+                                                  inner_v = 5L,
+                                                  stratified = TRUE,
+                                                  metric = "ber",
+                                                  family = "multinomial",
+                                                  n_bootstraps = 100L,
+                                                  artificial_type = "random_permutation",
+                                                  hard_threshold = NULL,
+                                                  random_state = NULL,
+                                                  n_lambda = 30L,
+                                                  l1_ratio = NULL,
+                                                  workers = 1L,
+                                                  cv_workers = 1L,
+                                                  checkpoint_dir = NULL,
+                                                  force = FALSE,
+                                                  ...) {
+  costablr::validate_multiomic_inputs(x_list = x_list, y = y)
+
+  y <- tcga_ns(".subset_outcome_by_ids")(y, rownames(x_list[[1L]]))
+  y <- factor(y)
+  sample_ids <- names(y)
+  if (nlevels(y) < 2L) {
+    stop("`y` must contain at least two outcome classes.", call. = FALSE)
+  }
+
+  make_nested_strata <- tcga_ns(".make_nested_strata")
+  make_repeated_cv_folds <- tcga_ns(".make_repeated_cv_folds")
+  make_cv_folds <- tcga_ns(".make_cv_folds")
+  normalize_candidates <- tcga_ns(".normalize_stabl_nested_candidates")
+  evaluate_inner <- tcga_ns(".evaluate_stabl_candidates_inner")
+  select_candidate <- tcga_ns(".select_nested_candidate")
+  fit_candidate <- tcga_ns(".fit_stabl_nested_candidate")
+  feature_table <- tcga_ns(".stabl_nested_feature_table")
+  classification_metrics <- tcga_ns(".classification_metrics")
+  derive_seed <- tcga_ns(".derive_nested_seed")
+  future_map_or_lapply <- tcga_ns(".future_map_or_lapply")
+
+  strata_labels <- make_nested_strata(
+    strata = NULL,
+    y = y,
+    sample_ids = sample_ids,
+    bins = 5L
+  )
+  if (isTRUE(stratified) && min(table(strata_labels)) < max(outer_v, inner_v)) {
+    stop("Each stratum must have at least `max(outer_v, inner_v)` samples.",
+         call. = FALSE)
+  }
+
+  candidates <- normalize_candidates(candidates, names(x_list))
+  outer_folds <- make_repeated_cv_folds(
+    y = strata_labels,
+    v = outer_v,
+    repeats = outer_repeats,
+    stratified = stratified,
+    random_state = random_state
+  )
+
+  process_outer_fold <- function(outer_i) {
+    outer <- outer_folds[[outer_i]]
+    fold_path <- NULL
+    if (!is.null(checkpoint_dir)) {
+      dir.create(checkpoint_dir, recursive = TRUE, showWarnings = FALSE)
+      fold_path <- file.path(
+        checkpoint_dir,
+        tcga_checkpoint_name("costablr_fold", outer$fold_id)
+      )
+      if (!force && tcga_checkpoint_complete(
+        fold_path,
+        c("fold_result", "diagnostics", "predictions", "selected_features")
+      )) {
+        message("costablr fold checkpoint complete: ", fold_path)
+        return(readRDS(fold_path))
+      }
+    }
+
+    message("Running costablr outer fold ", outer_i, "/", length(outer_folds),
+            " (", outer$fold_id, ")")
+    train_ids <- outer$train_ids
+    valid_ids <- outer$valid_ids
+
+    inner_folds <- make_cv_folds(
+      y = strata_labels[train_ids],
+      v = inner_v,
+      stratified = stratified,
+      random_state = derive_seed(random_state, outer_i, 1000L)
+    )
+
+    inner_eval <- evaluate_inner(
+      x_list = x_list,
+      y = y,
+      train_ids = train_ids,
+      candidates = candidates,
+      inner_folds = inner_folds,
+      lambda_grid = lambda_grid,
+      metric = metric,
+      family = family,
+      n_bootstraps = n_bootstraps,
+      artificial_type = artificial_type,
+      hard_threshold = hard_threshold,
+      random_state = derive_seed(random_state, outer_i, 2000L),
+      n_lambda = n_lambda,
+      l1_ratio = l1_ratio,
+      workers = workers,
+      ...
+    )
+
+    selected_name <- select_candidate(inner_eval$summary, metric)
+    selected_candidate <- candidates[[selected_name]]
+
+    outer_fit <- fit_candidate(
+      x_list = x_list,
+      y = y,
+      train_ids = train_ids,
+      valid_ids = valid_ids,
+      candidate = selected_candidate,
+      lambda_grid = lambda_grid,
+      family = family,
+      n_bootstraps = n_bootstraps,
+      artificial_type = artificial_type,
+      hard_threshold = hard_threshold,
+      random_state = derive_seed(random_state, outer_i, 3000L),
+      n_lambda = n_lambda,
+      l1_ratio = l1_ratio,
+      workers = workers,
+      ...
+    )
+
+    pred_df <- data.frame(
+      repeat_id = outer[["repeat"]],
+      fold = outer$fold,
+      fold_id = outer$fold_id,
+      sample_id = valid_ids,
+      truth = as.character(y[valid_ids]),
+      predicted = outer_fit$predicted,
+      selected_candidate = selected_name,
+      stringsAsFactors = FALSE
+    )
+    feature_df <- feature_table(
+      selected_features = outer_fit$selected_features,
+      importances = outer_fit$importances,
+      repeat_id = outer[["repeat"]],
+      fold = outer$fold,
+      fold_id = outer$fold_id,
+      method = "costablr",
+      candidate = selected_name
+    )
+
+    inner_diag <- inner_eval$summary
+    inner_diag$repeat_id <- outer[["repeat"]]
+    inner_diag$fold <- outer$fold
+    inner_diag$fold_id <- outer$fold_id
+
+    out <- list(
+      fold_result = list(
+        outer_fold = outer,
+        inner_folds = inner_folds,
+        inner_results = inner_eval,
+        selected_candidate = selected_name,
+        fit = outer_fit
+      ),
+      diagnostics = inner_diag,
+      predictions = pred_df,
+      selected_features = feature_df
+    )
+    if (!is.null(fold_path)) {
+      saveRDS(out, fold_path)
+      message("Saved costablr fold checkpoint: ", fold_path)
+    }
+    out
+  }
+
+  fold_indices <- seq_along(outer_folds)
+  outer_results <- if (cv_workers > 1L) {
+    future_map_or_lapply(
+      fold_indices,
+      process_outer_fold,
+      workers = min(cv_workers, length(outer_folds)),
+      seed = TRUE,
+      arg = "cv_workers"
+    )
+  } else {
+    lapply(fold_indices, process_outer_fold)
+  }
+
+  fold_results <- lapply(outer_results, `[[`, "fold_result")
+  names(fold_results) <- vapply(outer_folds, `[[`, character(1L), "fold_id")
+  predictions <- do.call(rbind, lapply(outer_results, `[[`, "predictions"))
+  diagnostics <- do.call(rbind, lapply(outer_results, `[[`, "diagnostics"))
+  selected_features <- do.call(rbind, lapply(outer_results, `[[`, "selected_features"))
+  performance <- classification_metrics(
+    truth = factor(predictions$truth, levels = levels(y)),
+    predicted = factor(predictions$predicted, levels = levels(y))
+  )
+
+  out <- structure(
+    list(
+      outer_folds = outer_folds,
+      fold_results = fold_results,
+      diagnostics = diagnostics,
+      outer_predictions = predictions,
+      selected_features = selected_features,
+      performance = performance,
+      levels = levels(y),
+      metric = metric,
+      candidates = candidates,
+      strata = strata_labels,
+      stratified = isTRUE(stratified),
+      cv_workers = cv_workers,
+      stabl_workers = workers
+    ),
+    class = "stabl_multiomic_nested_cv"
+  )
+
+  if (!is.null(checkpoint_dir)) {
+    saveRDS(out, file.path(checkpoint_dir, "costablr_nestedcv_result.rds"))
+  }
+  out
 }
 
 tcga_feature_recurrence <- function(features, n_folds) {
@@ -334,6 +615,13 @@ run_tcga_head_to_head <- function(cache_path,
          call. = FALSE)
   }
 
+  checkpoint_root <- file.path(
+    dirname(cache_path),
+    paste0(tools::file_path_sans_ext(basename(cache_path)), "_checkpoints")
+  )
+  costablr_checkpoint_dir <- file.path(checkpoint_root, "costablr")
+  diablo_checkpoint_dir <- file.path(checkpoint_root, "diablo")
+
   dat <- tcga_load_two_block()
   outer_v <- if (smoke) 2L else 5L
   outer_repeats <- if (smoke) 1L else 20L
@@ -348,7 +636,8 @@ run_tcga_head_to_head <- function(cache_path,
     list(mRNA = c(5:10, seq(15, 50, 5)), miRNA = c(5:10, seq(12, 40, 4)))
   }
 
-  stabl <- costablr::stabl_multiomic_nested_cv(
+  message("Starting costablr TCGA nested-CV arm")
+  stabl <- tcga_run_costablr_nested_checkpointed(
     x_list = dat$x_list,
     y = dat$y,
     lambda_grid = "auto",
@@ -363,9 +652,15 @@ run_tcga_head_to_head <- function(cache_path,
     n_lambda = n_lambda,
     random_state = 42L,
     workers = stabl_workers,
-    cv_workers = cv_workers
+    cv_workers = cv_workers,
+    checkpoint_dir = costablr_checkpoint_dir,
+    force = force
   )
+  dir.create(dirname(cache_path), recursive = TRUE, showWarnings = FALSE)
+  saveRDS(stabl, file.path(dirname(cache_path), "tcga_nestedcv_costablr.rds"))
+  message("Finished costablr TCGA nested-CV arm")
 
+  message("Starting DIABLO TCGA nested-CV arm")
   diablo <- tcga_run_diablo_nested(
     x_list = dat$x_list,
     y = dat$y,
@@ -375,8 +670,12 @@ run_tcga_head_to_head <- function(cache_path,
     ncomp_grid = ncomp_grid,
     keepx_grid = keepx_grid,
     workers = diablo_workers,
-    random_state = 42L
+    random_state = 42L,
+    checkpoint_dir = diablo_checkpoint_dir,
+    force = force
   )
+  saveRDS(diablo, file.path(dirname(cache_path), "tcga_nestedcv_diablo.rds"))
+  message("Finished DIABLO TCGA nested-CV arm")
 
   perf <- rbind(
     data.frame(

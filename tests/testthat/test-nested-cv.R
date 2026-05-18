@@ -37,17 +37,14 @@ test_that("nested CV warns about conflicting parallelism levels", {
   expect_silent(.warn_nested_cv_parallelism(cv_workers = 1L, workers = 2L))
 })
 
-test_that("nested CV warns about active future plan with cv_workers", {
+test_that("nested CV allows an active future plan with cv_workers", {
   skip_if_not_installed("future")
 
   old_plan <- future::plan()
   on.exit(future::plan(old_plan), add = TRUE)
   future::plan(future::multisession, workers = 1L)
 
-  expect_warning(
-    .warn_nested_cv_parallelism(cv_workers = 2L, workers = 1L),
-    "future::plan\\(sequential\\)"
-  )
+  expect_silent(.warn_nested_cv_parallelism(cv_workers = 2L, workers = 1L))
 })
 
 test_that("stabl_multiomic_nested_cv returns deterministic diagnostics and predictions", {

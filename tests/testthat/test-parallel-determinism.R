@@ -24,8 +24,6 @@ test_that("stabl_fit sequential and furrr paths remain identical", {
     workers = 1L
   )
 
-  old_plan <- suppressWarnings(future::plan(future::multisession, workers = 2L))
-  withr::defer(suppressWarnings(future::plan(old_plan)))
   fit_par <- suppressWarnings(stabl_fit(
     x = x,
     y = y,
@@ -46,8 +44,6 @@ test_that("stabl_fit sequential and furrr paths remain identical", {
 })
 
 test_that("nested CV sequential and cv_workers paths remain identical", {
-  skip_on_os("windows")
-
   withr::local_seed(502)
   n <- 16L
   ids <- paste0("s", seq_len(n))

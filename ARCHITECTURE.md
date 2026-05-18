@@ -135,7 +135,7 @@ coefficient extraction, one-vs-rest multinomial support, and diagnostics.
 | `Rcpp`, `RcppArmadillo` | Import/LinkingTo | Native correlation grouping and MVR solver |
 | `sparsegl` | Suggests | Sparse-group-lasso adapter |
 | `knockoff` | Suggests | Gaussian model-X knockoff artificial features |
-| `future`, `furrr` | Suggests | Optional bootstrap parallelism in `stabl_fit()` |
+| `future`, `furrr` | Suggests | Scoped optional parallelism for STABL bootstraps and nested-CV outer folds |
 | `multiview` | Suggests | Cooperative fusion only |
 | `nnet` | Suggests | Multinomial final refit |
 | `survival` | Suggests | Cox final refit |

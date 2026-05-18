@@ -64,9 +64,10 @@
 #'   elastic-net `alpha` column. Default `NULL` preserves the lasso-like auto
 #'   grid used by existing workflows.
 #' @param verbose Logical; emit progress messages.  Default: `FALSE`.
-#' @param workers Positive integer; parallel workers for
-#'   `furrr::future_map()`.  Actual parallelism requires the caller to invoke
-#'   `future::plan(multisession, workers = N)` first.  Default: `1L`.
+#' @param workers Positive integer; parallel workers for the bootstrap loop.
+#'   Values above `1` use a scoped `future`/`furrr` multisession plan when
+#'   those optional packages are installed, and otherwise fall back to
+#'   sequential execution with a warning.  Default: `1L`.
 #' @param random_state Integer or `NULL`; top-level seed.  Default: `NULL`.
 #' @param adaptive_gamma Positive numeric scalar. Used only when
 #'   `base_learner = "adaptive_lasso"`.
@@ -203,6 +204,8 @@ stabl_fit <- function(
     feature_groups        = NULL,
     corr_group_threshold  = NULL
 ) {
+  workers <- .normalize_worker_count(workers)
+
   # ---- Input coercion -------------------------------------------------------
   if (is.data.frame(x)) x <- as.matrix(x)
   if (!is.matrix(x) || !is.numeric(x)) {
@@ -414,11 +417,6 @@ stabl_fit <- function(
     seq(n_features + 1L, n_features + n_injected)
   } else NULL
 
-  # Choose map function based on worker count and availability
-  use_furrr <- (workers > 1L) &&
-    requireNamespace("furrr",  quietly = TRUE) &&
-    requireNamespace("future", quietly = TRUE)
-
   if (verbose) message("Running STABL bootstrap loop (",
                        n_bootstraps, " bootstraps, ",
                        n_lambdas, " lambdas, 1 path call per bootstrap)...")
@@ -436,14 +434,16 @@ stabl_fit <- function(
     }
   }
 
-  if (use_furrr) {
+  if (workers > 1L && .future_backend_available()) {
     # Parallel path: must collect all results before accumulating.
     # `seed = TRUE` is preserved as a furrr safety guard for any RNG that
     # leaks outside our explicit `.with_local_seed`; the explicit per-iter
     # seed inside `process_one_bootstrap` is what actually pins the result.
-    result_list <- furrr::future_map(
-      seq_along(boot_indices), process_one_bootstrap,
-      .options = furrr::furrr_options(seed = TRUE)
+    result_list <- .future_map_or_lapply(
+      seq_along(boot_indices),
+      process_one_bootstrap,
+      workers = workers,
+      seed = TRUE
     )
     for (r in result_list) {
       stabl_scores_ <- stabl_scores_ + r[seq_len(n_features), , drop = FALSE]
@@ -452,6 +452,9 @@ stabl_fit <- function(
       }
     }
   } else {
+    if (workers > 1L) {
+      .warn_future_backend_unavailable()
+    }
     # Sequential path: stream-accumulate one bootstrap at a time so we never
     # hold more than a single result matrix in memory (Fix 5).
     for (i in seq_along(boot_indices)) {

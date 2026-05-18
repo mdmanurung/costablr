@@ -5,9 +5,10 @@ completed evidence remains in `PROGRESS.md`.
 
 ## Active Refactoring
 
-- PR-12 decision: parallelism unification is still high risk. Safety tests now
-  exist in `tests/testthat/test-parallel-determinism.R`; backend migration
-  still needs explicit maintainer confirmation.
+- PR-12 is closed: `stabl_fit()` and nested CV now use the same scoped
+  `future`/`furrr` backend. Keep the determinism tests in
+  `tests/testthat/test-parallel-determinism.R` green for any future backend
+  edits.
 - PR-2B decision: only archive or compress canonical session docs after
   explicit maintainer confirmation.
 - Keep `R/multiomic_workflows.R` focused on orchestration; new helper code

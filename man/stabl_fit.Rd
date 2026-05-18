@@ -115,9 +115,10 @@ grid used by existing workflows.}
 
 \item{verbose}{Logical; emit progress messages.  Default: \code{FALSE}.}
 
-\item{workers}{Positive integer; parallel workers for
-\code{furrr::future_map()}.  Actual parallelism requires the caller to invoke
-\code{future::plan(multisession, workers = N)} first.  Default: \code{1L}.}
+\item{workers}{Positive integer; parallel workers for the bootstrap loop.
+Values above \code{1} use a scoped \code{future}/\code{furrr} multisession
+plan when those optional packages are installed, and otherwise fall back to
+sequential execution with a warning. Default: \code{1L}.}
 
 \item{random_state}{Integer or \code{NULL}; top-level seed.  Default: \code{NULL}.}
 

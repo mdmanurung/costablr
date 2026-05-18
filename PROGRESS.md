@@ -39,6 +39,113 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### TCGA Nested-CV Checkpointed SLURM Resubmission (2026-05-18)
+
+- Submitted the checkpointed TCGA nested-CV benchmark after the runner rework.
+- New SLURM job ID: `24812727`.
+- Initial state: `RUNNING` on `res-hpc-exe101`, started
+  `2026-05-18T14:02:18`.
+- Log paths:
+  - `inst/analysis/cache/tcga_nestedcv-24812727.out`
+  - `inst/analysis/cache/tcga_nestedcv-24812727.err`
+
+Validation:
+
+```bash
+sbatch --parsable inst/analysis/tcga_nestedcv.slurm
+# -> 24812727
+
+squeue -j 24812727
+# -> RUNNING on res-hpc-exe101
+
+sacct -j 24812727 --format=JobID,JobName%40,State,ExitCode,Elapsed,Start,End -P
+# -> 24812727 and batch/extern steps RUNNING, started 2026-05-18T14:02:18
+```
+
+### PR-12 Parallel Backend Unification (2026-05-18)
+
+- Added `R/parallel_backend.R` with shared internal worker-count validation,
+  optional `future`/`furrr` availability checks, scoped multisession plan
+  setup, and a sequential fallback warning.
+- Updated `stabl_fit()` so `workers > 1` creates and restores a local
+  `future` multisession plan instead of requiring callers to set
+  `future::plan()` themselves. The deterministic per-bootstrap seed path is
+  unchanged.
+- Updated `stabl_multiomic_nested_cv()` so `cv_workers > 1` uses the same
+  scoped `future`/`furrr` backend instead of `parallel::mclapply()`. The
+  warning about setting both nested-CV outer-fold workers and STABL bootstrap
+  workers above one remains; the old active-future-plan warning was removed.
+- Updated the parallelism tests and Rd documentation to reflect the unified
+  backend behavior.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "for (f in c('R/parallel_backend.R','R/stabl_fit.R','R/nested_cv.R','tests/testthat/test-nested-cv.R','tests/testthat/test-parallel-determinism.R')) { parse(f); cat(f, 'parse ok\n') }"
+# -> all listed files parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-parallel-determinism.R', reporter = 'summary')"
+# -> parallel-determinism completed successfully
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-nested-cv.R', reporter = 'summary')"
+# -> nested-cv completed successfully
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-rng-determinism.R', reporter = 'summary')"
+# -> rng-determinism completed successfully; WARN 2 existing future build-version warnings
+
+conda run -n R4_51 Rscript -e "Sys.setenv(NOT_CRAN='true'); devtools::test('.', reporter = 'summary')"
+# -> full suite completed successfully; SKIP 2 intentional NAT-001/NAT-003 placeholders; WARN 2 existing future build-version warnings
+
+conda run -n R4_51 Rscript -e "pkgdown::check_pkgdown()"
+# -> No problems found
+
+git diff --check
+# -> clean
+```
+
+### TCGA Nested-CV Checkpointed Runner Rework (2026-05-18)
+
+- Confirmed SLURM job `24750538` ended in `TIMEOUT` after `2-00:00:10`; no
+  `inst/analysis/cache/tcga_nestedcv_results.rds` cache was created.
+- Reworked `inst/analysis/run_tcga_nestedcv.R` so the costablr arm writes one
+  checkpoint per outer fold under
+  `<cache_stem>_checkpoints/costablr/`, then writes
+  `tcga_nestedcv_costablr.rds`.
+- Reworked the DIABLO arm to write one checkpoint per outer fold under
+  `<cache_stem>_checkpoints/diablo/`, then writes
+  `tcga_nestedcv_diablo.rds`.
+- The final head-to-head cache assembly now resumes from completed fold
+  checkpoints when the final cache is missing, so a walltime interruption does
+  not discard completed outer folds.
+- Added progress messages for arm and fold execution, and seeded the DIABLO
+  component-choice helper before its inner `perf()` call.
+
+Validation:
+
+```bash
+sacct -j 24750538 --format=JobID,JobName%40,State,ExitCode,Elapsed,MaxRSS -P
+# -> main job TIMEOUT; batch step CANCELLED due to time limit
+
+conda run -n R4_51 Rscript -e "parse('inst/analysis/run_tcga_nestedcv.R'); cat('tcga runner parse ok\n')"
+# -> tcga runner parse ok
+
+bash -n inst/analysis/tcga_nestedcv.slurm
+# -> slurm syntax ok
+
+conda run -n R4_51 Rscript inst/analysis/run_tcga_nestedcv.R --cache /tmp/costablr_tcga_smoke_patch.rds --force --smoke --cv-workers 1 --stabl-workers 1 --diablo-workers 1
+# -> smoke run completed; wrote two costablr fold checkpoints, two DIABLO fold checkpoints, and final performance table
+
+conda run -n R4_51 Rscript inst/analysis/run_tcga_nestedcv.R --cache /tmp/costablr_tcga_smoke_patch2.rds --force --smoke --cv-workers 1 --stabl-workers 1 --diablo-workers 1
+# -> smoke run completed after the DIABLO BiocParallel cleanup
+
+mv /tmp/costablr_tcga_smoke_patch.rds /tmp/costablr_tcga_smoke_patch.rds.bak
+conda run -n R4_51 Rscript inst/analysis/run_tcga_nestedcv.R --cache /tmp/costablr_tcga_smoke_patch.rds --smoke --cv-workers 1 --stabl-workers 1 --diablo-workers 1
+# -> resumed from existing costablr and DIABLO fold checkpoints and rebuilt the final cache
+
+conda run -n R4_51 Rscript -e 'obj <- readRDS("/tmp/costablr_tcga_smoke_patch.rds"); stopifnot(all(c("costablr","diablo","performance","feature_comparison") %in% names(obj)), nrow(obj$performance) == 2L); stopifnot(length(list.files("/tmp/costablr_tcga_smoke_patch_checkpoints/costablr", pattern="costablr_fold_.*[.]rds")) == 2L); stopifnot(length(list.files("/tmp/costablr_tcga_smoke_patch_checkpoints/diablo", pattern="diablo_fold_.*[.]rds")) == 2L); cat("tcga smoke cache/checkpoints ok\n")'
+# -> tcga smoke cache/checkpoints ok
+```
+
 ### Scratch Notebook SLURM Dashboards and Refit API Refresh (2026-05-14)
 
 - Rebuilt all five active notebooks under `scratch/` as cache-first SLURM
@@ -585,7 +692,9 @@ sacct -X -j 24766406 --format=JobID,JobName%32,State,ExitCode,Elapsed,Start,End 
 
 Job status observed during this rename:
 
-- TCGA nested-CV job `24750538` remains running.
+- TCGA nested-CV job `24750538` was still running at that observation point;
+  it later timed out and is superseded by the checkpointed runner rework
+  logged on 2026-05-18.
 - Baseline study-group arrays `24757562` and `24757563` completed.
 - Binary comparison preprocessing `24758964` and model branches `24758967`
   completed; old visualization array `24758968` failed immediately with
@@ -3143,8 +3252,8 @@ conda run -n R4_51 Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual
   fixed seeds.
 - The new tests pin `stabl_multiomic_nested_cv()` sequential vs
   `cv_workers = 2` behavior under fixed seeds on Unix-like systems.
-- No execution backend was changed. PR-12 remains high-risk and pending
-  explicit maintainer confirmation.
+- No execution backend was changed in this safety-prep step. Backend migration
+  remained pending until the PR-12 closure logged above on 2026-05-18.
 
 Validation:
 

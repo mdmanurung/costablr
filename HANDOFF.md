@@ -62,13 +62,17 @@ For details that must not be duplicated here:
 - TCGA nested-CV head-to-head scaffold is in place:
   - exported `stabl_multiomic_nested_cv()` supports stratified folds,
     custom categorical strata, numeric-strata quantile binning, and
-    outer-fold parallelism via `cv_workers`;
+    outer-fold parallelism via `cv_workers` on the shared `future`/`furrr`
+    backend;
   - `vignettes/costablr-tcga-nestedcv.Rmd` renders from cache or
     prints the SLURM command when the cache is absent;
-  - `inst/analysis/run_tcga_nestedcv.R` runs the cached
-    costablr-vs-DIABLO TCGA benchmark with costablr model-X knockoff artificial
-    features;
-  - full SLURM job `24750538` is running as of the latest check.
+  - `inst/analysis/run_tcga_nestedcv.R` now runs the cached
+    costablr-vs-DIABLO TCGA benchmark with resumable per-fold checkpoints for
+    both arms and arm-level RDS files;
+  - full SLURM job `24750538` timed out after `2-00:00:10` before writing
+    `inst/analysis/cache/tcga_nestedcv_results.rds`;
+  - checkpointed rerun job `24812727` was submitted on 2026-05-18 and was
+    initially `RUNNING` on `res-hpc-exe101`.
 - Workspace mode: May 13 audit remediation is closed; local package checks now
   have 0 errors, with only environment/toolchain warning/note items remaining.
 - Latest package robustness audit signal: `audit/PACKAGE_ROBUSTNESS_AUDIT.md`
@@ -109,9 +113,9 @@ For details that must not be duplicated here:
   `.resolve_threshold()` now owns support-threshold fallback and validation for
   `get_support.stabl_fit()` and `plot_stabl_path()`. Targeted accessor,
   visualization, and audit tests pass in `R4_51`.
-- Nested-CV parallelism signal: refactoring PR-8 is closed. Nested CV now
-  documents and warns about combining outer-fold `cv_workers` with STABL
-  bootstrap `workers` or an active non-sequential `future` plan.
+- Nested-CV parallelism signal: refactoring PR-8 is closed. Nested CV documents
+  and warns about combining outer-fold `cv_workers` with STABL bootstrap
+  `workers`.
 - CV-helper refactoring signal: PR-9 is closed. Shared private fold helpers
   now live in `R/cv_helpers.R`; `tests/testthat/test-cv-helpers.R` pins
   fixed-seed assignments for multiomic, grouped, nested, and repeated folds.
@@ -125,14 +129,12 @@ For details that must not be duplicated here:
   `CONTRIBUTING.md` provide the human-facing codebase map and contribution
   rules without moving canonical agent/session docs. `rcmdcheck --no-manual`
   is clean with 0 errors, 0 warnings, and 0 notes.
-- Parallelism signal: PR-12 safety prep is complete. New
-  `tests/testthat/test-parallel-determinism.R` pins `stabl_fit()` workers and
-  nested-CV `cv_workers` determinism. Backend unification has not been
-  implemented and still requires explicit confirmation.
-- Latest validation signal: the refactoring roadmap pass has full
-  `devtools::test()` with no failures, `pkgdown::check_pkgdown()` with no
-  problems, `rcmdcheck --no-manual` with 0 errors, 0 warnings, and 0 notes,
-  and clean `git diff --check`.
+- Parallelism signal: PR-12 is closed. `stabl_fit()` and
+  `stabl_multiomic_nested_cv()` now share a scoped `future`/`furrr`
+  multisession backend for `workers > 1` and `cv_workers > 1`; the old
+  nested-CV `parallel::mclapply()` path is gone. Determinism tests, full
+  `devtools::test()`, `pkgdown::check_pkgdown()`, and `git diff --check` are
+  green, with only the existing NAT skips and future build-version warnings.
 - Latest bootstrap-threshold parity signal: `stabl_fit()` now exposes
   `bootstrap_threshold` with Python STABL's effective default `1e-5`.  The
   learner adapters use sklearn-style `>=` per-bootstrap coefficient
@@ -228,16 +230,16 @@ For details that must not be duplicated here:
   cached refit predictions, with the old selected-feature `glmnet` path left
   only for legacy cache fallback.
 - Latest scratch SLURM submission signal: after the user fixed raw-data file
-  paths, all active costablr scratch workflows were resubmitted from
-  preprocessing at publication-scale settings. Active fresh job roots are
-  baseline `24773426` -> `24773427` -> `24773428`, group protection
-  `24773429` -> `24773430`, study protection `24773431` -> `24773432` ->
-  `24773433`, and binary comparisons `24773434` -> `24773435` ->
-  `24773436`. The manifest is recorded at
+  paths, the publication-scale scratch workflows were resubmitted from
+  preprocessing. Baseline `24773426` -> `24773427` -> `24773428`, group
+  protection `24773429` -> `24773430`, and binary comparisons `24773434` ->
+  `24773435` -> `24773436` completed. Study protection `24773431` ->
+  `24773432` had branch `24773432_26` (`nested_cv`) fail immediately because
+  glmnet saw a multinomial/binomial class with 1 or 0 observations; dependent
+  visualization job `24773433` was cancelled. The manifest is recorded at
   `scratch/cache/slurm-submissions/resubmission_all_scratch_20260514_230003.tsv`
-  and mirrored under `scratch/outputs/slurm-submissions/`. If any of these
-  jobs fail, pause and confirm with the user before choosing whether to patch,
-  cancel, or resubmit.
+  and mirrored under `scratch/outputs/slurm-submissions/`. Do not patch or
+  resubmit the study-protection nested-CV branch without user confirmation.
 - Latest guided all-view scratch notebook:
   `scratch/01_costablr_baseline_groups_test.ipynb` is now the active
   nonblocking SLURM control center for the full AURORA baseline study-group
@@ -376,17 +378,17 @@ For details that must not be duplicated here:
 
 ### Immediate next tasks (updated)
 
-1. Monitor SLURM job `24750538`; when it finishes, confirm
-   `inst/analysis/cache/tcga_nestedcv_results.rds` is complete
-   and re-render `costablr-tcga-nestedcv.Rmd` from cache.
-2. Render `vignettes/costablr-tcga-nestedcv.Rmd` from the completed TCGA
+1. Monitor checkpointed TCGA nested-CV SLURM job `24812727` with
+   `squeue -j 24812727` / `sacct -j 24812727`. Logs are
+   `inst/analysis/cache/tcga_nestedcv-24812727.out` and
+   `inst/analysis/cache/tcga_nestedcv-24812727.err`.
+2. When job `24812727` finishes, confirm
+   `inst/analysis/cache/tcga_nestedcv_results.rds`,
+   `tcga_nestedcv_costablr.rds`, `tcga_nestedcv_diablo.rds`, and the CSV
+   exports are complete.
+3. Render `vignettes/costablr-tcga-nestedcv.Rmd` from the completed TCGA
    nested-CV cache and record the output path and result signal in
    `PROGRESS.md`.
-3. For the next AURORA scratch run, open the relevant refreshed notebook under
-   `scratch/`, review the missing-artifact dashboard, set
-   `COSTABLR_SUBMIT_JOBS=true` only when ready, and launch the guarded
-   publication-scale SLURM chain from the notebook so job IDs are recorded for
-   monitoring.
 
 ### Vignette runtime profile (2026-05-10)
 
@@ -538,11 +540,13 @@ conda run -n R4_51 R CMD INSTALL multiview
   - preprocessing cache is present for `EG_P`, `EG_NP`, `TU_P`, `TU_NP`,
     `GA_P`, and `GA_NP` under
     `scratch/cache/costablr_baseline_study_protection_test/preprocess/`;
-  - heavy six-class, direct OVR, cooperative OVR, late-fusion, nested-CV, and
-    visualization branches have entrypoints but have not been run at
-    publication settings yet;
+  - publication-scale branch array `24773432` completed tasks 0-25 and failed
+    task 26 (`nested_cv`) because one resampling split left a class with 1 or
+    0 observations for glmnet; dependent visualization job `24773433` was
+    cancelled;
   - use the refreshed `scratch/03_costablr_baseline_study_protection_test.ipynb`
-    dashboard to submit the 27 heavy branches and dependent `visualize` branch;
+    dashboard for cache review, but do not resubmit the nested-CV or dependent
+    visualization branch without user confirmation;
     direct OVR branch predictions now come from `stabl_refit` caches.
 - Current audit gate:
   - May 13 audit remediation is closed for INT-001 through INT-006 and
