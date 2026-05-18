@@ -42,19 +42,21 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
-- STABL algorithm-contract signal: `STABL.md` now treats upstream Python STABL
-  `gregbellan/Stabl@1d07f85a13cfbecb4f08ce21075bf4fbb8e34678` as the
-  executable source of truth when Python code and the Nature Biotechnology
-  paper notation conflict. The canonical `costablr` contract uses strict `>`
-  FDP+/support thresholding, `floor(p * artificial_proportion)` artificial
-  counts, `(1 / pi)` FDP+ scaling, sklearn-style per-bootstrap
+- STABL algorithm-contract signal: `STABL.md` now uses the Nature
+  Biotechnology paper-method implementation for FDP+/support thresholding. The
+  canonical `costablr` contract counts and selects stability scores with `>=`,
+  so ties at the reliability threshold are included. This is an explicit
+  paper-method divergence from upstream Python STABL's strict `>` tie behavior.
+  The selector
+  still uses `floor(p * artificial_proportion)` artificial counts,
+  `(1 / pi)` FDP+ scaling, sklearn-style per-bootstrap
   `bootstrap_threshold >=` coefficient masks, Python's cutoff-lowering
-  `explore = TRUE` fallback, and Python-shaped gaussian/binomial/multinomial
-  auto-lambda grids. The paper's `>=` notation and `q = p` default construction
-  remain documented as method notation; `artificial_proportion = 1` still gives
-  `q = p`. Focused validation after the Python-original restoration passed
-  `test-fdp-plus-invariants.R`, `test-audit-stabl-accessors.R`,
-  `test-stabl-fit.R`, and `test-python-parity-fixtures.R`.
+  `explore = TRUE` fallback rule, and Python-shaped
+  gaussian/binomial/multinomial auto-lambda grids where applicable. Focused
+  validation after the documentation cleanup passed FDP+, support-accessor, and
+  Python-parity fixture tests with `FAIL 0`; `git diff --check` is clean. For
+  future audits, start with the `STABL.md` "Intentional Python Divergences"
+  table before comparing behavior to upstream Python.
 - Early Fusion provenance signal: `early_fusion = TRUE` now prefixes every
   candidate biomarker in the concatenated matrix as
   `<Omic View>__<original feature>` before running the single STABL Selector.
@@ -63,12 +65,27 @@ For details that must not be duplicated here:
   feature names may contain `__`, but Omic View names must not contain `__`.
   Early Fusion also requires a shared lambda grid (`"auto"` or one
   `data.frame`); named per-omic lambda lists are rejected because Early Fusion
-  has one concatenated input space. Early Fusion, Late Fusion, and Multi-Omic
-  STABL are additive comparison branches and may be enabled together, with
-  separate `$early_fusion`, `$late_fusion`, and `$multiomic_stabl` outputs.
-  Cooperative Fusion remains a separate comparator branch outside that formal
-  taxonomy. Focused validation after this change passed
-  `test-multiomic-workflows.R`.
+  has one concatenated input space. Canonical Late Fusion is prediction-level
+  fusion from independently trained per-view predictors. In `costablr`,
+  `late_fusion = TRUE` now owns that canonical meaning: it fits independent
+  per-view penalized glmnet predictors on full omic matrices and stacks their
+  predictions with `stacked_multi_omic()`. The
+  `$stabl_selected_late_fusion` branch remains more precise as STABL-Selected
+  Late Fusion: it stacks predictions after per-view STABL selection and
+  per-view final refits. Early Fusion, canonical Late Fusion, this
+  STABL-selected late-fusion comparator, and Multi-Omic STABL may be enabled
+  together, with separate `$early_fusion`, `$late_fusion`,
+  `$stabl_selected_late_fusion`, and `$multiomic_stabl` outputs. Cooperative
+  Fusion remains a separate comparator branch outside that formal taxonomy.
+  The old public `n_iter_lf` argument remains retired in favor of
+  `n_iter_stacking`. Focused validation after canonical Late Fusion
+  implementation passed `test-multiomic-workflows.R` and
+  `test-audit-multiomic-workflows.R` with `FAIL 0`; `git diff --check` is
+  clean.
+  Scratch analysis branch renaming is explicitly deferred: `scratch/scripts`
+  and existing scratch artifacts may still use `late_fusion` for older
+  STABL-selected hybrid outputs and may still pass `n_iter_lf`. Keep package
+  code and docs authoritative until the scratch cleanup is scheduled.
 - Multi-Omic STABL implementation signal:
   `stabl_multiomic_train_validate(multiomic_stabl = TRUE)` now returns a
   `$multiomic_stabl` branch with prefixed final-layer selected matrices,
@@ -89,8 +106,9 @@ For details that must not be duplicated here:
   `stabl_multiomic_cv()` diagnostics remain per-fold/per-Omic View selector
   diagnostics; combined Multi-Omic STABL final-layer details stay in each
   fold's `$multiomic_stabl` branch.
-- Deferred Cox Late Fusion signal: keep the current explicit
-  `late_fusion = TRUE, family = "cox"` unsupported guard. The existing stacker
+- Deferred Cox prediction-fusion signal: keep the current explicit unsupported
+  guards for `late_fusion = TRUE, family = "cox"` and
+  `stabl_selected_late_fusion = TRUE, family = "cox"`. The existing stacker
   optimizes binary AUC, regression R^2, or multiclass log loss; Cox needs
   survival-aware weight selection over risk scores and `Surv(time, event)`
   outcomes, for example with a concordance objective.
@@ -178,7 +196,7 @@ For details that must not be duplicated here:
   fixed-seed assignments for multiomic, grouped, nested, and repeated folds.
 - Late-fusion refactoring signal: PR-10 is closed. Exported
   `stacked_multi_omic()` and private stacking helpers now live in
-  `R/late_fusion.R`; `multiomic_workflows.R` is down to 1436 lines.
+  `R/stacked_generalization.R`; `multiomic_workflows.R` is down to 1436 lines.
 - Cooperative-fusion refactoring signal: PR-11 is closed. Cooperative helpers
   now live in `R/cooperative_fusion.R`; `multiomic_workflows.R` is down to
   754 lines while public workflow APIs are unchanged.
@@ -199,8 +217,9 @@ For details that must not be duplicated here:
   and scaled forms such as `"1.25*mean"`.  Focused `test-stabl-fit.R` passes.
 - Latest STABL parity-audit signal: `STABL.md` was checked against upstream
   Python commit `1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`. The active R
-  selector now matches Python's strict FDP+/support thresholding,
-  floor-based artificial-feature count, and cutoff-lowering `explore = TRUE`
+  selector intentionally diverges from Python strict FDP+/support tie behavior
+  by using the paper's `>=` notation, while retaining Python-aligned
+  floor-based artificial-feature count and cutoff-lowering `explore = TRUE`
   fallback. Python `"knockoff"` still maps to R `"modelx_knockoff"`, with
   `"mvr_knockoff"` retained as an R extension.
 - Validation policy: local R suite is authoritative for this workspace (CI deferred by scope).
@@ -379,7 +398,7 @@ For details that must not be duplicated here:
   preprocess smoke with counts `EG_P=6`, `EG_NP=4`, `TU_P=9`, `TU_NP=3`,
   `GA_P=8`, `GA_NP=8`, reduced joint CyTOF single-view smoke, reduced
   `within:TU:single_view:cytof_celltype` smoke, reduced
-  `within:TU:late_fusion` smoke, and notebook cache-loading smoke with heavy
+  `within:TU:stabl_selected_late_fusion` smoke, and notebook cache-loading smoke with heavy
   local branch execution disabled. The notebook now also displays cached
   early-fusion selected-feature boxplots in separate sections for `EG_P` vs
   `EG_NP`, `TU_P` vs `TU_NP`, and `GA_P` vs `GA_NP`; helper validation found
@@ -391,19 +410,21 @@ For details that must not be duplicated here:
   shorthand. Grouped `replace = TRUE` sampling can now reuse whole groups
   without stalling under stratified targets. Targeted helper, `stabl_fit`, and
   multiomic workflow tests are green.
-- Latest FDP+ parity signal: the R default `fdr_threshold_range` remains
+- Latest FDP+ threshold signal: the R default `fdr_threshold_range` remains
   `seq(0, 0.99, by = 0.01)`, matching Python STABL's
-  `np.arange(0., 1., .01)`, and FDP+ counts use Python-original strict `>`.
+  `np.arange(0., 1., .01)`, while FDP+ counts now intentionally use the
+  paper-method `>=` comparator rather than Python's strict `>` tie behavior.
   The active scratch notebook is the study-group multinomial elastic-net
   analysis noted above.
 - Latest multi-omic API signal: auto-lambda calls now forward `l1_ratio`
   through `stabl_fit()`, `stabl_multiomic_train_validate()`,
-  `stabl_multiomic_cv()`, and nested CV. Multiclass late fusion is supported
-  through per-view class-probability stacking and log-loss optimization, with
-  class-prior fallback when a view selects no features. Stacking now errors
-  when multiclass outcome labels are absent from probability columns, and
-  `stabl_multiomic_cv()` now accepts unnamed full-length bootstrap strata
-  aligned to input row order before per-fold subsetting. The active AURORA
+  `stabl_multiomic_cv()`, and nested CV. Multiclass STABL-Selected Late Fusion
+  is supported through per-view class-probability stacking and log-loss
+  optimization, with class-prior fallback when a view selects no features.
+  Stacking now errors when multiclass outcome labels are absent from
+  probability columns, and `stabl_multiomic_cv()` now accepts unnamed
+  full-length bootstrap strata aligned to input row order before per-fold
+  subsetting. The active AURORA
   notebook and branch helper now compute macro F1 with omitted predicted
   classes contributing 0 rather than being dropped. Cooperative fusion now
   supports `family = "multinomial"` through an automatic one-vs-rest binomial
@@ -448,6 +469,17 @@ For details that must not be duplicated here:
 3. Render `vignettes/costablr-tcga-nestedcv.Rmd` from the completed TCGA
    nested-CV cache and record the output path and result signal in
    `PROGRESS.md`.
+
+### Deferred design reminders
+
+- After the planned API simplification pass, remind the operator to revisit
+  Base-SRM Consensus for robust biomarker discovery. The deferred concept is
+  single-view first: run separate STABL Selector fits over the same candidate
+  biomarkers with `base_learner = "lasso"`, `"elastic_net"`, and
+  `"adaptive_lasso"`, then retain the Consensus Biomarker Set using the
+  Majority Consensus Rule (`min_selectors = 2` of 3 by default). Keep this
+  separate from SuperLearner Final Refit work, which belongs to prediction
+  ensembling rather than consensus biomarker selection.
 
 ### Vignette runtime profile (2026-05-10)
 
@@ -629,13 +661,36 @@ conda run -n R4_51 R CMD INSTALL multiview
   - `stabl_refit()` is the single-matrix end-to-end API and performs the
     compulsory unpenalized final model after selection;
   - `stabl_multiomic_train_validate()` now always returns per-omic `$refits`,
-    adds `$early_fusion$refit` when early fusion is enabled, and late fusion
-    reuses those same refits for stacking;
+    adds `$early_fusion$refit` when early fusion is enabled, and
+    STABL-Selected Late Fusion reuses those same refits for stacking;
   - nested CV selected-candidate evaluation now uses the same final-refit
     helper;
   - latest validation after the follow-up hardening is `FAIL 0`, `WARN 2`,
     `SKIP 2`, `PASS 1596` under `NOT_CRAN=true`; the earlier `R CMD INSTALL .`
     check completed after the initial refit implementation.
+- Latest STABL training-function audit:
+  - audited `stabl_fit()`, `stabl_refit()`,
+    `stabl_multiomic_train_validate()`, `stabl_multiomic_cv()`,
+    `stabl_multiomic_nested_cv()`, FDP+ control, artificial-feature
+    construction, final-refit helpers, and prediction stacking against
+    `STABL.md`;
+  - no blocking algorithm-contract mismatch was found in active package code;
+  - corrected stale artificial-feature docs to say `floor(ncol(x) *
+    artificial_proportion)` and at least `n_injected` source columns;
+  - focused validation passed: FDP+ invariants PASS 6, `stabl_refit` PASS 17,
+    multiomic workflows PASS 208, audit multiomic workflows PASS 21,
+    `stabl_fit` PASS 149, audit accessors PASS 15, nested CV PASS 37, and
+    parallel determinism PASS 6.
+- Latest Cooperative Fusion contract signal:
+  - `STABL.md` now defines Cooperative Fusion by its agreement penalty between
+    view-specific predictions and keeps it outside the formal Early Fusion /
+    Late Fusion / Multi-Omic STABL taxonomy;
+  - the documented contract covers direct augmented-design intuition,
+    original-sample CV constraints, non-negative `rho` tuning, scalar
+    `multiview` support for gaussian/binomial/poisson/Cox, and the repository
+    multinomial one-vs-rest wrapper;
+  - arbitrary-learner one-view-at-a-time cooperative learning is documented as
+    background methodology only, not current package behavior.
 
 ## Update protocol
 

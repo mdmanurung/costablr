@@ -22,7 +22,8 @@ stabl_multiomic_train_validate(
   random_state = NULL,
   early_fusion = FALSE,
   late_fusion = FALSE,
-  n_iter_lf = 10000L,
+  stabl_selected_late_fusion = FALSE,
+  n_iter_stacking = 10000L,
   multiomic_stabl = FALSE,
   cooperative_fusion = FALSE,
   rho = NULL,
@@ -82,22 +83,32 @@ per-omic fits. Combined Early Fusion feature names are prefixed as
 \verb{<Omic View>__<original feature>} to preserve provenance. Results are
 returned in the \code{early_fusion} field.}
 
-\item{late_fusion}{Logical.  When \code{TRUE}, a downstream unpenalized
-predictor is fitted per omic on its selected features, and
+\item{late_fusion}{Logical. When \code{TRUE}, fit an independent penalized
+glmnet predictor on each full omic matrix, collect the per-omic
+predictions, and combine those predictions with \code{\link[=stacked_multi_omic]{stacked_multi_omic()}}.
+This is canonical prediction-level Late Fusion: it does not use STABL
+feature selection and it does not concatenate selected biomarkers.
+Results are returned in the \code{late_fusion} field.}
+
+\item{stabl_selected_late_fusion}{Logical.  When \code{TRUE}, a downstream
+unpenalized predictor is fitted per omic on its selected features, and
 \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} combines the per-omic predictions.  If no features
 are selected for an omic, the downstream predictor is fitted as an
 intercept-only model. The \code{task_type} (binary, regression, or multiclass)
-is inferred from \code{family}.  Results are returned in the \code{late_fusion}
-field.}
+is inferred from \code{family}. Results are returned in the
+\code{stabl_selected_late_fusion} field. This is a STABL-selected hybrid
+comparator, not canonical Late Fusion as defined in the paper taxonomy.}
 
-\item{n_iter_lf}{Number of random weight draws passed to
-\code{\link[=stacked_multi_omic]{stacked_multi_omic()}} during late fusion.  Ignored when
-\code{late_fusion = FALSE}.}
+\item{n_iter_stacking}{Number of random weight draws passed to
+\code{\link[=stacked_multi_omic]{stacked_multi_omic()}} during canonical Late Fusion and STABL-Selected
+Late Fusion. Ignored when both \code{late_fusion = FALSE} and
+\code{stabl_selected_late_fusion = FALSE}.}
 
 \item{multiomic_stabl}{Logical. When \code{TRUE}, concatenate the per-omic
 STABL-selected biomarkers into one final-layer matrix and fit a single
 downstream unpenalized final refit on that combined selected set. This is
-distinct from late fusion, which combines prediction outputs.}
+distinct from canonical Late Fusion and STABL-Selected Late Fusion, which
+combine prediction outputs.}
 
 \item{cooperative_fusion}{Logical. When \code{TRUE}, fit a multiview-based
 cooperative comparator branch in addition to the existing per-omic STABL
@@ -143,8 +154,13 @@ selected features, or \code{NULL} when no validation input is provided.}
 list with \code{fit}, \code{refit}, Omic View-prefixed \code{selected_features},
 \code{selected_train}, and \code{selected_valid} for the concatenated
 single-STABL run.}
-\item{\code{late_fusion}}{\code{NULL} when \code{late_fusion = FALSE}.  Otherwise a
-list with \code{weights} (data.frame), \code{train_predictions} (data.frame),
+\item{\code{late_fusion}}{\code{NULL} when \code{late_fusion = FALSE}. Otherwise a list
+with per-view penalized \code{models}, stacking \code{weights},
+\code{train_predictions}, \code{valid_predictions}, and \code{score}; multinomial
+tasks also include \code{levels}, \code{log_loss}, and classification metrics.}
+\item{\code{stabl_selected_late_fusion}}{\code{NULL} when
+\code{stabl_selected_late_fusion = FALSE}. Otherwise a list with
+\code{weights} (data.frame), \code{train_predictions} (data.frame),
 \code{valid_predictions}, and \code{score}; multinomial tasks also include
 \code{levels}, \code{log_loss}, and classification metrics.}
 \item{\code{multiomic_stabl}}{Present only when \code{multiomic_stabl = TRUE}.
@@ -163,9 +179,10 @@ class-specific selected features, and per-view union selections.}
 \description{
 Fits \code{\link[=stabl_fit]{stabl_fit()}} independently on each omic block from a named list,
 then returns per-omic fitted objects and selected-feature matrices for
-downstream composition. Optional early-fusion, late-fusion, Multi-Omic
-STABL, and cooperative-fusion branches are additive to the per-omic STABL
-results. Early Fusion, Late Fusion, and Multi-Omic STABL may be enabled in
-the same call; their outputs remain separated in \code{early_fusion},
-\code{late_fusion}, and \code{multiomic_stabl}.
+downstream composition. Optional Early Fusion, canonical Late Fusion,
+STABL-Selected Late Fusion, Multi-Omic STABL, and Cooperative Fusion
+branches are additive to the per-omic STABL results. Their outputs remain
+separated in \code{early_fusion}, \code{late_fusion},
+\code{stabl_selected_late_fusion}, \code{multiomic_stabl}, and
+\code{cooperative_fusion}.
 }

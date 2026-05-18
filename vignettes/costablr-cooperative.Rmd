@@ -33,8 +33,9 @@ if (!requireNamespace("multiview", quietly = TRUE)) {
 
 ## Overview
 
-Early fusion asks all features to compete in one wide matrix.  Late fusion lets
-each omic make its own prediction and combines the answers afterward.
+Early fusion asks all features to compete in one wide matrix.  STABL-selected
+late fusion lets each omic select biomarkers and make its own prediction, then
+combines the predictions afterward.
 Cooperative fusion asks a subtler question: can the views be fitted together
 without erasing their identities?
 
@@ -49,7 +50,8 @@ fully isolated.
 |---|---|---|
 | **Per-omic** | One STABL fit per omic, independently. | Baseline; or when views are likely orthogonal. |
 | **Early fusion** | Concatenate all omics, one joint STABL fit. | Omics are tightly correlated; you want a single feature list. |
-| **Late fusion** | Per-omic fits, then learn a weighted blend of predictions. | Each omic may predict independently; you want omic weights. |
+| **Late fusion** | Fit one full-view predictive model per omic, then learn a weighted blend of predictions. | You want the canonical prediction-level fusion baseline. |
+| **STABL-selected late fusion** | Per-omic STABL fits and Final Refits, then learn a weighted blend of predictions. | Each omic may predict independently after selection; you want omic weights. |
 | **Cooperative fusion** | Joint multiview fit with cooperation strength `rho`; each view has its own coefficient path. | Omics share some signal structure; you want cross-view feature selection to be coherent. |
 
 The cooperation strength `rho` controls how much the views are encouraged to
@@ -67,8 +69,9 @@ By the end, you should be able to:
 3. Read the `print()` output for cooperative fusion details.
 4. Understand which `cooperation_selection` and `cooperation_selector`
    combinations are supported and why.
-5. Compare cooperative fusion feature selections to early and late fusion on the
-   same dataset.
+5. Compare cooperative fusion feature selections to early fusion and
+   STABL-selected late fusion, with canonical late fusion available as a
+   prediction-level baseline.
 6. Use `stabl_multiomic_cv()` to evaluate cooperative fusion across outer folds.
 
 ---
@@ -320,7 +323,7 @@ the rest of `costablr` works without `multiview`.
 
 ---
 
-## 7. Comparing cooperative, early, and late fusion
+## 7. Comparing Cooperative, Early, and STABL-Selected Late Fusion
 
 The most useful comparison is often side by side.  Run all three strategies in
 one call, then compare the selected features:
@@ -337,8 +340,8 @@ all_fit <- stabl_multiomic_train_validate(
   artificial_type       = "random_permutation",
   random_state          = 42L,
   early_fusion          = TRUE,
-  late_fusion           = TRUE,
-  n_iter_lf             = 250L,
+  stabl_selected_late_fusion = TRUE,
+  n_iter_stacking             = 250L,
   cooperative_fusion    = TRUE,
   rho                   = c(0, 0.25, 0.5),
   cooperation_selection = "cv",
@@ -435,8 +438,8 @@ analysis: did the views need to cooperate, and if so, how strongly?
 
 ## Next steps
 
-- See `vignette("costablr-multiomic")` for per-omic, early, and late fusion on
-  the same OOL dataset.
+- See `vignette("costablr-multiomic")` for per-omic, early, and
+  STABL-selected late fusion on the same OOL dataset.
 - See `vignette("costablr-intro")` for single-omic STABL and learner options.
 - Pass `groups` to `stabl_multiomic_train_validate()` to prevent leakage in
   longitudinal designs; grouped bootstrapping and outer-fold construction both

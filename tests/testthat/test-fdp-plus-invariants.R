@@ -2,11 +2,11 @@
 #
 #   FDP+(t) = ((1/pi) * |{j: q_j^art >= t}| + 1) / max(1, |{j: q_j >= t}|)
 #
-# Paper-notation `>=`, additive 1 in numerator, max(1, .) denominator guard,
-# and (1/pi) artificial scaling are all baked in here on hand-computed cases so
+# Paper-method `>=`, additive 1 in numerator, max(1, .) denominator guard, and
+# (1/pi) artificial scaling are all baked in here on hand-computed cases so
 # future refactors cannot silently drift on any of them.
 
-test_that("compute_fdp_plus uses paper `>=` (ties at threshold count)", {
+test_that("compute_fdp_plus uses paper-method `>=` (ties at threshold count)", {
   art  <- matrix(0.5, nrow = 10L, ncol = 5L)
   real <- matrix(0.5, nrow = 10L, ncol = 5L)
 

@@ -115,7 +115,7 @@ stabl_multiomic_nested_cv()        [nested_cv.R:50]
 |---|---|---|
 | `stabl_fit` | `stabl_fit()` | `stabl_scores_` (p×L matrix), `fdr_min_threshold_`, `hard_threshold`, `feature_names`, `artificial_type`, `fitted_lambda_grid` |
 | `stabl_refit` | `stabl_refit()` | inherits `stabl_fit` fields + `final_model_`, `family` |
-| `stabl_multiomic_fit` | `stabl_multiomic_train_validate()` | `fits`, `refits`, `selected_features`, `early_fusion`, `late_fusion`, `cooperative_fusion` |
+| `stabl_multiomic_fit` | `stabl_multiomic_train_validate()` | `fits`, `refits`, `selected_features`, `early_fusion`, `late_fusion`, `stabl_selected_late_fusion`, `cooperative_fusion` |
 | `stabl_multiomic_cv` | `stabl_multiomic_cv()` | per-fold summaries of the above |
 | `stabl_multiomic_nested_cv` | `stabl_multiomic_nested_cv()` | outer-fold results, candidate selection |
 
@@ -124,10 +124,13 @@ stabl_multiomic_nested_cv()        [nested_cv.R:50]
 ## Invariants — never break these
 
 1. **FDP+ semantics** (STABL.md is authoritative):
-   - Threshold sweep uses strict `>` comparison.
+   - Threshold sweep uses the paper-method `>=` comparison.
+   - This intentionally diverges from upstream Python STABL's strict `>` tie
+     behavior.
    - Bootstrap thresholding: `|coef| >= bootstrap_threshold` (not `>`).
    - Artificial feature scaling uses `(1/pi)` factor.
-   - Changing any of these requires a Python cross-check + new parity test.
+   - Changing any of these requires a source-of-truth check against `STABL.md`
+     plus a focused regression test.
 
 2. **Accessor contract**: code must read `stabl_fit` results only through
    `get_support()`, `get_feature_names_out()`, `get_importances()`, etc.
@@ -162,7 +165,7 @@ stabl_multiomic_nested_cv()        [nested_cv.R:50]
 | PR-7 | Added artificial-feature fallback metadata and persisted `artificial_type_used_` on `stabl_fit` objects | `R/artificial_features.R`, `R/mvr_knockoff.R`, `R/stabl_fit.R`, `R/stabl_accessors.R`, artificial/MVR/STABL tests |
 | PR-8 | Documented and warned about nested-CV parallelism interactions between `cv_workers`, `workers`, and active `future` plans | `R/nested_cv.R`, `tests/testthat/test-nested-cv.R` |
 | PR-9 | Extracted shared multiomic and nested-CV fold helpers into `R/cv_helpers.R` after adding fixed-seed characterization tests | `R/cv_helpers.R`, `R/multiomic_workflows.R`, `R/nested_cv.R`, `tests/testthat/test-cv-helpers.R` |
-| PR-10 | Extracted exported `stacked_multi_omic()` and late-fusion/stacking helpers into `R/late_fusion.R` | `R/late_fusion.R`, `R/multiomic_workflows.R` |
+| PR-10 | Extracted exported `stacked_multi_omic()` and prediction-stacking helpers into `R/stacked_generalization.R` | `R/stacked_generalization.R`, `R/multiomic_workflows.R` |
 | PR-11 | Extracted cooperative-fusion helpers into `R/cooperative_fusion.R` and reduced `multiomic_workflows.R` below 800 lines | `R/cooperative_fusion.R`, `R/multiomic_workflows.R` |
 | PR-2A | Added human-facing maintainer docs without moving canonical agent/session docs; kept new root docs out of source builds | `ARCHITECTURE.md`, `TODO.md`, `CONTRIBUTING.md`, `.Rbuildignore` |
 | PR-12 prep | Added parallel-determinism characterization tests before any backend migration | `tests/testthat/test-parallel-determinism.R` |

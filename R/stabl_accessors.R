@@ -2,8 +2,8 @@
 #'
 #' Returns a named logical vector that is `TRUE` for every feature whose
 #' maximum stability score is greater than or equal to the effective threshold,
-#' matching the StablSRM paper notation. This intentionally differs from the
-#' upstream Python implementation's strict `>` tie behavior.
+#' matching the StablSRM paper-method implementation. This intentionally
+#' differs from the upstream Python implementation's strict `>` tie behavior.
 #' This is the primary accessor for downstream use of a fitted STABL model:
 #' index your data matrix with the returned mask, or pass the object to
 #' [get_feature_names_out()] to obtain the names directly.
@@ -21,8 +21,9 @@
 #'
 #' **Explore fallback:** When `explore = TRUE` was set during fitting and no
 #' feature's score meets the threshold, the function lowers the cutoff to the
-#' `n_explore`-th largest score minus `0.01`, then reapplies `>=` selection.
-#' This can select more than `n_explore` features when scores are tied.
+#' `n_explore`-th largest score minus `0.01`, then reapplies the paper-method
+#' `>=` selection rule. This can select more than `n_explore` features when
+#' scores are tied.
 #'
 #' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
 #' @param new_hard_threshold Numeric in `(0, 1]` or `NULL`.  When supplied,
@@ -93,7 +94,7 @@ get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
   max_scores <- get_importances(object)
   mask       <- max_scores >= threshold
 
-  # Keep Python's cutoff-lowering rule, then apply the paper-notation support
+  # Keep Python's cutoff-lowering rule, then apply the paper-method support
   # comparator used by the rest of the R implementation.
   if (!any(mask) && isTRUE(object$explore)) {
     n_exp       <- min(object$n_explore, length(max_scores))
@@ -369,6 +370,9 @@ print.stabl_multiomic_fit <- function(x, ...) {
   } else "no", "\n")
   cat("  Late fusion:     ", if (!is.null(x$late_fusion)) {
     paste0("yes (score = ", round(x$late_fusion$score, 4L), ")")
+  } else "no", "\n")
+  cat("  STABL-selected LF:", if (!is.null(x$stabl_selected_late_fusion)) {
+    paste0("yes (score = ", round(x$stabl_selected_late_fusion$score, 4L), ")")
   } else "no", "\n")
   cat("  Multi-Omic STABL:", if (!is.null(x$multiomic_stabl)) {
     paste0(" yes (", length(x$multiomic_stabl$final_features),

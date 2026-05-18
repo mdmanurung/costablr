@@ -39,21 +39,172 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
-### Python-Original STABL Parity Restoration (2026-05-18)
+### Base-SRM Consensus Design Deferred (2026-05-18)
 
-- Restored the active selector contract to upstream Python STABL
-  `gregbellan/Stabl@1d07f85` when Python code and paper notation conflict.
-  This supersedes the earlier same-day paper-notation threshold switch below.
-- Changed `compute_fdp_plus()` so FDP+ real/artificial counts use strict
-  `>` stability-score thresholds. Ties at a candidate threshold are not
-  counted.
-- Changed `get_support.stabl_fit()` so final support extraction uses strict
-  `>`. A data-driven `fdr_min_threshold_ = 0` now selects only features with
-  positive stability scores.
-- Restored Python's `explore = TRUE` fallback: when no feature passes, the
-  cutoff is set to the `n_explore`-th largest stability score minus `0.01`,
-  then strict `>` selection is reapplied. Ties can select more than
-  `n_explore`, including all features when all scores are zero.
+- Resolved exploratory terminology for a future robust-biomarker feature:
+  **SuperLearner Final Refit** is a downstream prediction ensemble after STABL
+  selection, while **Base-SRM Consensus** is a consensus biomarker-selection
+  idea across separate STABL Selector runs.
+- Recorded the deferred consensus shape in `CONTEXT.md`: compare STABL
+  Selector runs over the same candidate biomarkers while varying the Base SRM.
+- Agreed default rule: Majority Consensus Rule, retaining biomarkers selected
+  by at least two of the three initial Base SRMs (`lasso`, `elastic_net`, and
+  `adaptive_lasso`).
+- Deferred implementation until after a separate API simplification pass.
+  Added reminder notes to `PLAN.md` and `HANDOFF.md`.
+
+### Paper-Method Threshold Documentation Cleanup (2026-05-18)
+
+- Added an `Intentional Python Divergences` table to `STABL.md` covering
+  paper-method FDP+/support thresholding, explore fallback comparator behavior,
+  classification auto-lambda scaling, adaptive lasso implementation, artificial
+  feature option naming/extensions, and R-only workflow extensions.
+- Clarified across canonical docs that FDP+/support thresholding uses the
+  StablSRM paper-method `>=` implementation, not upstream Python's strict `>`
+  tie behavior.
+- Updated `STABL.md`, `PLAN.md`, `HANDOFF.md`, `CONTEXT.md`,
+  `ARCHITECTURE.md`, and `REFACTORING.md` so this is labeled as an
+  intentional paper-method divergence wherever threshold parity is discussed.
+- Updated roxygen comments in `R/fdp_control.R` and `R/stabl_accessors.R` so
+  regenerated Rd help pages describe the paper-method comparator consistently.
+- Cleaned older execution-log wording that incorrectly referred to strict `>`
+  thresholding as the current contract.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "devtools::document('.', roclets = c('rd'))"
+# -> compute_fdp_plus.Rd and get_support.Rd regenerated
+
+conda run -n R4_51 Rscript -e "for (f in c('R/fdp_control.R','R/stabl_accessors.R','tests/testthat/test-fdp-plus-invariants.R','tests/testthat/test-audit-stabl-accessors.R')) { parse(f); cat(f, 'parse ok\n') }"
+# -> all four files parsed successfully
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-fdp-plus-invariants.R', reporter = 'summary'); testthat::test_file('tests/testthat/test-audit-stabl-accessors.R', reporter = 'summary')"
+# -> fdp-plus-invariants DONE; audit-stabl-accessors DONE
+
+git diff --check
+# -> clean
+```
+
+### Paper-Notation FDP+/Support Restoration (2026-05-18)
+
+- Restored the active selector-threshold contract to the StablSRM paper
+  notation after explicitly reviewing the Python strict-`>` implications.
+  FDP+ counts and final support now use `>=` on stability scores.
+- This intentionally diverges from upstream Python STABL only in threshold-tie
+  behavior. Other reconciled implementation details, including
+  `floor(p * artificial_proportion)`, `(1 / pi)` FDP+ scaling,
+  sklearn-style per-bootstrap `abs(coef) >= bootstrap_threshold`, and
+  Python-shaped auto-lambda grids where applicable, remain in force.
+- Changed `compute_fdp_plus()` so original/artificial counts include scores
+  exactly equal to the candidate threshold.
+- Changed `get_support.stabl_fit()` so selected support includes features with
+  maximum stability score exactly equal to the effective reliability threshold.
+- Updated the domain glossary, `STABL.md`, `PLAN.md`, `HANDOFF.md`, roxygen
+  source comments, and focused tests to document the paper-method comparator
+  and the deliberate Python tie-case divergence.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "for (f in c('R/fdp_control.R','R/stabl_accessors.R','tests/testthat/test-fdp-plus-invariants.R','tests/testthat/test-audit-stabl-accessors.R','tests/testthat/test-stabl-fit.R')) { parse(f); cat(f, 'parse ok\n') }"
+# -> all five files parsed successfully
+
+conda run -n R4_51 Rscript -e "devtools::document('.', roclets = c('rd'))"
+# -> compute_fdp_plus.Rd and get_support.Rd regenerated
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.'); testthat::test_file('tests/testthat/test-fdp-plus-invariants.R'); testthat::test_file('tests/testthat/test-audit-stabl-accessors.R'); testthat::test_file('tests/testthat/test-stabl-fit.R'); testthat::test_file('tests/testthat/test-python-parity-fixtures.R')"
+# -> fdp-plus-invariants PASS 6 / FAIL 0
+# -> audit-stabl-accessors PASS 15 / FAIL 0
+# -> stabl-fit PASS 149 / FAIL 0
+# -> python-parity-fixtures PASS 55 / FAIL 0
+# -> warning only: testthat was built under R 4.5.2
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.'); testthat::test_file('tests/testthat/test-fdp-plus-invariants.R'); testthat::test_file('tests/testthat/test-audit-stabl-accessors.R'); testthat::test_file('tests/testthat/test-python-parity-fixtures.R')"
+# -> repeated after documentation cleanup: PASS 6, PASS 15, PASS 55; FAIL 0
+
+git diff --check
+# -> clean
+```
+
+### Late-Fusion Taxonomy Clarification (2026-05-18)
+
+- Clarified the domain distinction between canonical Late Fusion and the
+  current `costablr` `stabl_selected_late_fusion = TRUE` branch.
+- Canonical Late Fusion is now documented as prediction-level fusion over
+  independently trained per-view predictors, without requiring STABL selection
+  or selected-biomarker concatenation.
+- The current implementation is documented as STABL-Selected Late Fusion: each
+  Omic View receives a STABL Selector and Final Refit before prediction outputs
+  are stacked. This remains a useful hybrid comparator, but it is not the
+  canonical paper baseline.
+- Updated `CONTEXT.md`, `STABL.md`, `PLAN.md`, and `HANDOFF.md` to use the
+  clarified terms.
+
+Validation:
+
+```bash
+git diff --check
+# -> clean
+```
+
+### STABL-Selected Late-Fusion API Rename (2026-05-18)
+
+- Renamed the public STABL-selected prediction-fusion branch from
+  `late_fusion` to `stabl_selected_late_fusion` in
+  `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()`.
+- Renamed the returned result slot from `$late_fusion` to
+  `$stabl_selected_late_fusion`.
+- Renamed the companion iteration argument from `n_iter_lf` to
+  `n_iter_stacking`.
+- Added explicit retired-name errors for `late_fusion` and `n_iter_lf` so old
+  calls fail with the taxonomy-cleanup reason.
+- Renamed implementation file `R/late_fusion.R` to
+  `R/stacked_generalization.R`, because the exported helper is generic
+  prediction stacking rather than canonical Late Fusion.
+- Updated tests, roxygen/Rd docs, README, vignettes, `ARCHITECTURE.md`,
+  `REFACTORING.md`, `STABL.md`, `PLAN.md`, and `HANDOFF.md`.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "for (f in c('R/multiomic_workflows.R','R/stabl_accessors.R','R/stacked_generalization.R','R/input_validation.R','tests/testthat/test-multiomic-workflows.R','tests/testthat/test-audit-multiomic-workflows.R')) { parse(f); cat(f, 'parse ok\n') }"
+# -> all six files parsed successfully
+
+conda run -n R4_51 Rscript -e "devtools::document('.', roclets = c('rd'))"
+# -> costablr-package.Rd, stabl_multiomic_train_validate.Rd, and stabl_multiomic_cv.Rd regenerated
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.'); testthat::test_file('tests/testthat/test-multiomic-workflows.R'); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R')"
+# -> test-multiomic-workflows PASS 192 / FAIL 0
+# -> test-audit-multiomic-workflows PASS 21 / FAIL 0
+# -> warning only: testthat was built under R 4.5.2
+
+git diff --check
+# -> clean
+```
+
+### Historical Python-Original STABL Parity Experiment (2026-05-18) — Superseded For Thresholding
+
+- Supersession note: the FDP+/support threshold details in this section were
+  superseded later on 2026-05-18 by the paper-method restoration recorded
+  above. Floor-based artificial counts, FDP+ scaling, bootstrap-threshold
+  behavior, explore cutoff lowering, and Python-shaped auto-lambda decisions
+  remain current unless separately superseded.
+
+- Historical intermediate decision: restored the selector contract to upstream
+  Python STABL `gregbellan/Stabl@1d07f85` when Python code and paper notation
+  conflicted. The FDP+/support comparator part of this decision is no longer
+  current.
+- Historical intermediate state: `compute_fdp_plus()` used strict `>`
+  stability-score thresholds, so ties at a candidate threshold were not
+  counted. The current contract uses the paper-method `>=` rule.
+- Historical intermediate state: `get_support.stabl_fit()` used strict `>`
+  support extraction. The current contract uses the paper-method `>=` rule, so exact
+  threshold ties are selected.
+- Restored Python's `explore = TRUE` cutoff-lowering rule: when no feature
+  passes, the cutoff is set to the `n_explore`-th largest stability score minus
+  `0.01`. The later paper-method restoration keeps that cutoff rule but
+  reapplies `>=` support extraction.
 - Changed `stabl_fit()` artificial-feature realization from `round()` to
   `floor(n_features * artificial_proportion)`, matching Python. Floor-to-zero
   artificial counts still error when artificial features are requested.
@@ -68,7 +219,9 @@ Logging rule:
   `l1_ratio = c(0.5, 0.7, 0.9)` when `base_learner = "elastic_net"`,
   `lambda_grid = "auto"`, and the user does not supply `l1_ratio`.
 - Updated `STABL.md`, `PLAN.md`, `CONTEXT.md`, roxygen source comments, and
-  generated Rd pages for the restored Python-original contract.
+  generated Rd pages for that intermediate Python-original contract. The
+  threshold parts of those edits were later superseded by the paper-method
+  `>=` restoration recorded above.
 
 Validation:
 
@@ -95,15 +248,17 @@ git diff --check
 ### STABL Algorithm Contract Reconciliation (2026-05-18)
 
 - Supersession note: the selector-threshold details in this section were
-  superseded later on 2026-05-18 by the Python-original parity restoration
-  recorded above. Multi-Omic STABL and final-layer API decisions remain current.
+  temporarily superseded later on 2026-05-18 by a Python-original experiment,
+  but the active contract has been restored to the paper-method `>=`
+  implementation recorded above. Multi-Omic STABL and final-layer API decisions
+  remain current.
 - Rewrote `STABL.md` around the Nature Biotechnology methods description as
   the master algorithm reference, then reconciled it with repository-specific
   parity decisions.
-- At that point, reconciled FDP+/support thresholding with the paper notation
+- Reconciled FDP+/support thresholding with the paper-method implementation
   and changed the repository contract to use `>=` for FDP+ counts and final
-  support. That threshold decision is no longer current; the active contract is
-  the strict-`>` Python-original behavior documented above.
+  support. After a short intermediate Python-original experiment, this is again
+  the active threshold contract.
 - Made explicit the other reconciled differences: configurable
   `artificial_proportion`, `(1 / pi)` FDP+ scaling, sklearn-style
   `bootstrap_threshold`, configurable subsampling, R artificial-feature labels,
@@ -122,7 +277,7 @@ git diff --check
   by the implementation recorded below.
 - Recorded the follow-up API decision: implement Multi-Omic STABL as
   `stabl_multiomic_train_validate(multiomic_stabl = TRUE)` returning a
-  `$multiomic_stabl` branch, rather than overloading `late_fusion` or creating
+  `$multiomic_stabl` branch, rather than overloading `stabl_selected_late_fusion` or creating
   a separate top-level workflow.
 - Recorded the final-layer policy decision: the `$multiomic_stabl` branch
   should use the existing unpenalized final-refit helper and preserve the
@@ -159,10 +314,11 @@ git diff --check
 # -> clean
 ```
 
-### Paper-Notation Thresholding Switch (2026-05-18) — Superseded
+### Paper-Notation Thresholding Switch (2026-05-18)
 
-- Superseded later on 2026-05-18 by the Python-original parity restoration
-  recorded above. This section is retained as historical execution evidence.
+- This paper-method `>=` thresholding decision is the active selector contract.
+  A later same-day Python-original experiment briefly changed the comparator,
+  but it was superseded by the paper-method restoration recorded above.
 - Changed `compute_fdp_plus()` so FDP+ original/artificial counts use
   `>=` rather than strict `>`.
 - Changed `get_support.stabl_fit()` so selected support uses
@@ -274,7 +430,7 @@ git diff --check
   concatenated input space.
 - Recorded the additive branch policy: Early Fusion, Late Fusion, and
   Multi-Omic STABL may be enabled together in one workflow call, with results
-  kept separate under `$early_fusion`, `$late_fusion`, and `$multiomic_stabl`.
+  kept separate under `$early_fusion`, `$stabl_selected_late_fusion`, and `$multiomic_stabl`.
 
 Validation:
 
@@ -313,7 +469,7 @@ git diff --check
 
 ### Deferred Cox Late Fusion (2026-05-18)
 
-- Recorded that `late_fusion = TRUE` remains intentionally unsupported for
+- Recorded that `stabl_selected_late_fusion = TRUE` remains intentionally unsupported for
   `family = "cox"` in this implementation.
 - Rationale: the existing `stacked_multi_omic()` stacker optimizes binary AUC,
   regression R^2, or multiclass log loss. Cox final refits produce risk scores
@@ -626,11 +782,13 @@ conda run -n R4_51 Rscript -e 'res <- rcmdcheck::rcmdcheck(args = c("--no-manual
   `1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`, including core
   `stabl/stabl.py`, metrics, lambda-grid helper, adaptive learners, and
   multi-omic workflow files.
-- Confirmed the core parity contract remains aligned for the documented
+- Confirmed the then-current core parity contract remained aligned for the documented
   defaults (`sample_fraction = 0.5`, `replace = FALSE`,
   `bootstrap_threshold = 1e-5`), floor subsampling, strict `>` FDP+/support
   thresholding, sklearn-style per-bootstrap `>=` coefficient selection,
   FDP+ `(1 / pi)` scaling, and selector-versus-final-refit boundary.
+  The FDP+/support comparator part was later intentionally changed to the
+  paper-method `>=` rule on 2026-05-18.
 - Updated `STABL.md` to correct stale upstream line references for
   random-permutation artificial-feature sampling and FDP+ scaling, document
   that Python `"knockoff"` maps to R `"modelx_knockoff"`, and record the then
@@ -1106,8 +1264,8 @@ conda run -n R4_51 Rscript -e 'invisible(parse("scratch/scripts/costablr_baselin
   `scratch/slurm/costablr_baseline_group_protection_preprocess.slurm` and
   `scratch/slurm/costablr_baseline_group_protection_branches.slurm`.
   The branch grammar is limited to `joint:single_view:<view>`,
-  `joint:early_fusion`, `joint:late_fusion`, and
-  `within:<EG|TU|GA>:{single_view:<view>|early_fusion|late_fusion}`.
+  `joint:early_fusion`, `joint:stabl_selected_late_fusion`, and
+  `within:<EG|TU|GA>:{single_view:<view>|early_fusion|stabl_selected_late_fusion}`.
 - Result tables exported by the new runner include explicit `comparison` and
   `outcome_level` columns to keep joint six-class outputs separate from
   within-study P-vs-NP outputs.
@@ -1151,7 +1309,7 @@ COSTABLR_CACHE_DIR=/tmp/costablr_gp_smoke_cache.Ndtkiu \
 COSTABLR_EXPORT_DIR=/tmp/costablr_gp_smoke_outputs.lLBZKs \
 COSTABLR_N_BOOTSTRAPS=2 COSTABLR_N_LAMBDA=3 COSTABLR_N_ITER_LF=20 \
 SLURM_CPUS_PER_TASK=1 \
-conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_group_protection_branch.R within:TU:late_fusion
+conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_group_protection_branch.R within:TU:stabl_selected_late_fusion
 # -> binary late-fusion export path completed for TU_P_vs_TU_NP
 
 COSTABLR_CACHE_DIR=/tmp/costablr_gp_smoke_cache.Ndtkiu \
@@ -1351,8 +1509,8 @@ conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_comparisons_bra
 COSTABLR_CACHE_DIR=/tmp/costablr_binary_cmp_smoke_cache \
 COSTABLR_EXPORT_DIR=/tmp/costablr_binary_cmp_smoke_export \
 COSTABLR_N_BOOTSTRAPS=2 COSTABLR_N_LAMBDA=3 COSTABLR_N_ITER_LF=25 \
-conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_comparisons_branch.R EG_vs_GA_TU late_fusion
-# -> Finished STABL baseline comparison branch: EG_vs_GA_TU / late_fusion
+conda run -n R4_51 Rscript scratch/scripts/run_costablr_baseline_comparisons_branch.R EG_vs_GA_TU stabl_selected_late_fusion
+# -> Finished STABL baseline comparison branch: EG_vs_GA_TU / stabl_selected_late_fusion
 
 conda run -n R4_51 Rscript -e 'if (!requireNamespace("jsonlite", quietly=TRUE)) stop("jsonlite missing"); nb <- jsonlite::fromJSON("scratch/04_costablr_baseline_binary_comparisons.ipynb", simplifyVector=FALSE); code <- vapply(Filter(function(x) identical(x$cell_type, "code"), nb$cells), function(x) paste(unlist(x$source), collapse=""), character(1)); pdf("/tmp/costablr_baseline_binary_comparisons_notebook_smoke.pdf"); on.exit(dev.off(), add=TRUE); invisible(eval(parse(text=paste(code, collapse="\n\n")), envir=globalenv())); cat("comparison notebook cache-loading smoke ok\n")'
 # -> comparison notebook cache-loading smoke ok
@@ -1390,7 +1548,7 @@ warnings under intentionally tiny `N_BOOTSTRAPS=2` smoke settings.
     `l1_ratio` for elastic-net grids.
   - `stacked_multi_omic()` supports true multiclass probability stacking with
     log-loss optimization.
-  - `stabl_multiomic_train_validate(late_fusion = TRUE)` supports
+  - `stabl_multiomic_train_validate(stabl_selected_late_fusion = TRUE)` supports
     multinomial late fusion, class-prior fallback, train/validation metrics,
     and unchanged binary/regression return behavior.
   - Cooperative multinomial remains rejected; one-vs-rest binomial branches
@@ -1512,12 +1670,14 @@ conda run -n R4_51 R --quiet -e 'nb <- jsonlite::fromJSON("scratch/01_costablr_b
 
 - Audited R FDP+ thresholding against the original Python STABL
   `_compute_FDPplus()` implementation.
-- Confirmed parity-critical semantics:
+- Confirmed the then-current Python-parity semantics:
   - row-max stability scores across lambda are used for global FDP+;
   - strict `>` threshold comparisons are used;
   - numerator is `(1 / artificial_proportion) * n_artificial + 1`;
   - denominator is `max(1, n_real)`;
   - final cutoff falls back to `1` when the minimum FDP+ exceeds `1`.
+  The threshold comparator was later intentionally changed to the
+  paper-method `>=` rule on 2026-05-18.
 - Aligned the R default `fdr_threshold_range` from `seq(0, 1, by = 0.01)` to
   `seq(0, 0.99, by = 0.01)` to match Python STABL's
   `np.arange(0., 1., .01)` default. This mainly affects the stored `min_fdr_`
@@ -2324,8 +2484,10 @@ and the remediation options.
 
 ### Documentation Integration
 
-- Updated `STABL.md` to align with implemented Python/R semantics:
-  - `artificial_proportion`, `sample_fraction`, strict `>` thresholding, FDP+ scaling, and core-fit output boundaries.
+- Updated `STABL.md` to align with then-current Python/R semantics:
+  - `artificial_proportion`, `sample_fraction`, strict `>` thresholding,
+    FDP+ scaling, and core-fit output boundaries. The threshold comparator was
+    later intentionally changed to the paper-method `>=` rule on 2026-05-18.
 - Updated `AGENTS.md`, `PLAN.md`, and `PROGRESS.md` to enforce distinct roles and cross-references.
 - Added root-level analysis memo `MultiView.md` summarizing cooperative-fusion implementation details and mapping concrete strengthening directions for `.` (cooperative middle-fusion mode, M-view agreement penalties, cooperative classification path, and STABL+cooperative hybrid workflow guidance).
 - Re-audited `MultiView.md` against the then-available cooperative-learning source files and `R/multiomic_workflows.R`; corrected the `alpha = 0` interpretation to early-fusion-like behavior, clarified `lambda.min` vs `lambda.1se` function-level behavior, and added a simulated team design discussion capturing phased implementation and API naming constraints.
@@ -2483,13 +2645,13 @@ Validation notes for this implementation step:
   - R² optimisation for regression tasks.
   - Optional `random_state` for reproducible weight search.
   - Exported and documented in `man/stacked_multi_omic.Rd`.
-- Added internal helpers `.r_auc()`, `.r_squared()`, `.family_to_task_type()`, `.late_fusion_fit_omic()`.
+- Added internal helpers `.r_auc()`, `.r_squared()`, `.family_to_task_type()`, `.stabl_selected_late_fusion_fit_omic()`.
 - Extended `stabl_multiomic_train_validate()` with three new parameters:
   - `early_fusion = FALSE`: cbind all omic matrices → single `stabl_fit()` run; result in `$early_fusion` field.
-  - `late_fusion = FALSE`: per-omic downstream GLM/LM on selected features → `stacked_multi_omic()` → stacked ensemble; result in `$late_fusion` field.
-  - `n_iter_lf = 10000L`: passed to `stacked_multi_omic()` for the late-fusion weight search.
-  - Return value extended: `early_fusion` and `late_fusion` list slots added to `stabl_multiomic_fit` objects.
-- Extended `stabl_multiomic_cv()` to pass `early_fusion`, `late_fusion`, `n_iter_lf` through to each per-fold call.
+  - `stabl_selected_late_fusion = FALSE`: per-omic downstream GLM/LM on selected features → `stacked_multi_omic()` → stacked ensemble; result in `$stabl_selected_late_fusion` field.
+  - `n_iter_stacking = 10000L`: passed to `stacked_multi_omic()` for the late-fusion weight search.
+  - Return value extended: `early_fusion` and `stabl_selected_late_fusion` list slots added to `stabl_multiomic_fit` objects.
+- Extended `stabl_multiomic_cv()` to pass `early_fusion`, `stabl_selected_late_fusion`, `n_iter_stacking` through to each per-fold call.
 - Added 12 new tests in `test-multiomic-workflows.R` covering:
   - `stacked_multi_omic` structure, regression/binary scoring, reproducibility, and NA-per-row handling.
   - Early fusion structure, validation population, and FALSE-guard.
@@ -3095,7 +3257,7 @@ Validation:
 - Early branch-array monitoring showed completed CyTOF and single-view branch
   artifacts under `scratch/cache/costablr_baseline_groups_test/` and
   `scratch/outputs/costablr_baseline_groups_test/`.
-- At the last status check, `late_fusion`, the cooperative one-vs-rest
+- At the last status check, `stabl_selected_late_fusion`, the cooperative one-vs-rest
   branches, and `nested_cv` were still running, with visualization and notebook
   execution pending on `afterok` dependencies.
 
@@ -3365,9 +3527,9 @@ sacct -j 24773426,24773427,24773428,24773429,24773430,24773431,24773432,24773433
 
 - Centralized STABL support-threshold fallback into private
   `.resolve_threshold(object, new_hard_threshold)` in `R/stabl_accessors.R`.
-- `get_support.stabl_fit()` now uses the shared resolver while preserving the
-  strict `>` support rule, the `explore` fallback, and the existing allowance
-  for FDP+-derived threshold `0`.
+- `get_support.stabl_fit()` now uses the shared resolver. The active support
+  comparator is the paper-method `>=` rule; the resolver still preserves the
+  `explore` fallback and the allowance for FDP+-derived threshold `0`.
 - `plot_stabl_path()` now uses the same resolver for its threshold line and
   label source, avoiding separate fallback logic between accessors and
   visualization.
@@ -3471,17 +3633,17 @@ conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::
 
 ### Refactoring Roadmap PR-10 Late-Fusion Extraction (2026-05-18)
 
-- Created `R/late_fusion.R` and moved exported `stacked_multi_omic()` plus its
+- Created `R/stacked_generalization.R` and moved exported `stacked_multi_omic()` plus its
   private stacking helpers there.
 - Removed the moved late-fusion block from `R/multiomic_workflows.R` without
   changing callers, exported names, or `NAMESPACE`.
 - Current line counts after extraction: `R/multiomic_workflows.R` 1436 lines,
-  `R/late_fusion.R` 370 lines.
+  `R/stacked_generalization.R` 370 lines.
 
 Validation:
 
 ```bash
-conda run -n R4_51 Rscript -e "invisible(parse('R/late_fusion.R')); invisible(parse('R/multiomic_workflows.R')); cat('parse ok\n')"
+conda run -n R4_51 Rscript -e "invisible(parse('R/stacked_generalization.R')); invisible(parse('R/multiomic_workflows.R')); cat('parse ok\n')"
 # -> parse ok
 
 conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_dir('tests/testthat', filter = 'exports|multiomic-workflows|audit-multiomic-workflows|audit-performance-optimizations', reporter = 'summary')"
@@ -3607,5 +3769,111 @@ find docs/agents -maxdepth 1 -type f -print | sort
 # -> docs/agents/triage-labels.md
 
 git diff --check -- AGENTS.md docs/agents/issue-tracker.md docs/agents/triage-labels.md docs/agents/domain.md PLAN.md PROGRESS.md HANDOFF.md
+# -> clean
+```
+
+### Canonical Late Fusion Implementation (2026-05-18)
+
+- Reintroduced `late_fusion = TRUE` with the canonical prediction-level
+  meaning instead of using it for the STABL-selected hybrid.
+- Added a `$late_fusion` result branch to `stabl_multiomic_train_validate()`.
+  The branch fits independent per-view penalized glmnet predictors on the full
+  omic matrices, selects the best per-view lambda-grid candidate by training
+  predictive score, then stacks per-view predictions with
+  `stacked_multi_omic()`.
+- Kept the hybrid comparator under the explicit
+  `stabl_selected_late_fusion = TRUE` / `$stabl_selected_late_fusion` name.
+  Both canonical Late Fusion and STABL-Selected Late Fusion share
+  `n_iter_stacking` for the random weight search.
+- Updated `stabl_multiomic_cv()` to forward `late_fusion` to fold-specific
+  train/validation fits.
+- Retained the breaking cleanup for `n_iter_lf`; it now errors clearly in
+  favor of `n_iter_stacking`.
+- Updated `STABL.md`, `PLAN.md`, and `HANDOFF.md` to reflect the clarified
+  taxonomy and current implementation contract.
+- Regenerated Rd docs for `stabl_multiomic_train_validate()` and
+  `stabl_multiomic_cv()`, plus package-level docs after updating the workflow
+  overview.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "parse('R/multiomic_workflows.R'); parse('R/stabl_accessors.R')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "pkgload::load_all('.'); testthat::test_file('tests/testthat/test-multiomic-workflows.R')"
+# -> PASS 208 / FAIL 0 / WARN 0 / SKIP 0
+
+conda run -n R4_51 Rscript -e "devtools::document(roclets = c('rd', 'namespace'))"
+# -> wrote stabl_multiomic_train_validate.Rd, stabl_multiomic_cv.Rd, and
+#    costablr-package.Rd
+
+conda run -n R4_51 Rscript -e "pkgload::load_all('.'); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R')"
+# -> PASS 21 / FAIL 0 / WARN 0 / SKIP 0
+
+git diff --check
+# -> clean
+```
+
+### STABL Training Function Audit (2026-05-18)
+
+- Audited the main STABL training surfaces against `STABL.md`:
+  `stabl_fit()`, `stabl_refit()`, `stabl_multiomic_train_validate()`,
+  `stabl_multiomic_cv()`, `stabl_multiomic_nested_cv()`, FDP+ control,
+  artificial-feature construction, final-refit helpers, and prediction
+  stacking.
+- No blocking algorithm-contract mismatch was found in the active package
+  code. The selector still uses `floor(p * artificial_proportion)`, `>=` for
+  FDP+ and support extraction, `abs(coef) >= bootstrap_threshold` for
+  per-bootstrap masks, and keeps the final predictive refit outside
+  `stabl_fit()`.
+- Corrected stale artificial-feature documentation that still said
+  `round(ncol(x) * artificial_proportion)` and implied random permutation
+  required strictly more source columns than injected columns. The docs now
+  match the implementation: `floor(...)` and at least `n_injected` source
+  columns.
+- Remaining code-quality recommendation: extract prediction-fusion internals
+  out of `R/multiomic_workflows.R` into a dedicated internal module in a
+  behavior-preserving refactor.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "pkgload::load_all('.'); testthat::test_file('tests/testthat/test-fdp-plus-invariants.R'); testthat::test_file('tests/testthat/test-stabl-refit.R'); testthat::test_file('tests/testthat/test-multiomic-workflows.R'); testthat::test_file('tests/testthat/test-audit-multiomic-workflows.R')"
+# -> FDP+ invariants PASS 6; stabl_refit PASS 17; multiomic workflows PASS 208;
+#    audit multiomic workflows PASS 21
+
+conda run -n R4_51 Rscript -e "pkgload::load_all('.'); testthat::test_file('tests/testthat/test-stabl-fit.R'); testthat::test_file('tests/testthat/test-audit-stabl-accessors.R')"
+# -> stabl_fit PASS 149; audit accessors PASS 15
+
+conda run -n R4_51 Rscript -e "pkgload::load_all('.'); testthat::test_file('tests/testthat/test-nested-cv.R'); testthat::test_file('tests/testthat/test-parallel-determinism.R')"
+# -> nested CV PASS 37; parallel determinism PASS 6
+```
+
+### Cooperative Fusion Contract Clarification (2026-05-18)
+
+- Expanded the `STABL.md` Cooperative Fusion comparator contract.
+- Added the cooperative-learning agreement-penalty objective for two views,
+  the direct augmented-design interpretation, and the rule that CV folds must
+  be formed on original samples before constructing augmented matrices.
+- Clarified `rho` as the non-negative cooperation strength selected by CV or
+  validation, with `rho = 0` early-fusion-like behavior and positive `rho`
+  penalizing disagreement between view-specific predictions.
+- Documented the current `costablr` implementation boundary: scalar
+  cooperative fusion is delegated to `multiview::multiview()` /
+  `multiview::cv.multiview()` for gaussian, binomial, poisson, and Cox
+  families; multinomial cooperative fusion is a repository one-vs-rest wrapper;
+  arbitrary-learner one-view-at-a-time cooperative learning remains background
+  methodology, not current package behavior.
+- Updated `CONTEXT.md` so Cooperative Fusion is defined by the agreement
+  penalty rather than only as generic joint modeling.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e "if (requireNamespace('multiview', quietly=TRUE)) { print(args(multiview::multiview)); print(args(multiview::cv.multiview)) } else { cat('multiview not installed\n') }"
+# -> confirmed multiview defaults include standardize = TRUE and intercept = TRUE
+
+git diff --check
 # -> clean
 ```

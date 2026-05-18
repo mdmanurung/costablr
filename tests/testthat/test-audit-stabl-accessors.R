@@ -44,7 +44,7 @@ test_that("AUDIT IMPL-001: get_support rejects invalid thresholds", {
   )
 })
 
-test_that("get_support uses paper threshold ties", {
+test_that("get_support uses paper-method threshold ties", {
   object <- structure(
     list(
       stabl_scores_ = matrix(

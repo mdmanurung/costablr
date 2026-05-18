@@ -2,11 +2,12 @@
 #'
 #' Fits [stabl_fit()] independently on each omic block from a named list,
 #' then returns per-omic fitted objects and selected-feature matrices for
-#' downstream composition. Optional early-fusion, late-fusion, Multi-Omic
-#' STABL, and cooperative-fusion branches are additive to the per-omic STABL
-#' results. Early Fusion, Late Fusion, and Multi-Omic STABL may be enabled in
-#' the same call; their outputs remain separated in `early_fusion`,
-#' `late_fusion`, and `multiomic_stabl`.
+#' downstream composition. Optional Early Fusion, canonical Late Fusion,
+#' STABL-Selected Late Fusion, Multi-Omic STABL, and Cooperative Fusion
+#' branches are additive to the per-omic STABL results. Their outputs remain
+#' separated in `early_fusion`, `late_fusion`,
+#' `stabl_selected_late_fusion`, `multiomic_stabl`, and
+#' `cooperative_fusion`.
 #'
 #' @param x_train_list Named list of training omic tables (`data.frame` or
 #'   numeric matrix), each with row names as sample IDs.
@@ -42,20 +43,29 @@
 #'   per-omic fits. Combined Early Fusion feature names are prefixed as
 #'   `<Omic View>__<original feature>` to preserve provenance. Results are
 #'   returned in the `early_fusion` field.
-#' @param late_fusion Logical.  When `TRUE`, a downstream unpenalized
-#'   predictor is fitted per omic on its selected features, and
+#' @param late_fusion Logical. When `TRUE`, fit an independent penalized
+#'   glmnet predictor on each full omic matrix, collect the per-omic
+#'   predictions, and combine those predictions with [stacked_multi_omic()].
+#'   This is canonical prediction-level Late Fusion: it does not use STABL
+#'   feature selection and it does not concatenate selected biomarkers.
+#'   Results are returned in the `late_fusion` field.
+#' @param stabl_selected_late_fusion Logical.  When `TRUE`, a downstream
+#'   unpenalized predictor is fitted per omic on its selected features, and
 #'   [stacked_multi_omic()] combines the per-omic predictions.  If no features
 #'   are selected for an omic, the downstream predictor is fitted as an
 #'   intercept-only model. The `task_type` (binary, regression, or multiclass)
-#'   is inferred from `family`.  Results are returned in the `late_fusion`
-#'   field.
-#' @param n_iter_lf Number of random weight draws passed to
-#'   [stacked_multi_omic()] during late fusion.  Ignored when
-#'   `late_fusion = FALSE`.
+#'   is inferred from `family`. Results are returned in the
+#'   `stabl_selected_late_fusion` field. This is a STABL-selected hybrid
+#'   comparator, not canonical Late Fusion as defined in the paper taxonomy.
+#' @param n_iter_stacking Number of random weight draws passed to
+#'   [stacked_multi_omic()] during canonical Late Fusion and STABL-Selected
+#'   Late Fusion. Ignored when both `late_fusion = FALSE` and
+#'   `stabl_selected_late_fusion = FALSE`.
 #' @param multiomic_stabl Logical. When `TRUE`, concatenate the per-omic
 #'   STABL-selected biomarkers into one final-layer matrix and fit a single
 #'   downstream unpenalized final refit on that combined selected set. This is
-#'   distinct from late fusion, which combines prediction outputs.
+#'   distinct from canonical Late Fusion and STABL-Selected Late Fusion, which
+#'   combine prediction outputs.
 #' @param cooperative_fusion Logical. When `TRUE`, fit a multiview-based
 #'   cooperative comparator branch in addition to the existing per-omic STABL
 #'   fits. This branch is outside the formal Early Fusion, Late Fusion, and
@@ -92,8 +102,13 @@
 #'       list with `fit`, `refit`, Omic View-prefixed `selected_features`,
 #'       `selected_train`, and `selected_valid` for the concatenated
 #'       single-STABL run.}
-#'     \item{`late_fusion`}{`NULL` when `late_fusion = FALSE`.  Otherwise a
-#'       list with `weights` (data.frame), `train_predictions` (data.frame),
+#'     \item{`late_fusion`}{`NULL` when `late_fusion = FALSE`. Otherwise a list
+#'       with per-view penalized `models`, stacking `weights`,
+#'       `train_predictions`, `valid_predictions`, and `score`; multinomial
+#'       tasks also include `levels`, `log_loss`, and classification metrics.}
+#'     \item{`stabl_selected_late_fusion`}{`NULL` when
+#'       `stabl_selected_late_fusion = FALSE`. Otherwise a list with
+#'       `weights` (data.frame), `train_predictions` (data.frame),
 #'       `valid_predictions`, and `score`; multinomial tasks also include
 #'       `levels`, `log_loss`, and classification metrics.}
 #'     \item{`multiomic_stabl`}{Present only when `multiomic_stabl = TRUE`.
@@ -127,7 +142,8 @@ stabl_multiomic_train_validate <- function(
     random_state    = NULL,
     early_fusion    = FALSE,
     late_fusion     = FALSE,
-    n_iter_lf       = 10000L,
+    stabl_selected_late_fusion = FALSE,
+    n_iter_stacking = 10000L,
     multiomic_stabl = FALSE,
     cooperative_fusion = FALSE,
     rho             = NULL,
@@ -137,6 +153,8 @@ stabl_multiomic_train_validate <- function(
     cooperation_nfolds = 5L,
     ...
 ) {
+  extra_args <- list(...)
+  .reject_retired_stacking_args(extra_args)
   validate_multiomic_inputs(x_list = x_train_list, y = y_train,
                             groups = groups_train)
 
@@ -161,6 +179,14 @@ stabl_multiomic_train_validate <- function(
     )
   }
   lambda_by_omic <- .resolve_multiomic_lambda_grid(lambda_grid, omic_names)
+  if (identical(family, "cox") && isTRUE(late_fusion)) {
+    stop("`late_fusion = TRUE` does not support `family = 'cox'`.",
+         call. = FALSE)
+  }
+  if (identical(family, "cox") && isTRUE(stabl_selected_late_fusion)) {
+    stop("`stabl_selected_late_fusion = TRUE` does not support `family = 'cox'`.",
+         call. = FALSE)
+  }
 
   if (!is.null(x_valid_list)) {
     .validate_multiomic_validation_inputs(
@@ -347,104 +373,57 @@ stabl_multiomic_train_validate <- function(
     )
   }
 
-  # ---- Late fusion ---------------------------------------------------------
-  lf_result <- NULL
+  # ---- Canonical late fusion ----------------------------------------------
+  late_fusion_result <- NULL
   if (isTRUE(late_fusion)) {
-    if (identical(family, "cox")) {
-      stop("`late_fusion = TRUE` does not support `family = 'cox'`.",
-           call. = FALSE)
-    }
-    task_type    <- .family_to_task_type(family)
-
-    if (identical(task_type, "multiclass")) {
-      train_preds <- vector("list", length(omic_names))
-      names(train_preds) <- omic_names
-      valid_preds <- if (!is.null(x_valid_list)) {
-        out <- vector("list", length(omic_names))
-        names(out) <- omic_names
-        out
-      } else {
-        NULL
-      }
-    } else {
-      train_preds <- matrix(
-        NA_real_,
-        nrow = length(y_train),
-        ncol = length(omic_names),
-        dimnames = list(names(y_train), omic_names)
-      )
-      valid_preds <- if (!is.null(x_valid_list)) {
-        matrix(
-          NA_real_,
-          nrow = length(valid_ids),
-          ncol = length(omic_names),
-          dimnames = list(valid_ids, omic_names)
-        )
-      } else {
-        NULL
-      }
-    }
+    task_type <- .family_to_task_type(family)
+    late_fusion_models <- vector("list", length(omic_names))
+    names(late_fusion_models) <- omic_names
 
     for (omic in omic_names) {
-      omic_result <- refits[[omic]]
-      if (identical(task_type, "multiclass")) {
-        train_preds[[omic]] <- omic_result$training_predictions
-        if (!is.null(valid_preds)) {
-          valid_preds[[omic]] <- omic_result$valid_predictions
-        }
-      } else {
-        train_preds[, omic] <- omic_result$training_predictions
-        if (!is.null(valid_preds)) {
-          valid_preds[, omic] <- omic_result$valid_predictions
-        }
-      }
+      late_fusion_models[[omic]] <- .fit_late_fusion_glmnet_model(
+        x_train = x_train_list[[omic]],
+        y_train = y_train,
+        x_valid = if (is.null(x_valid_list)) NULL else x_valid_list[[omic]],
+        family = family,
+        base_learner = base_learner,
+        lambda_grid = lambda_by_omic[[omic]],
+        l1_ratio = l1_ratio,
+        n_lambda = extra_args[["n_lambda"]] %||% 30L,
+        adaptive_gamma = extra_args[["adaptive_gamma"]] %||% 1.0,
+        adaptive_epsilon = extra_args[["adaptive_epsilon"]] %||% 1e-6
+      )
     }
 
-    stacked <- stacked_multi_omic(
-      predictions  = train_preds,
-      y            = unname(y_train),
-      task_type    = task_type,
-      n_iter       = n_iter_lf,
+    late_fusion_result <- c(
+      list(models = late_fusion_models),
+      .stack_per_view_predictions(
+        per_view_models = late_fusion_models,
+        omic_names = omic_names,
+        y_train = y_train,
+        y_valid = y_valid,
+        valid_ids = valid_ids,
+        task_type = task_type,
+        n_iter_stacking = n_iter_stacking,
+        random_state = random_state
+      )
+    )
+  }
+
+  # ---- STABL-selected late fusion -----------------------------------------
+  lf_result <- NULL
+  if (isTRUE(stabl_selected_late_fusion)) {
+    task_type    <- .family_to_task_type(family)
+    lf_result <- .stack_per_view_predictions(
+      per_view_models = refits,
+      omic_names = omic_names,
+      y_train = y_train,
+      y_valid = y_valid,
+      valid_ids = valid_ids,
+      task_type = task_type,
+      n_iter_stacking = n_iter_stacking,
       random_state = random_state
     )
-
-    lf_valid_preds <- if (is.null(valid_preds)) {
-      NULL
-    } else if (identical(task_type, "multiclass")) {
-      .apply_multiclass_stack_weights(valid_preds, stacked$weights$Associated_weight)
-    } else {
-      w      <- stacked$weights$Associated_weight
-      w_mat  <- matrix(w, nrow = nrow(valid_preds),
-                       ncol = length(w), byrow = TRUE)
-      is_obs <- !is.na(valid_preds)
-      denom  <- rowSums(is_obs * w_mat)
-      num    <- rowSums(ifelse(is_obs, valid_preds * w_mat, 0))
-      ifelse(denom > 0, num / denom, NA_real_)
-    }
-
-    lf_result <- list(
-      weights           = stacked$weights,
-      train_predictions = stacked$predictions,
-      valid_predictions = lf_valid_preds,
-      score             = stacked$score
-    )
-    if (identical(task_type, "multiclass")) {
-      lf_result$task_type <- task_type
-      lf_result$levels <- stacked$levels
-      lf_result$log_loss <- stacked$log_loss
-      lf_result$train_metrics <- .classification_metrics(
-        truth = factor(y_train, levels = stacked$levels),
-        predicted = factor(stacked$predictions$predicted_class,
-                           levels = stacked$levels)
-      )
-      if (!is.null(y_valid) && !is.null(lf_valid_preds)) {
-        lf_result$valid_metrics <- .classification_metrics(
-          truth = factor(y_valid, levels = stacked$levels),
-          predicted = factor(lf_valid_preds$predicted_class,
-                             levels = stacked$levels)
-        )
-      }
-    }
   }
 
   # ---- Multi-Omic STABL final layer ---------------------------------------
@@ -483,7 +462,8 @@ stabl_multiomic_train_validate <- function(
     selected_train    = selected_train,
     selected_valid    = selected_valid,
     early_fusion      = ef_result,
-    late_fusion       = lf_result
+    late_fusion       = late_fusion_result,
+    stabl_selected_late_fusion = lf_result
   )
 
   if (!is.null(mos_result)) {
@@ -507,8 +487,9 @@ stabl_multiomic_train_validate <- function(
 #' fold-wise selection diagnostics together with selected train/validation
 #' matrices for downstream inspection.
 #'
-#' Optional early-fusion, late-fusion, Multi-Omic STABL, and
-#' cooperative-fusion branches are forwarded to each fold-specific
+#' Optional Early Fusion, canonical Late Fusion, STABL-Selected Late Fusion,
+#' Multi-Omic STABL, and Cooperative Fusion branches are forwarded to each
+#' fold-specific
 #' [stabl_multiomic_train_validate()] call.
 #'
 #' @param x_list Named list of omic tables (`data.frame` or numeric matrix),
@@ -535,9 +516,13 @@ stabl_multiomic_train_validate <- function(
 #'   assignment and forwarded to each per-fold [stabl_fit()] call.
 #' @param early_fusion Logical.  Forwarded to each per-fold
 #'   [stabl_multiomic_train_validate()] call.
-#' @param late_fusion Logical.  Forwarded to each per-fold
-#'   [stabl_multiomic_train_validate()] call.
-#' @param n_iter_lf Forwarded to [stabl_multiomic_train_validate()].
+#' @param late_fusion Logical. Forwarded to each per-fold
+#'   [stabl_multiomic_train_validate()] call. This enables canonical
+#'   prediction-level Late Fusion.
+#' @param stabl_selected_late_fusion Logical. Forwarded to each per-fold
+#'   [stabl_multiomic_train_validate()] call. This enables the
+#'   STABL-selected late-fusion comparator.
+#' @param n_iter_stacking Forwarded to [stabl_multiomic_train_validate()].
 #' @param multiomic_stabl Forwarded to [stabl_multiomic_train_validate()].
 #' @param cooperative_fusion Forwarded to
 #'   [stabl_multiomic_train_validate()].
@@ -583,7 +568,8 @@ stabl_multiomic_cv <- function(
   random_state    = NULL,
   early_fusion    = FALSE,
   late_fusion     = FALSE,
-  n_iter_lf       = 10000L,
+  stabl_selected_late_fusion = FALSE,
+  n_iter_stacking = 10000L,
   multiomic_stabl = FALSE,
   cooperative_fusion = FALSE,
   rho               = NULL,
@@ -593,6 +579,7 @@ stabl_multiomic_cv <- function(
   cooperation_nfolds = 5L,
   ...
 ) {
+  .reject_retired_stacking_args(list(...))
   validate_multiomic_inputs(x_list = x_list, y = y, groups = groups)
   if (isTRUE(early_fusion)) {
     .resolve_early_fusion_lambda_grid(lambda_grid)
@@ -644,7 +631,8 @@ stabl_multiomic_cv <- function(
       random_state    = random_state,
       early_fusion    = early_fusion,
       late_fusion     = late_fusion,
-      n_iter_lf       = n_iter_lf,
+      stabl_selected_late_fusion = stabl_selected_late_fusion,
+      n_iter_stacking = n_iter_stacking,
       multiomic_stabl = multiomic_stabl,
       cooperative_fusion = cooperative_fusion,
       rho             = rho,
@@ -670,6 +658,386 @@ stabl_multiomic_cv <- function(
     ),
     class = "stabl_multiomic_cv"
   )
+}
+
+.reject_retired_stacking_args <- function(args) {
+  retired <- intersect(names(args), "n_iter_lf")
+  if (length(retired) == 0L) {
+    return(invisible(NULL))
+  }
+
+  replacements <- c(
+    n_iter_lf = "n_iter_stacking"
+  )
+  details <- paste0(
+    "`", retired, "` was renamed to `", replacements[retired], "`",
+    collapse = "; "
+  )
+  stop(
+    paste0(
+      details,
+      ". `late_fusion` now names canonical prediction-level fusion; use ",
+      "`stabl_selected_late_fusion` for the STABL-selected hybrid."
+    ),
+    call. = FALSE
+  )
+}
+
+.fit_late_fusion_glmnet_model <- function(x_train,
+                                          y_train,
+                                          x_valid,
+                                          family,
+                                          base_learner,
+                                          lambda_grid,
+                                          l1_ratio,
+                                          n_lambda,
+                                          adaptive_gamma,
+                                          adaptive_epsilon) {
+  if (!requireNamespace("glmnet", quietly = TRUE)) {
+    stop(
+      "Package 'glmnet' is required for `late_fusion = TRUE`. ",
+      "Install it with: install.packages(\"glmnet\")",
+      call. = FALSE
+    )
+  }
+  if (identical(base_learner, "sparse_group_lasso")) {
+    stop(
+      "`late_fusion = TRUE` currently supports `base_learner = \"lasso\"`, ",
+      "`\"elastic_net\"`, or `\"adaptive_lasso\"`; sparse-group late fusion ",
+      "is not implemented.",
+      call. = FALSE
+    )
+  }
+  if (!base_learner %in% c("lasso", "elastic_net", "adaptive_lasso")) {
+    stop(
+      "`base_learner` must be one of: \"lasso\", \"elastic_net\", ",
+      "\"adaptive_lasso\", \"sparse_group_lasso\".",
+      call. = FALSE
+    )
+  }
+
+  if (is.data.frame(x_train)) x_train <- as.matrix(x_train)
+  if (!is.null(x_valid) && is.data.frame(x_valid)) x_valid <- as.matrix(x_valid)
+  if (!is.matrix(x_train) || !is.numeric(x_train)) {
+    stop("`x_train` must be a numeric matrix or data.frame.", call. = FALSE)
+  }
+  if (!is.null(x_valid) && (!is.matrix(x_valid) || !is.numeric(x_valid))) {
+    stop("`x_valid` must be a numeric matrix or data.frame.", call. = FALSE)
+  }
+
+  lambda_grid <- .late_fusion_lambda_grid(
+    lambda_grid = lambda_grid,
+    x_train = x_train,
+    y_train = y_train,
+    family = family,
+    base_learner = base_learner,
+    l1_ratio = l1_ratio,
+    n_lambda = n_lambda
+  )
+  task_type <- .family_to_task_type(family)
+  y_model <- .late_fusion_model_outcome(y_train, family)
+  penalty_factor <- .late_fusion_penalty_factor(
+    x_train = x_train,
+    y_model = y_model,
+    family = family,
+    base_learner = base_learner,
+    adaptive_gamma = adaptive_gamma,
+    adaptive_epsilon = adaptive_epsilon
+  )
+
+  best <- NULL
+  best_score <- -Inf
+  for (i in seq_len(nrow(lambda_grid))) {
+    lambda_i <- lambda_grid[["lambda"]][[i]]
+    alpha_i <- .late_fusion_alpha(base_learner, lambda_grid[i, , drop = FALSE])
+    fit_args <- list(
+      x = x_train,
+      y = y_model,
+      family = family,
+      alpha = alpha_i,
+      lambda = lambda_i
+    )
+    if (!is.null(penalty_factor)) {
+      fit_args$penalty.factor <- penalty_factor
+    }
+    model <- do.call(glmnet::glmnet, fit_args)
+    train_pred <- .late_fusion_predict_glmnet(
+      model = model,
+      newx = x_train,
+      family = family,
+      lambda = lambda_i,
+      levels = if (identical(task_type, "multiclass")) levels(y_model) else NULL
+    )
+    score <- .late_fusion_candidate_score(
+      y = y_train,
+      predictions = train_pred,
+      task_type = task_type
+    )
+    if (is.finite(score) && score > best_score) {
+      best_score <- score
+      best <- list(
+        model = model,
+        lambda = lambda_i,
+        alpha = alpha_i,
+        lambda_index = i,
+        training_predictions = train_pred
+      )
+    }
+  }
+
+  if (is.null(best)) {
+    stop("No finite late-fusion glmnet candidate score was obtained.",
+         call. = FALSE)
+  }
+
+  best$valid_predictions <- if (is.null(x_valid)) {
+    NULL
+  } else {
+    .late_fusion_predict_glmnet(
+      model = best$model,
+      newx = x_valid,
+      family = family,
+      lambda = best$lambda,
+      levels = if (identical(task_type, "multiclass")) levels(y_model) else NULL
+    )
+  }
+  best$model_type <- paste0("glmnet_", base_learner)
+  best$family <- family
+  best$task_type <- task_type
+  best$score <- best_score
+  best$lambda_grid <- lambda_grid
+  best
+}
+
+.late_fusion_lambda_grid <- function(lambda_grid,
+                                     x_train,
+                                     y_train,
+                                     family,
+                                     base_learner,
+                                     l1_ratio,
+                                     n_lambda) {
+  if (identical(lambda_grid, "auto")) {
+    auto_l1_ratio <- l1_ratio
+    if (is.null(auto_l1_ratio)) {
+      auto_l1_ratio <- if (identical(base_learner, "elastic_net")) {
+        c(0.5, 0.7, 0.9)
+      } else {
+        1.0
+      }
+    }
+    lambda_grid <- auto_lambda_grid(
+      x = x_train,
+      y = y_train,
+      family = family,
+      n_lambda = as.integer(n_lambda),
+      l1_ratio = auto_l1_ratio
+    )
+  }
+  if (!is.data.frame(lambda_grid) || !"lambda" %in% names(lambda_grid)) {
+    stop("Late Fusion requires `lambda_grid` to be a data.frame with a `lambda` column or \"auto\".",
+         call. = FALSE)
+  }
+  lambda_grid
+}
+
+.late_fusion_model_outcome <- function(y_train, family) {
+  if (identical(family, "gaussian") || identical(family, "poisson")) {
+    return(unname(as.numeric(y_train)))
+  }
+  if (identical(family, "binomial")) {
+    y_factor <- droplevels(factor(y_train))
+    if (length(levels(y_factor)) != 2L) {
+      stop("Binomial Late Fusion requires exactly two outcome classes.",
+           call. = FALSE)
+    }
+    return(y_factor)
+  }
+  if (identical(family, "multinomial")) {
+    y_factor <- droplevels(factor(y_train))
+    if (length(levels(y_factor)) < 2L) {
+      stop("Multinomial Late Fusion requires at least two outcome classes.",
+           call. = FALSE)
+    }
+    return(y_factor)
+  }
+  stop(
+    "`late_fusion = TRUE` supports family = 'gaussian', 'binomial', ",
+    "'multinomial', or 'poisson'.",
+    call. = FALSE
+  )
+}
+
+.late_fusion_penalty_factor <- function(x_train,
+                                        y_model,
+                                        family,
+                                        base_learner,
+                                        adaptive_gamma,
+                                        adaptive_epsilon) {
+  if (!identical(base_learner, "adaptive_lasso")) {
+    return(NULL)
+  }
+  init_fit <- glmnet::glmnet(
+    x = x_train,
+    y = y_model,
+    family = family,
+    alpha = 0,
+    nlambda = 30L
+  )
+  init_lambda <- utils::tail(init_fit$lambda, n = 1L)
+  init_scores <- .feature_abs_coefs(
+    fit = init_fit,
+    s = init_lambda,
+    family = family
+  )
+  1.0 / ((init_scores + adaptive_epsilon) ^ adaptive_gamma)
+}
+
+.late_fusion_alpha <- function(base_learner, lambda_row) {
+  if (!identical(base_learner, "elastic_net")) {
+    return(1.0)
+  }
+  if ("alpha" %in% names(lambda_row)) {
+    return(lambda_row[["alpha"]][[1L]])
+  }
+  1.0
+}
+
+.late_fusion_predict_glmnet <- function(model,
+                                        newx,
+                                        family,
+                                        lambda,
+                                        levels = NULL) {
+  pred <- stats::predict(
+    model,
+    newx = newx,
+    s = lambda,
+    type = if (identical(family, "multinomial")) "response" else "response"
+  )
+  if (!identical(family, "multinomial")) {
+    return(unname(as.numeric(pred)))
+  }
+
+  if (length(dim(pred)) == 3L) {
+    mat <- pred[, , 1L, drop = FALSE]
+    dim(mat) <- dim(mat)[1:2]
+    dimnames(mat) <- list(rownames(newx), dimnames(pred)[[2L]])
+  } else {
+    mat <- as.matrix(pred)
+    rownames(mat) <- rownames(newx)
+  }
+  if (!is.null(levels)) {
+    mat <- mat[, levels, drop = FALSE]
+  }
+  mat
+}
+
+.late_fusion_candidate_score <- function(y, predictions, task_type) {
+  if (identical(task_type, "binary")) {
+    return(.r_auc(.coerce_binary_stack_outcome(y), as.numeric(predictions)))
+  }
+  if (identical(task_type, "multiclass")) {
+    return(-.multiclass_log_loss(y, predictions))
+  }
+  .r_squared(as.numeric(y), as.numeric(predictions))
+}
+
+.stack_per_view_predictions <- function(per_view_models,
+                                        omic_names,
+                                        y_train,
+                                        y_valid,
+                                        valid_ids,
+                                        task_type,
+                                        n_iter_stacking,
+                                        random_state) {
+  if (identical(task_type, "multiclass")) {
+    train_preds <- vector("list", length(omic_names))
+    names(train_preds) <- omic_names
+    valid_preds <- if (is.null(valid_ids)) {
+      NULL
+    } else {
+      out <- vector("list", length(omic_names))
+      names(out) <- omic_names
+      out
+    }
+  } else {
+    train_preds <- matrix(
+      NA_real_,
+      nrow = length(y_train),
+      ncol = length(omic_names),
+      dimnames = list(names(y_train), omic_names)
+    )
+    valid_preds <- if (is.null(valid_ids)) {
+      NULL
+    } else {
+      matrix(
+        NA_real_,
+        nrow = length(valid_ids),
+        ncol = length(omic_names),
+        dimnames = list(valid_ids, omic_names)
+      )
+    }
+  }
+
+  for (omic in omic_names) {
+    omic_result <- per_view_models[[omic]]
+    if (identical(task_type, "multiclass")) {
+      train_preds[[omic]] <- omic_result$training_predictions
+      if (!is.null(valid_preds)) {
+        valid_preds[[omic]] <- omic_result$valid_predictions
+      }
+    } else {
+      train_preds[, omic] <- omic_result$training_predictions
+      if (!is.null(valid_preds)) {
+        valid_preds[, omic] <- omic_result$valid_predictions
+      }
+    }
+  }
+
+  stacked <- stacked_multi_omic(
+    predictions = train_preds,
+    y = unname(y_train),
+    task_type = task_type,
+    n_iter = n_iter_stacking,
+    random_state = random_state
+  )
+
+  valid_predictions <- if (is.null(valid_preds)) {
+    NULL
+  } else if (identical(task_type, "multiclass")) {
+    .apply_multiclass_stack_weights(valid_preds, stacked$weights$Associated_weight)
+  } else {
+    w <- stacked$weights$Associated_weight
+    w_mat <- matrix(w, nrow = nrow(valid_preds), ncol = length(w), byrow = TRUE)
+    is_obs <- !is.na(valid_preds)
+    denom <- rowSums(is_obs * w_mat)
+    num <- rowSums(ifelse(is_obs, valid_preds * w_mat, 0))
+    ifelse(denom > 0, num / denom, NA_real_)
+  }
+
+  out <- list(
+    weights = stacked$weights,
+    train_predictions = stacked$predictions,
+    valid_predictions = valid_predictions,
+    score = stacked$score,
+    task_type = task_type
+  )
+  if (identical(task_type, "multiclass")) {
+    out$levels <- stacked$levels
+    out$log_loss <- stacked$log_loss
+    out$train_metrics <- .classification_metrics(
+      truth = factor(y_train, levels = stacked$levels),
+      predicted = factor(stacked$predictions$predicted_class,
+                         levels = stacked$levels)
+    )
+    if (!is.null(y_valid) && !is.null(valid_predictions)) {
+      out$valid_metrics <- .classification_metrics(
+        truth = factor(y_valid, levels = stacked$levels),
+        predicted = factor(valid_predictions$predicted_class,
+                           levels = stacked$levels)
+      )
+    }
+  }
+  out
 }
 
 .resolve_multiomic_lambda_grid <- function(lambda_grid, omic_names) {

@@ -832,10 +832,107 @@ test_that("stabl_multiomic_cv forwards multiomic_stabl", {
 })
 
 # ---------------------------------------------------------------------------
-# Late fusion tests
+# Canonical late-fusion tests
 # ---------------------------------------------------------------------------
 
-test_that("late_fusion = TRUE adds late_fusion field with weights and predictions", {
+test_that("late_fusion = TRUE adds canonical prediction-level late_fusion field", {
+  set.seed(310)
+  n <- 30L
+  ids <- paste0("s", seq_len(n))
+  x_a <- matrix(rnorm(n * 5L), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(5L))))
+  x_b <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(4L))))
+  y <- setNames(1.2 * x_a[, 1L] - 0.8 * x_b[, 2L] + rnorm(n, sd = 0.3), ids)
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a, omic_b = x_b),
+    y_train = y,
+    lambda_grid = data.frame(lambda = c(0.2, 0.05)),
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    family = "gaussian",
+    random_state = 310L,
+    late_fusion = TRUE,
+    n_iter_stacking = 50L
+  ))
+
+  expect_false(is.null(fit$late_fusion))
+  expect_null(fit$stabl_selected_late_fusion)
+  lf <- fit$late_fusion
+  expect_named(lf, c("models", "weights", "train_predictions",
+                     "valid_predictions", "score", "task_type"))
+  expect_equal(lf$task_type, "regression")
+  expect_s3_class(lf$weights, "data.frame")
+  expect_equal(rownames(lf$weights), c("omic_a", "omic_b"))
+  expect_true("Stacked Gen. Predictions" %in% names(lf$train_predictions))
+  expect_equal(lf$models$omic_a$model_type, "glmnet_lasso")
+  expect_null(lf$valid_predictions)
+})
+
+test_that("late_fusion = TRUE with validation returns stacked validation predictions", {
+  set.seed(311)
+  n_tr <- 24L
+  n_va <- 8L
+  tr_ids <- paste0("tr", seq_len(n_tr))
+  va_ids <- paste0("va", seq_len(n_va))
+  x_a_tr <- matrix(rnorm(n_tr * 4L), nrow = n_tr,
+                   dimnames = list(tr_ids, paste0("a", seq_len(4L))))
+  x_b_tr <- matrix(rnorm(n_tr * 3L), nrow = n_tr,
+                   dimnames = list(tr_ids, paste0("b", seq_len(3L))))
+  x_a_va <- matrix(rnorm(n_va * 4L), nrow = n_va,
+                   dimnames = list(va_ids, paste0("a", seq_len(4L))))
+  x_b_va <- matrix(rnorm(n_va * 3L), nrow = n_va,
+                   dimnames = list(va_ids, paste0("b", seq_len(3L))))
+  y_tr <- setNames(x_a_tr[, 1L] - x_b_tr[, 2L] + rnorm(n_tr, sd = 0.2), tr_ids)
+  y_va <- setNames(rnorm(n_va), va_ids)
+
+  fit <- suppressWarnings(stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = x_a_tr, omic_b = x_b_tr),
+    y_train = y_tr,
+    lambda_grid = data.frame(lambda = c(0.2, 0.05)),
+    x_valid_list = list(omic_a = x_a_va, omic_b = x_b_va),
+    y_valid = y_va,
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 3L,
+    family = "gaussian",
+    random_state = 311L,
+    late_fusion = TRUE,
+    n_iter_stacking = 50L
+  ))
+
+  expect_type(fit$late_fusion$valid_predictions, "double")
+  expect_length(fit$late_fusion$valid_predictions, n_va)
+})
+
+test_that("late_fusion = TRUE rejects Cox before fitting per-view selectors", {
+  x <- matrix(
+    rnorm(12L),
+    nrow = 6L,
+    dimnames = list(paste0("s", seq_len(6L)), paste0("f", seq_len(2L)))
+  )
+  y <- setNames(seq_len(6L), rownames(x))
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(view = x),
+      y_train = y,
+      lambda_grid = data.frame(lambda = 1),
+      family = "cox",
+      late_fusion = TRUE
+    ),
+    "`late_fusion = TRUE` does not support `family = 'cox'`",
+    fixed = TRUE
+  )
+})
+
+# ---------------------------------------------------------------------------
+# STABL-selected late-fusion tests
+# ---------------------------------------------------------------------------
+
+test_that("stabl_selected_late_fusion = TRUE adds stabl_selected_late_fusion field with weights and predictions", {
   set.seed(31)
   n <- 30L
   x_a <- matrix(rnorm(n * 5L), nrow = n,
@@ -854,13 +951,15 @@ test_that("late_fusion = TRUE adds late_fusion field with weights and prediction
     n_bootstraps    = 4L,
     family          = "gaussian",
     random_state    = 10L,
-    late_fusion     = TRUE,
-    n_iter_lf       = 200L
+    stabl_selected_late_fusion     = TRUE,
+    n_iter_stacking       = 200L
   )
 
-  expect_false(is.null(fit$late_fusion))
-  lf <- fit$late_fusion
-  expect_named(lf, c("weights", "train_predictions", "valid_predictions", "score"))
+  expect_false(is.null(fit$stabl_selected_late_fusion))
+  lf <- fit$stabl_selected_late_fusion
+  expect_named(lf, c("weights", "train_predictions", "valid_predictions",
+                     "score", "task_type"))
+  expect_equal(lf$task_type, "regression")
   expect_s3_class(lf$weights, "data.frame")
   expect_equal(nrow(lf$weights), 2L)             # one row per omic
   expect_s3_class(lf$train_predictions, "data.frame")
@@ -868,7 +967,7 @@ test_that("late_fusion = TRUE adds late_fusion field with weights and prediction
   expect_null(lf$valid_predictions)              # no validation supplied
 })
 
-test_that("late_fusion = TRUE with validation returns valid_predictions vector", {
+test_that("stabl_selected_late_fusion = TRUE with validation returns valid_predictions vector", {
   set.seed(32)
   n_tr <- 24L; n_va <- 12L
   x_a_tr <- matrix(rnorm(n_tr * 4L), nrow = n_tr,
@@ -893,16 +992,16 @@ test_that("late_fusion = TRUE with validation returns valid_predictions vector",
     n_bootstraps    = 4L,
     family          = "gaussian",
     random_state    = 11L,
-    late_fusion     = TRUE,
-    n_iter_lf       = 200L
+    stabl_selected_late_fusion     = TRUE,
+    n_iter_stacking       = 200L
   )
 
-  lf <- fit$late_fusion
+  lf <- fit$stabl_selected_late_fusion
   expect_false(is.null(lf$valid_predictions))
   expect_equal(length(lf$valid_predictions), n_va)
 })
 
-test_that("late_fusion = TRUE supports multinomial probability stacking", {
+test_that("stabl_selected_late_fusion = TRUE supports multinomial probability stacking", {
   set.seed(321)
   n <- 24L
   ids <- paste0("s", seq_len(n))
@@ -925,11 +1024,11 @@ test_that("late_fusion = TRUE supports multinomial probability stacking", {
     sample_fraction = 1,
     family = "multinomial",
     random_state = 321L,
-    late_fusion = TRUE,
-    n_iter_lf = 100L
+    stabl_selected_late_fusion = TRUE,
+    n_iter_stacking = 100L
   ))
 
-  lf <- fit$late_fusion
+  lf <- fit$stabl_selected_late_fusion
   expect_equal(lf$task_type, "multiclass")
   expect_equal(lf$levels, levels(y))
   expect_equal(nrow(lf$weights), 2L)
@@ -941,7 +1040,7 @@ test_that("late_fusion = TRUE supports multinomial probability stacking", {
   expect_true(is.finite(lf$log_loss))
 })
 
-test_that("late_fusion = FALSE leaves late_fusion field NULL", {
+test_that("fusion branches are NULL when not requested", {
   set.seed(33)
   n <- 20L
   x <- matrix(rnorm(n * 4L), nrow = n,
@@ -955,11 +1054,25 @@ test_that("late_fusion = FALSE leaves late_fusion field NULL", {
     artificial_type = NULL,
     hard_threshold  = 0.3,
     n_bootstraps    = 4L,
-    late_fusion     = FALSE,
+    stabl_selected_late_fusion     = FALSE,
     random_state    = 6L
   )
 
   expect_null(fit$late_fusion)
+  expect_null(fit$stabl_selected_late_fusion)
+})
+
+test_that("retired stacking iteration API name errors clearly", {
+  expect_error(
+    stabl_multiomic_cv(
+      x_list = list(a = matrix(1, nrow = 1L, ncol = 1L)),
+      y = c(s1 = 1),
+      lambda_grid = data.frame(lambda = 1),
+      n_iter_lf = 10L
+    ),
+    "renamed to `n_iter_stacking`",
+    fixed = TRUE
+  )
 })
 
 test_that("print.stabl_multiomic_fit runs and reports class header", {
@@ -1005,7 +1118,7 @@ test_that("print.stabl_multiomic_cv runs and reports class header", {
   expect_output(print(fit), "stabl_multiomic_cv")
 })
 
-test_that("early, late, and multiomic STABL branches can coexist", {
+test_that("early, late, STABL-selected, and multiomic STABL branches can coexist", {
   set.seed(351)
   n <- 24L
   ids <- paste0("s", seq_len(n))
@@ -1027,18 +1140,22 @@ test_that("early, late, and multiomic STABL branches can coexist", {
     random_state = 351L,
     early_fusion = TRUE,
     late_fusion = TRUE,
+    stabl_selected_late_fusion = TRUE,
     multiomic_stabl = TRUE,
-    n_iter_lf = 50L
+    n_iter_stacking = 50L
   ))
 
   expect_false(is.null(fit$early_fusion))
   expect_false(is.null(fit$late_fusion))
+  expect_false(is.null(fit$stabl_selected_late_fusion))
   expect_false(is.null(fit$multiomic_stabl))
   expect_s3_class(fit$early_fusion$fit, "stabl_fit")
   expect_s3_class(fit$late_fusion$weights, "data.frame")
+  expect_s3_class(fit$stabl_selected_late_fusion$weights, "data.frame")
   expect_s3_class(fit$multiomic_stabl$refit$model, "lm")
   expect_true(all(grepl("__", fit$early_fusion$fit$feature_names, fixed = TRUE)))
   expect_equal(nrow(fit$late_fusion$train_predictions), n)
+  expect_equal(nrow(fit$stabl_selected_late_fusion$train_predictions), n)
   expect_equal(length(fit$multiomic_stabl$train_predictions), n)
 })
 
@@ -1065,7 +1182,7 @@ test_that("default multi-omic return structure is unchanged when cooperative_fus
   expect_named(
     fit,
     c("fits", "refits", "selected_features", "selected_train", "selected_valid",
-      "early_fusion", "late_fusion")
+      "early_fusion", "late_fusion", "stabl_selected_late_fusion")
   )
   expect_false("cooperative_fusion" %in% names(fit))
 })
@@ -1684,7 +1801,7 @@ test_that("cooperative accessors expose selected features and diagnostics", {
                             omic_b = matrix(nrow = 0, ncol = 0)),
       selected_valid = NULL,
       early_fusion = NULL,
-      late_fusion = NULL,
+      stabl_selected_late_fusion = NULL,
       cooperative_fusion = list(
         selected_features = list(omic_a = c("a1", "a3"), omic_b = "b2"),
         diagnostics = diagnostics
@@ -1719,7 +1836,7 @@ test_that("cooperative accessors expose one-vs-rest class-specific features", {
                             omic_b = matrix(nrow = 0, ncol = 0)),
       selected_valid = NULL,
       early_fusion = NULL,
-      late_fusion = NULL,
+      stabl_selected_late_fusion = NULL,
       cooperative_fusion = list(
         task_type = "multiclass_ovr",
         selected_features = list(omic_a = c("a1", "a3"),
@@ -1753,7 +1870,7 @@ test_that("cooperative accessors fail clearly when branch is absent", {
       selected_train = list(omic_a = matrix(nrow = 0, ncol = 0)),
       selected_valid = NULL,
       early_fusion = NULL,
-      late_fusion = NULL
+      stabl_selected_late_fusion = NULL
     ),
     class = "stabl_multiomic_fit"
   )
@@ -1771,7 +1888,7 @@ test_that("cooperative accessors support multiomic cv objects", {
                             omic_b = matrix(nrow = 0, ncol = 0)),
       selected_valid = NULL,
       early_fusion = NULL,
-      late_fusion = NULL,
+      stabl_selected_late_fusion = NULL,
       cooperative_fusion = list(
         selected_features = list(omic_a = "a1", omic_b = character(0)),
         diagnostics = data.frame(rho = 0, lambda = 0.1, metric_value = 0.2,

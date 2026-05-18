@@ -38,16 +38,17 @@ per-lambda FDP+ values.}
 }
 \description{
 Sweeps a grid of stability-score thresholds and computes the FDP+ estimate
-at each one, then identifies the threshold that minimises it.  For
-Python-original parity, features are counted only when their stability score
-is strictly greater than the candidate threshold.  This differs from the
-paper's formal \code{>=} notation.
+at each one, then identifies the threshold that minimises it.  Following
+the StablSRM paper-method implementation, features are counted when their
+stability score is greater than or equal to the candidate threshold. This
+intentionally differs from the upstream Python implementation's strict \code{>}
+tie behavior.
 }
 \details{
 The FDP+ at threshold \eqn{\tau} is estimated as:
 \deqn{\widehat{\text{FDP}}(\tau) =
-  \frac{(1/\pi) \cdot |\{j : \hat{q}_j^{\text{art}} > \tau\}| + 1}
-       {\max(1,\, |\{j : \hat{q}_j > \tau\}|)}}
+  \frac{(1/\pi) \cdot |\{j : \hat{q}_j^{\text{art}} \ge \tau\}| + 1}
+       {\max(1,\, |\{j : \hat{q}_j \ge \tau\}|)}}
 where \eqn{\pi} is \code{artificial_proportion}, \eqn{\hat{q}_j} are the
 maximum-over-lambda stability scores for real feature \eqn{j}, and
 \eqn{\hat{q}_j^{\text{art}}} are the scores for artificial feature \eqn{j}.

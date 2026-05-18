@@ -18,8 +18,9 @@ the original feature names from the training matrix.
 }
 \description{
 Returns a named logical vector that is \code{TRUE} for every feature whose
-maximum stability score is strictly greater than the effective threshold,
-matching the upstream Python STABL implementation.
+maximum stability score is greater than or equal to the effective threshold,
+matching the StablSRM paper-method implementation. This intentionally
+differs from the upstream Python implementation's strict \code{>} tie behavior.
 This is the primary accessor for downstream use of a fitted STABL model:
 index your data matrix with the returned mask, or pass the object to
 \code{\link[=get_feature_names_out]{get_feature_names_out()}} to obtain the names directly.
@@ -38,10 +39,10 @@ if \code{stabl_fit()} was called with both \code{artificial_type = NULL} and no
 \code{hard_threshold}.
 
 \strong{Explore fallback:} When \code{explore = TRUE} was set during fitting and no
-feature's score exceeds the threshold, the function lowers the cutoff to the
-\code{n_explore}-th largest score minus \code{0.01}, then reapplies strict \code{>}
-selection.  This mirrors Python STABL and can select more than \code{n_explore}
-features when scores are tied.
+feature's score meets the threshold, the function lowers the cutoff to the
+\code{n_explore}-th largest score minus \code{0.01}, then reapplies the paper-method
+\code{>=} selection rule. This can select more than \code{n_explore} features when
+scores are tied.
 }
 \seealso{
 \code{\link[=get_feature_names_out]{get_feature_names_out()}} to get names directly,

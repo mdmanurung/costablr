@@ -9,9 +9,10 @@ and how the main runtime paths fit together.
 `costablr` is a pure-R implementation of STABL for sparse, reliable biomarker
 discovery in high-dimensional clinical and omic data. The core selector uses
 bootstrap stability selection with artificial-feature FDP+ control. Predictive
-workflows layer unpenalized final refits, multi-omic early and late fusion,
-cooperative fusion through `multiview`, and nested cross-validation on top of
-that selector.
+workflows layer unpenalized final refits, multi-omic Early Fusion,
+canonical prediction-level Late Fusion, STABL-Selected Late Fusion,
+Multi-Omic STABL, Cooperative Fusion through `multiview`, and nested
+cross-validation on top of that selector.
 
 The package has no Python runtime dependency and no tidymodels runtime
 dependency.
@@ -48,7 +49,7 @@ Utilities:
 |---|---|---|
 | `stabl_fit` | `stabl_fit()` | `stabl_scores_`, `stabl_scores_artificial_`, `fdr_min_threshold_`, `FDRs_`, `min_fdr_`, `hard_threshold`, `artificial_type`, `artificial_type_used_`, `feature_names` |
 | `stabl_refit` | `stabl_refit()` | `selection`, `selected_features`, `final_model`, `task_type`, `feature_names`, `call` |
-| `stabl_multiomic_fit` | `stabl_multiomic_train_validate()` | `fits`, `refits`, `selected_features`, `early_fusion`, `late_fusion`, optional `cooperative_fusion` |
+| `stabl_multiomic_fit` | `stabl_multiomic_train_validate()` | `fits`, `refits`, `selected_features`, `early_fusion`, `late_fusion`, `stabl_selected_late_fusion`, optional `multiomic_stabl`, optional `cooperative_fusion` |
 | `stabl_multiomic_cv` | `stabl_multiomic_cv()` | `fold_results`, `diagnostics`, `performance`, `folds` |
 | `stabl_multiomic_nested_cv` | `stabl_multiomic_nested_cv()` | `outer_folds`, `fold_results`, `diagnostics`, `outer_predictions`, `performance` |
 
@@ -70,7 +71,7 @@ fields directly when they are pinning object contracts.
 | `R/stabl_accessors.R` | S3 accessors, print methods, cooperative accessors, threshold resolver |
 | `R/multiomic_workflows.R` | Multi-omic train/validation and CV orchestration |
 | `R/cv_helpers.R` | Shared fold and fold-ID helpers |
-| `R/late_fusion.R` | `stacked_multi_omic()` and late-fusion stacking helpers |
+| `R/stacked_generalization.R` | `stacked_multi_omic()` and prediction-stacking helpers |
 | `R/cooperative_fusion.R` | Multiview cooperative-fusion internals |
 | `R/nested_cv.R` | Nested cross-validation orchestration and nested result summaries |
 | `R/metrics.R` | Similarity and prediction metrics |
@@ -97,8 +98,10 @@ matrix -> `.fit_stabl_final_model()` -> `stabl_refit` object.
 Multi-omic train/validation:
 
 `stabl_multiomic_train_validate()` -> per-omic `stabl_fit()` and
-`stabl_refit()` -> optional early fusion -> optional late fusion through
-`stacked_multi_omic()` -> optional cooperative fusion through `multiview`.
+`stabl_refit()` -> optional early fusion -> optional canonical late fusion
+through full-view per-omic glmnet predictors and `stacked_multi_omic()` ->
+optional STABL-selected late fusion through `stacked_multi_omic()` -> optional
+cooperative fusion through `multiview`.
 
 Multi-omic CV:
 
@@ -115,12 +118,21 @@ Artificial features and FDP+:
 
 `make_artificial_features()` appends known-noise columns. `compute_fdp_plus()`
 compares real and artificial stability paths over candidate thresholds. Support
-uses strict `>`; per-bootstrap coefficient masks use `>= bootstrap_threshold`.
+uses the paper-method `>=` rule; per-bootstrap coefficient masks use
+`>= bootstrap_threshold`.
 
-Late fusion:
+Canonical late fusion:
 
-Per-omic refit predictions are stacked by `stacked_multi_omic()`, which uses
-random-search weights and task-specific scoring.
+Independent per-omic penalized glmnet predictors are fitted on full omic
+matrices and their predictions are stacked by `stacked_multi_omic()`. This
+branch is exposed as `late_fusion` and does not use STABL-selected features.
+
+STABL-selected late fusion:
+
+Per-omic STABL-selected Final Refit predictions are stacked by
+`stacked_multi_omic()`, which uses random-search weights and task-specific
+scoring. This branch is exposed as `stabl_selected_late_fusion`, not
+canonical Late Fusion.
 
 Cooperative fusion:
 

@@ -1,4 +1,4 @@
-# Late-fusion and stacked-generalization helpers.
+# Stacked-generalization helpers for prediction-level fusion.
 
 # ---------------------------------------------------------------------------
 # stacked_multi_omic

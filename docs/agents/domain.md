@@ -26,7 +26,7 @@ When docs conflict, follow the precedence order in `AGENTS.md`. In particular:
 After the required docs, read the source, tests, and user-facing docs relevant to the task:
 
 - Core STABL: `R/stabl_fit.R`, `R/stabl_refit.R`, `R/artificial_features.R`, `R/fdp_control.R`.
-- Multi-omic workflows: `R/multiomic_workflows.R`, `R/late_fusion.R`, `R/cooperative_fusion.R`.
+- Multi-omic workflows: `R/multiomic_workflows.R`, `R/stacked_generalization.R`, `R/cooperative_fusion.R`.
 - Cross-validation: `R/cv_helpers.R`, `R/nested_cv.R`.
 - Public contracts: `R/stabl_accessors.R`, `NAMESPACE`, `README.md`, vignettes.
 - Validation: `tests/testthat/`, parity fixtures, and documented commands in `HANDOFF.md`.

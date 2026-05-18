@@ -44,8 +44,8 @@ test_that("AUDIT INT-003: shuffled named y is aligned before late fusion", {
     n_bootstraps = 2L,
     sample_fraction = 1,
     family = "gaussian",
-    late_fusion = TRUE,
-    n_iter_lf = 20L,
+    stabl_selected_late_fusion = TRUE,
+    n_iter_stacking = 20L,
     random_state = 7L
   )
   fit_ordered <- suppressWarnings(do.call(
@@ -59,8 +59,8 @@ test_that("AUDIT INT-003: shuffled named y is aligned before late fusion", {
 
   expect_equal(fit_ordered$selected_features, fit_shuffled$selected_features)
   expect_equal(
-    fit_ordered$late_fusion$train_predictions,
-    fit_shuffled$late_fusion$train_predictions,
+    fit_ordered$stabl_selected_late_fusion$train_predictions,
+    fit_shuffled$stabl_selected_late_fusion$train_predictions,
     ignore_attr = TRUE
   )
 })
@@ -94,13 +94,13 @@ test_that("AUDIT INT-004: validation predictors without y_valid return late pred
     hard_threshold = 1,
     n_bootstraps = 2L,
     sample_fraction = 1,
-    late_fusion = TRUE,
-    n_iter_lf = 5L,
+    stabl_selected_late_fusion = TRUE,
+    n_iter_stacking = 5L,
     random_state = 1L
   ))
 
-  expect_type(fit$late_fusion$valid_predictions, "double")
-  expect_length(fit$late_fusion$valid_predictions, 4L)
+  expect_type(fit$stabl_selected_late_fusion$valid_predictions, "double")
+  expect_length(fit$stabl_selected_late_fusion$valid_predictions, 4L)
 })
 
 test_that("AUDIT INT-005: stacked_multi_omic rejects recycled short y", {

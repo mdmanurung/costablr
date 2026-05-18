@@ -10,15 +10,17 @@
 selection in high-dimensional clinical and omic datasets.  The package
 provides a core bootstrap stability-selection engine, FDP+ threshold
 calibration with artificial features, glmnet-family learner adapters, and
-multi-omic workflows for per-omic, early-fusion, late-fusion, and
-cooperative-fusion analyses.
+multi-omic workflows for per-omic, early-fusion, canonical late-fusion,
+STABL-selected late-fusion, Multi-Omic STABL, and cooperative-fusion
+analyses.
 }
 \section{Main workflows}{
 
 \itemize{
 \item \code{\link[=stabl_fit]{stabl_fit()}} fits the core single-matrix STABL selector.
 \item \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} runs train/validation multi-omic
-workflows with optional early, late, and cooperative fusion.
+workflows with optional Early Fusion, canonical Late Fusion,
+STABL-Selected Late Fusion, Multi-Omic STABL, and Cooperative Fusion.
 \item \code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} runs outer cross-validation for named
 multi-omic inputs, preserving optional group structure.
 }

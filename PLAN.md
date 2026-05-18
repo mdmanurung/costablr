@@ -74,19 +74,21 @@ The core port baseline (Phases 1-8) is complete. This plan now tracks only remai
 
 For command-level evidence and exact validation results, use `PROGRESS.md`.
 
-Current method baseline follows the upstream Python STABL implementation
-(`gregbellan/Stabl@1d07f85`) when executable code and paper notation differ.
-FDP+ counts and selected support use Python-original strict `>` thresholding,
-so ties at the reliability threshold are not counted or selected.
+Current method baseline follows the StablSRM paper-method implementation for
+FDP+ counts and selected support: stability scores equal to the reliability
+threshold are counted and selected with `>=`. This is an explicit, intentional
+divergence from upstream Python STABL's strict `>` tie behavior.
 Artificial-feature counts use `floor(p * artificial_proportion)`, with the
 default `artificial_proportion = 1` still recovering the paper's `q = p`
 construction. The R `fdr_threshold_range` default remains
 `seq(0, 0.99, by = 0.01)`, matching Python's `np.arange(0., 1., .01)` sweep.
 The core selector still exposes Python's `bootstrap_threshold` control with
 the upstream effective default `1e-5` and sklearn-style per-bootstrap `>=`
-coefficient thresholding. Auto-lambda mode now uses Python-shaped gaussian,
+coefficient thresholding. Auto-lambda mode uses Python-shaped gaussian,
 binomial, and multinomial grids where possible, with Cox remaining an R-only
-glmnet-native path because upstream Python STABL has no Cox backend.
+glmnet-native path because upstream Python STABL has no Cox backend. The
+compact source-of-truth ledger for these choices is the
+`STABL.md` "Intentional Python Divergences" table.
 
 ## Active Dependencies
 
@@ -133,12 +135,24 @@ Paper-level **Multi-Omic STABL** final-layer parity is implemented for
 train/validation and CV workflows as of 2026-05-18:
 `stabl_multiomic_train_validate(multiomic_stabl = TRUE)` returns a
 `$multiomic_stabl` branch, and `stabl_multiomic_cv()` forwards the same flag to
-each fold. This branch is intentionally distinct from `late_fusion = TRUE`:
-late fusion stacks prediction outputs, while Multi-Omic STABL concatenates
-per-view selected biomarkers and performs one final refit. Remaining forward
-scope: `stabl_multiomic_nested_cv()` integration is deferred because nested CV
-uses its own candidate-selection abstraction; the follow-up should add an
-explicit Multi-Omic STABL candidate type rather than simple flag forwarding.
+each fold. This branch is intentionally distinct from `stabl_selected_late_fusion = TRUE`:
+canonical Late Fusion stacks prediction outputs from independently trained
+per-view predictors, while Multi-Omic STABL concatenates per-view selected
+biomarkers and performs one final refit. Canonical Late Fusion is now exposed
+as `late_fusion = TRUE` and returns a `$late_fusion` branch built from
+independently trained per-view penalized glmnet predictors plus the shared
+`stacked_multi_omic()` weight search. The
+`stabl_selected_late_fusion = TRUE` branch remains a STABL-Selected Late Fusion
+hybrid because it first runs per-view STABL selection before stacking per-view
+final-refit predictions; preserving it as a separate comparator is useful, but
+it is not the canonical paper baseline.
+Remaining forward scope: `stabl_multiomic_nested_cv()` integration is deferred
+because nested CV uses its own candidate-selection abstraction; the follow-up
+should add an explicit Multi-Omic STABL candidate type rather than simple flag
+forwarding. Scratch analysis branch renaming is also deferred: existing
+`scratch/scripts` and historical artifacts may still use `late_fusion` for the
+older STABL-selected hybrid and may still pass `n_iter_lf`; do not treat those
+analysis artifacts as the package API contract until that cleanup is scheduled.
 Early Fusion now also preserves Omic View provenance by prefixing concatenated
 candidate biomarker names as `<Omic View>__<original feature>` before the
 single STABL Selector is fitted. Top-level `stabl_multiomic_cv()` diagnostics
@@ -146,13 +160,29 @@ remain per-fold/per-Omic View selector diagnostics; combined Multi-Omic STABL
 final-layer details remain inside each fold's `$multiomic_stabl` branch. Early
 Fusion requires a shared lambda grid (`"auto"` or one `data.frame`); per-omic
 lambda-grid lists remain available for per-view STABL and Multi-Omic STABL but
-are rejected for Early Fusion. Early Fusion, Late Fusion, and Multi-Omic STABL
-remain additive comparison branches and may be enabled together in the same
-workflow call. Cooperative Fusion remains a separate comparator branch outside
-the formal Early Fusion / Late Fusion / Multi-Omic STABL taxonomy.
-Cox Late Fusion remains deferred: the current stacker handles binary AUC,
-regression R^2, and multiclass log loss, while Cox requires survival-aware
-weight selection over risk scores and `Surv(time, event)` outcomes.
+are rejected for Early Fusion. Early Fusion, canonical Late Fusion,
+STABL-Selected Late Fusion, and Multi-Omic STABL remain additive comparison
+branches and may be enabled together in the same workflow call. Cooperative
+Fusion remains a separate comparator branch outside the formal Early Fusion /
+Late Fusion / Multi-Omic STABL taxonomy. Its contract now explicitly documents
+the cooperative agreement penalty, `rho` tuning, original-sample CV
+constraint, current `multiview` direct/GLM implementation, multinomial
+one-vs-rest wrapper, and the fact that arbitrary-model one-view-at-a-time
+cooperative learning is background methodology rather than the current package
+implementation. Cox prediction fusion remains deferred: the current stacker
+handles binary AUC, regression R^2, and
+multiclass log loss, while Cox requires survival-aware weight selection over
+risk scores and
+`Surv(time, event)` outcomes.
+
+Deferred design reminder: after the planned API simplification pass, revisit
+Base-SRM Consensus for robust biomarker discovery. The agreed shape is
+single-view first, running separate STABL Selector fits over the same candidate
+biomarkers with `base_learner = "lasso"`, `"elastic_net"`, and
+`"adaptive_lasso"`, then retaining a Consensus Biomarker Set with the Majority
+Consensus Rule (`min_selectors = 2` of 3 by default). This is distinct from a
+SuperLearner Final Refit: the consensus feature is about recurrent selected
+biomarkers, not prediction ensembling.
 
 0. ~~**[ACTIVE] Vignette render validation after narrative rewrite.**~~
    **CLOSED 2026-05-12.** SLURM array `24752130` created HTML output for all
@@ -302,11 +332,13 @@ weight selection over risk scores and `Surv(time, event)` outcomes.
     and removed the dead DESCRIPTION URL. Acceptance signal: full local tests
     pass with no failures; final `rcmdcheck --no-manual --as-cran` has
     `0 errors`, with only local/release hygiene warning-note items remaining.
-24. ~~Restore Python-original STABL selector defaults.~~
-    **CLOSED 2026-05-18.** Core selector semantics now match upstream Python
-    for strict FDP+/support thresholding, floor-based artificial counts,
-    cutoff-lowering explore fallback, and Python-shaped auto-lambda grids.
-    Detailed evidence lives in `PROGRESS.md`.
+24. ~~Document paper-method STABL selector thresholding and keep non-threshold
+    Python-shaped defaults.~~
+    **CLOSED 2026-05-18.** FDP+/support thresholding intentionally follows the
+    paper-method `>=` implementation rather than upstream Python's strict `>`
+    tie behavior. Floor-based artificial counts, cutoff-lowering explore
+    fallback, and Python-shaped auto-lambda grids remain current. Detailed
+    evidence lives in `PROGRESS.md`.
 
 ## Remediation Audit Execution Status (2026-05-08)
 
@@ -371,12 +403,13 @@ conda run -n R4_51 Rscript -e "testthat::test_local('.')"
 ### Fix 1 — `get_support` explore fallback over-selects on tied scores [SUPERSEDED 2026-05-18]
 
 This earlier audit finding treated Python's cutoff-lowering explore fallback as
-a bug and proposed exact top-`n_explore` selection. The 2026-05-18
-Python-original parity decision supersedes that remediation. `costablr` now
-intentionally mirrors Python: if no feature passes and `explore = TRUE`, lower
-the cutoff to the `n_explore`-th largest score minus `0.01`, then select scores
-strictly greater than that cutoff. Ties can select more than `n_explore`
-features, including all features when all stability scores are zero.
+a bug and proposed exact top-`n_explore` selection. The current paper-method
+contract keeps the cutoff-lowering rule but uses the paper-method comparator:
+if no feature passes and `explore = TRUE`, lower the cutoff to the
+`n_explore`-th largest score minus `0.01`, then select scores greater than or
+equal to that cutoff. Ties can
+select more than `n_explore` features, including all features when all
+stability scores are zero.
 
 ---
 
@@ -660,10 +693,10 @@ Promotion criteria:
 - 2026-05-18: Refactoring roadmap PR-9 is closed. Shared multiomic and nested
   fold helpers now live in `R/cv_helpers.R`, with fixed-seed characterization
   tests in `tests/testthat/test-cv-helpers.R`. The next roadmap item is PR-10
-  extraction of late-fusion/stacking helpers.
+  extraction of prediction-stacking helpers.
 - 2026-05-18: Refactoring roadmap PR-10 is closed. Exported
-  `stacked_multi_omic()` and late-fusion/stacking helpers now live in
-  `R/late_fusion.R`. The next roadmap item is PR-11 cooperative-fusion
+  `stacked_multi_omic()` and prediction-stacking helpers now live in
+  `R/stacked_generalization.R`. The next roadmap item is PR-11 cooperative-fusion
   extraction.
 - 2026-05-18: Refactoring roadmap PR-11 is closed. Cooperative-fusion helpers
   now live in `R/cooperative_fusion.R`, and `R/multiomic_workflows.R` is below
@@ -691,6 +724,13 @@ Promotion criteria:
   read `docs/agents/` for the GitHub issue tracker, default triage labels,
   and single-context domain-doc layout; no roadmap gate is open from this
   setup-only change.
+- 2026-05-18: Cooperative Fusion contract clarification is complete. `STABL.md`
+  now describes the agreement-penalty objective, direct augmented-design
+  interpretation, `rho` tuning policy, original-sample CV constraint, scalar
+  `multiview` family support, multinomial one-vs-rest wrapper, and the boundary
+  between the current direct/GLM implementation and future arbitrary-learner
+  iterative cooperative learning. No implementation change is open from this
+  documentation-only clarification.
 - 2026-05-14: All active scratch costablr SLURM workflows were resubmitted
   from preprocessing after raw-data file paths were fixed. Track the fresh
   job chain `24773426` through `24773436` from the notebook dashboards or
@@ -707,10 +747,10 @@ Promotion criteria:
   unpenalized final refit after selection. `stabl_fit()` remains the
   low-level selector; `stabl_refit()` owns the single-matrix end-to-end
   workflow; multi-omic train/validate results now carry per-omic `$refits`,
-  early fusion carries `$early_fusion$refit`, late fusion reuses the same
-  refits, and nested CV selected-candidate evaluation uses the shared refit
-  helper. Implementation evidence is logged in `PROGRESS.md`; no additional
-  roadmap gate is open.
+  early fusion carries `$early_fusion$refit`, STABL-Selected Late Fusion reuses
+  the same refits for prediction stacking, and nested CV selected-candidate
+  evaluation uses the shared refit helper. Implementation evidence is logged
+  in `PROGRESS.md`; no additional roadmap gate is open.
 - 2026-05-13: The R package moved from the previous monorepo package
   subdirectory into the standalone repository
   `/exports/para-lipg-hpc/mdmanurung/costablr`, with `DESCRIPTION` at the

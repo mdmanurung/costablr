@@ -35,8 +35,8 @@ We will:
 
 1. Loading the bundled example data with `load_ool_data()`.
 2. Running per-omic STABL --- a useful baseline before integration.
-3. Running the integrated multi-omic workflow with **early fusion** and
-   **late fusion**.
+3. Running the integrated multi-omic workflow with **early fusion**,
+   canonical **late fusion**, and **STABL-selected late fusion**.
 4. Comparing selected features across strategies.
 5. Exporting results.
 
@@ -46,7 +46,8 @@ By the end, you should be able to:
 
 1. Understand the data structure returned by `load_ool_data()`.
 2. Run STABL independently on each omic and interpret the outputs.
-3. Explain the difference between early fusion and late fusion.
+3. Explain the difference between early fusion, canonical late fusion, and
+   STABL-selected late fusion.
 4. Run `stabl_multiomic_train_validate()` and navigate its result list.
 5. Compare which features appear across integration strategies.
 6. Export results for downstream use.
@@ -193,13 +194,14 @@ plot_stabl_path(fit_prot,      title = "Proteomics - stability path")
 ## 3. Integrated multi-omic workflow
 
 `stabl_multiomic_train_validate()` puts the train/validation analysis into one
-call.  It accepts matched omic matrices and evaluates two complementary ways to
+call.  It accepts matched omic matrices and evaluates complementary ways to
 let the views interact:
 
 | Strategy | How it works | Best when |
 |---|---|---|
 | **Early fusion** | Concatenates all omic matrices into one wide matrix, then runs a *single* STABL fit across all features jointly. | Omics are measured on the same samples; you want a unified biomarker list. |
-| **Late fusion** | Fits one STABL + downstream model per omic separately, then learns a weighted combination of training predictions and applies those weights to validation predictions. | You want to know each omic's independent predictive contribution. |
+| **Late fusion** | Fits one penalized predictive model per omic on the full per-view matrix, then learns a weighted combination of per-omic predictions. | You want the canonical prediction-level fusion baseline without STABL-selected features. |
+| **STABL-selected late fusion** | Fits one STABL + downstream model per omic separately, then learns a weighted combination of training predictions and applies those weights to validation predictions. | You want to know each omic's independent predictive contribution after per-view selection. |
 
 Key arguments:
 
@@ -207,8 +209,8 @@ Key arguments:
 |---|---|
 | `x_train_list` / `x_valid_list` | Named lists of feature matrices; names must match between train and valid. |
 | `lambda_grid` | Named list of lambda grids, one per omic (names must match `x_train_list`). |
-| `early_fusion` / `late_fusion` | Toggle each strategy on or off independently. |
-| `n_iter_lf` | Number of optimisation iterations for the late-fusion weight search. |
+| `early_fusion` / `late_fusion` / `stabl_selected_late_fusion` | Toggle each strategy on or off independently. |
+| `n_iter_stacking` | Number of optimisation iterations for the late-fusion and STABL-selected late-fusion weight searches. |
 
 The printed `multi_fit` object summarises every active strategy and reports
 validation metrics, Spearman rho for regression and AUROC for classification,
@@ -236,7 +238,8 @@ multi_fit <- stabl_multiomic_train_validate(
   artificial_type = "modelx_knockoff",
   early_fusion    = TRUE,
   late_fusion     = TRUE,
-  n_iter_lf       = 500L,
+  stabl_selected_late_fusion = TRUE,
+  n_iter_stacking = 500L,
   random_state    = 42L
 )
 
@@ -255,7 +258,10 @@ elements are:
 - **`$early_fusion`**: result of the early-fusion step (if
   `early_fusion = TRUE`), containing `$fit` (a `stabl_fit` on the concatenated
   matrix).
-- **`$late_fusion`**: result of the late-fusion step (if `late_fusion = TRUE`),
+- **`$late_fusion`**: result of canonical prediction-level late fusion (if
+  `late_fusion = TRUE`), containing per-view penalized `$models`,
+  `$valid_predictions`, and `$weights`.
+- **`$stabl_selected_late_fusion`**: result of the STABL-selected late-fusion step (if `stabl_selected_late_fusion = TRUE`),
   containing `$valid_predictions` (validation predictions) and `$weights`
   (per-omic importance weights).
 
@@ -285,10 +291,18 @@ another omic carries the same information.  That is a property of the joint
 question, not a failure of the method.
 
 ```{r late-fusion-results}
-# Late fusion: optimal linear combination of per-omic predictions
+# Canonical late fusion: optimal linear combination of full-view model predictions
 if (!is.null(multi_fit$late_fusion)) {
-  cat("Late fusion validation predictions (first 6):\n")
-  print(head(multi_fit$late_fusion$valid_predictions))
+  cat("Late-fusion omic weights:\n")
+  print(multi_fit$late_fusion$weights)
+}
+```
+
+```{r stabl-selected-late-fusion-results}
+# STABL-selected late fusion: optimal linear combination of per-omic predictions
+if (!is.null(multi_fit$stabl_selected_late_fusion)) {
+  cat("STABL-selected late-fusion validation predictions (first 6):\n")
+  print(head(multi_fit$stabl_selected_late_fusion$valid_predictions))
 }
 ```
 

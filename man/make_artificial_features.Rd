@@ -8,12 +8,12 @@ make_artificial_features(x, n_injected, type, random_state = NULL)
 }
 \arguments{
 \item{x}{Numeric matrix of predictors (samples \eqn{\times} features).
-Must have more columns than \code{n_injected} for random permutation; for
+Must have at least \code{n_injected} columns for random permutation; for
 knockoffs, must yield finite Gaussian moment estimates (a fallback to
 random permutation is attempted otherwise).}
 
 \item{n_injected}{Positive integer; number of artificial columns to append.
-Typically \code{round(ncol(x) * artificial_proportion)} as computed in
+Typically \code{floor(ncol(x) * artificial_proportion)} as computed in
 \code{\link[=stabl_fit]{stabl_fit()}}.}
 
 \item{type}{Character string; \code{"random_permutation"}, \code{"modelx_knockoff"},

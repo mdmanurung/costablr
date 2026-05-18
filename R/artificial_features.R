@@ -217,11 +217,11 @@ make_modelx_knockoff_features <- function(x, n_injected, random_state = NULL) {
 #' }
 #'
 #' @param x Numeric matrix of predictors (samples \eqn{\times} features).
-#'   Must have more columns than `n_injected` for random permutation; for
+#'   Must have at least `n_injected` columns for random permutation; for
 #'   knockoffs, must yield finite Gaussian moment estimates (a fallback to
 #'   random permutation is attempted otherwise).
 #' @param n_injected Positive integer; number of artificial columns to append.
-#'   Typically `round(ncol(x) * artificial_proportion)` as computed in
+#'   Typically `floor(ncol(x) * artificial_proportion)` as computed in
 #'   [stabl_fit()].
 #' @param type Character string; `"random_permutation"`, `"modelx_knockoff"`,
 #'   or `"mvr_knockoff"`.

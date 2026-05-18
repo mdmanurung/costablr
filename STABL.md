@@ -6,10 +6,11 @@ This file is the algorithmic contract for the R implementation of STABL in
 `costablr`.
 
 The Nature Biotechnology StablSRM methods description is the mathematical
-method reference. The upstream Python STABL implementation, currently audited
-against `gregbellan/Stabl@1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`, remains
-the executable reference for implementation details unless this document
-records an explicit paper-method decision.
+method reference and the source of truth for thresholding. The upstream Python
+STABL implementation, currently audited against
+`gregbellan/Stabl@1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`, remains the
+executable reference for implementation details unless this document records an
+explicit paper-method decision.
 
 - Planning and phase gates are tracked in `PLAN.md`.
 - Implemented work and validation evidence are tracked in `PROGRESS.md`.
@@ -41,8 +42,8 @@ The following repository decisions are the authoritative reconciliations for
 `costablr`:
 
 - **Thresholding precedence:** for FDP+ counts and final support, `costablr`
-  follows the paper's greater-than-or-equal (`>=`) notation. This intentionally
-  differs from the upstream Python implementation, which uses strict
+  implements the paper-method greater-than-or-equal (`>=`) rule. This is a
+  deliberate, documented divergence from upstream Python, which uses strict
   greater-than (`>`) comparisons in tie cases.
 - **Artificial-feature count:** the paper's main construction uses one
   artificial feature per original feature. `costablr` generalizes this with
@@ -59,7 +60,7 @@ The following repository decisions are the authoritative reconciliations for
   stability-score comparator, which is `>=`.
 - **Explore fallback:** Python lowers the final cutoff to the `n_explore`-th
   largest score minus `0.01` when no features pass and `explore = TRUE`, then
-  `costablr` reapplies paper-notation `>=` support extraction. This can select
+  `costablr` reapplies the paper-method `>=` support rule. This can select
   more than `n_explore` features when scores are tied, including all-zero
   stability scores.
 - **Auto lambda:** explicit user-provided `lambda_grid` values are preserved.
@@ -83,8 +84,24 @@ The following repository decisions are the authoritative reconciliations for
 
 These decisions are parity-critical unless a future change explicitly updates
 this contract, implementation, and tests together. The `>=` stability-score
-threshold decision is a deliberate paper-method divergence from upstream Python
-tie handling.
+threshold decision is the paper-method implementation used by this repository,
+even though it breaks exact Python tie-case parity.
+
+## Intentional Python Divergences
+
+These are known, intentional differences from upstream Python STABL. Do not
+"fix" them back to Python behavior unless `STABL.md`, implementation, and
+tests are changed together.
+
+| Area | `costablr` behavior | Upstream Python behavior | Status |
+|---|---|---|---|
+| FDP+ threshold counts | Uses the paper-method `f_j >= t` rule. Ties count. | Uses strict `f_j > t`; ties do not count. | Intentional paper-method implementation. |
+| Final support extraction | Uses the paper-method `f_j >= theta` rule. Ties are selected. | Uses strict `f_j > theta`; ties are not selected. | Intentional paper-method implementation. |
+| Explore fallback comparator | Lowers the cutoff to the `n_explore`-th largest score minus `0.01`, then applies `>=`. | Lowers the cutoff by `0.01`, then applies strict `>`. | Hybrid by design: Python cutoff rule plus paper-method support rule. |
+| Classification auto lambda | Approximates Python's `l1_min_c()` path shape and maps `C` to glmnet `lambda = 1 / C`. | Uses sklearn's exact `l1_min_c()` scale and estimators consuming `C`. | Scale mismatch is unavoidable across sklearn/glmnet objectives. |
+| Adaptive lasso | Uses glmnet with ridge-derived `penalty.factor` weights. | Uses iterative feature reweighting inside sklearn-style adaptive estimators. | Known implementation difference. |
+| Artificial-feature options | Uses `"modelx_knockoff"` for Gaussian model-X knockoffs and adds `"mvr_knockoff"`. | Uses `"knockoff"` for Gaussian model-X knockoffs. | Naming clarified; MVR is an R extension. |
+| R-only workflow extensions | Supports Cox, bootstrap strata, hardened grouped sampling, native correlation grouping, and multi-omic workflow branches. | Not all are present in upstream Python STABL. | R package extensions; not Python parity targets. |
 
 ## Formal Single-View Algorithm
 
@@ -158,7 +175,7 @@ abs(beta_hat_j(k, lambda)) >= bootstrap_threshold
 ```
 
 This bootstrap-level `>=` comparator is applied to fitted coefficients. It is
-the same closed-threshold convention used by paper-notation FDP+ and support
+the same closed-threshold convention used by paper-method FDP+ and support
 thresholding, though it applies to fitted coefficients rather than stability
 scores.
 
@@ -183,7 +200,7 @@ grid; the maximum is still taken over the realised grid rows.
 ### Step 4: FDP+ Surrogate
 
 For a candidate stability threshold `t`, `costablr` counts selected original and
-artificial features using the paper's `>=` comparator. This intentionally
+artificial features using the paper-method `>=` comparator. This intentionally
 differs from the executable Python code's strict `>` tie behavior:
 
 ```text
@@ -198,7 +215,7 @@ FDP_+(t) = (1 + (1 / pi) * N_art(t)) / max(1, N_real(t))
 ```
 
 The additive `1` in the numerator, denominator floor, `(1 / pi)` scaling, and
-paper-notation `>=` comparator are all part of the repository contract.
+paper-method `>=` comparator are all part of the repository contract.
 
 ### Step 5: Reliability Threshold and Selected Set
 
@@ -218,9 +235,9 @@ theta in argmin_{t in T} FDP_+(t)
 
 with implementation fallback `theta = 1` when the minimum FDP+ exceeds `1`.
 Because the default grid includes zero, a data-driven `theta = 0` is valid.
-Under paper-notation `>=` support semantics, `theta = 1` selects features with
-stability score exactly `1`, and `theta = 0` selects all features with valid
-stability scores, including scores exactly `0`.
+Under the paper-method `>=` support semantics, `theta = 1` selects features
+with stability score exactly `1`, and `theta = 0` selects all features with
+valid stability scores, including scores exactly `0`.
 
 The final selected original-feature set is:
 
@@ -284,21 +301,47 @@ lists are rejected for Early Fusion instead of silently using one view's grid.
 
 Late fusion trains separate per-view predictive models and combines their
 prediction outputs, for example by averaging predictions or by fitting a second
-model on those predictions.
+model on those predictions. Canonical Late Fusion is a prediction-level
+baseline: it does not concatenate selected biomarkers and does not require the
+STABL reliability-threshold machinery.
 
-In `costablr`, `stabl_multiomic_train_validate(late_fusion = TRUE)` implements
-prediction-level fusion: each omic view receives its own STABL selector and
-final refit, and `stacked_multi_omic()` combines the per-view predictions with
-learned non-negative view weights. This is downstream workflow logic, not part
-of the core STABL selector.
+In `costablr`, `stabl_multiomic_train_validate(late_fusion = TRUE)` now owns
+this canonical meaning. For each omic view, it fits an independent penalized
+glmnet predictor on the full per-view feature matrix, obtains one per-view
+prediction vector or class-probability matrix, and then uses
+`stacked_multi_omic()` to combine those prediction outputs. This branch is
+Python-style prediction-level Late Fusion: it does not use the per-view STABL
+selected set and it does not feed selected biomarkers into the stacker.
 
-Late Fusion for `family = "cox"` is intentionally unsupported in the current
-implementation. The existing stacker optimizes binary AUC, regression R^2, or
-multiclass log loss; treating Cox risk scores as ordinary regression
-predictions would ignore censoring and event indicators. A future Cox Late
-Fusion implementation should reuse the weight-search and weighted-risk-score
-combination structure, but it must add a survival-specific objective such as a
-concordance metric over `survival::Surv(time, event)` outcomes.
+The current implementation uses the same `lambda_grid` contract as the per-view
+STABL selectors. For each omic view, `late_fusion = TRUE` fits candidate
+penalized models over that view's grid and keeps the candidate with the best
+training-set predictive score for the active task: AUC for binomial outcomes,
+R^2 for gaussian/poisson-style regression predictions, and multiclass log loss
+for multinomial probabilities. The selected per-view predictions are then
+stacked by `stacked_multi_omic()` using the shared `n_iter_stacking` random
+weight search. Supported base learners are `lasso`, `elastic_net`, and
+`adaptive_lasso`; sparse-group late fusion is not implemented because the
+canonical branch currently uses the glmnet prediction backend. Cox Late Fusion
+is intentionally unsupported until a censoring-aware stacking objective is
+added.
+
+The `costablr` `stabl_multiomic_train_validate(stabl_selected_late_fusion = TRUE)`
+branch remains separate and is more precise as **STABL-Selected Late Fusion**:
+each omic view receives its own STABL selector and final refit, then
+`stacked_multi_omic()` combines the per-view predictions with learned
+non-negative view weights. This is useful as a hybrid comparator, but it should
+not be described as the canonical Late Fusion baseline when contrasting the
+paper's Early Fusion, Late Fusion, and Multi-Omic STABL methods.
+
+STABL-Selected Late Fusion for `family = "cox"` is intentionally unsupported in
+the current implementation. The existing stacker optimizes binary AUC,
+regression R^2, or multiclass log loss; treating Cox risk scores as ordinary
+regression predictions would ignore censoring and event indicators. A future
+Cox prediction-fusion implementation should reuse the weight-search and
+weighted-risk-score combination structure, but it must add a survival-specific
+objective such as a concordance metric over `survival::Surv(time, event)`
+outcomes.
 
 ### Multi-Omic STABL
 
@@ -310,7 +353,7 @@ is distinct from late fusion:
 3. Select view-specific reliable features:
 
    ```text
-   S_hat_m(theta_m) = {j in O_m : f_{m,j} > theta_m}
+   S_hat_m(theta_m) = {j in O_m : f_{m,j} >= theta_m}
    ```
 
 4. Concatenate only the selected original features across views:
@@ -350,12 +393,13 @@ top-level per-view `fits`, `selected_features`, `selected_train`, or `refits`.
 Those top-level objects remain per-view diagnostics and per-view Final Refits.
 The paper-level combined final estimate lives in `$multiomic_stabl$refit`.
 
-Early Fusion, Late Fusion, and Multi-Omic STABL are additive comparison
-branches in `costablr`. A workflow call may enable `early_fusion = TRUE`,
-`late_fusion = TRUE`, and `multiomic_stabl = TRUE` simultaneously. Their
-outputs must remain separated under `$early_fusion`, `$late_fusion`, and
-`$multiomic_stabl`, because each branch represents a different integration
-strategy.
+Early Fusion, canonical Late Fusion, STABL-Selected Late Fusion, and Multi-Omic
+STABL are additive comparison branches in `costablr`. A workflow call may
+enable `early_fusion = TRUE`, `late_fusion = TRUE`,
+`stabl_selected_late_fusion = TRUE`, and `multiomic_stabl = TRUE`
+simultaneously. Their outputs must remain separated under `$early_fusion`,
+`$late_fusion`, `$stabl_selected_late_fusion`, and `$multiomic_stabl`, because
+each branch represents a different integration strategy.
 
 For `stabl_multiomic_cv()`, the top-level `$diagnostics` table remains a
 per-fold, per-Omic View selector diagnostic table. It summarizes the
@@ -375,10 +419,96 @@ path to jointly model Omic Views while allowing view-specific contributions.
 Do not describe Cooperative Fusion as Early Fusion, Late Fusion, or
 Multi-Omic STABL.
 
+At the method level, cooperative learning adds an agreement penalty to the
+joint predictive objective. For two views `X` and `Z`, with view-specific
+linear predictors `X theta_x` and `Z theta_z`, the gaussian direct objective is:
+
+```text
+1/2 ||y - X theta_x - Z theta_z||_2^2
+  + rho/2 ||X theta_x - Z theta_z||_2^2
+  + lambda (||theta_x||_1 + ||theta_z||_1)
+```
+
+The first term fits the combined prediction to the outcome. The second term is
+the cooperative agreement penalty: larger `rho` values encourage the two
+view-specific predictions to agree. The last term is the sparsity penalty.
+This is why Cooperative Fusion is not ordinary Early Fusion or Late Fusion:
+Early Fusion concatenates inputs before fitting, Late Fusion combines fitted
+prediction outputs after fitting, while Cooperative Fusion couples the
+view-specific fits during optimization.
+
+For linear lasso/elastic-net cooperative learning, the direct gaussian problem
+can be solved by an augmented design:
+
+```text
+X_tilde = [ X              Z          ]
+          [ -sqrt(rho) X   sqrt(rho) Z]
+
+y_tilde = [ y ]
+          [ 0 ]
+```
+
+Solving a lasso or elastic-net problem on `(X_tilde, y_tilde)` recovers the
+cooperative objective above. Cross-validation must be performed on original
+sample rows before constructing the augmented matrices; folds must not be
+formed by shuffling the rows of `X_tilde`, because the augmented rows are not
+independent samples.
+
+The value of `rho` controls the degree of cooperation. In the linear objective,
+`rho = 0` is early-fusion-like because the agreement term is absent and the
+views are optimized only through the summed prediction. Positive `rho` values
+penalize disagreement between view-specific predictions; `rho = 1` is the
+standard late-fusion-like point commonly discussed for cooperative learning,
+and values larger than 1 are allowed because they can be useful in empirical
+tuning. The appropriate `rho` should be selected by cross-validation or by a
+held-out validation set rather than fixed by the contract.
+
+For more than two views, cooperative learning can be generalized by penalizing
+pairwise disagreement between view-specific predictions. A direct augmented
+matrix is possible but can grow quickly because it adds rows for view-pair
+agreement terms. Iterative one-view-at-a-time cooperative algorithms update
+one view while holding the others fixed and are attractive when different
+model classes are needed for different data types, for example imaging and
+omics. That modular arbitrary-learner iterative algorithm is background
+methodology only in this repository: it is not the current `costablr`
+implementation.
+
+Classification, count, and survival variants can be handled through GLM or Cox
+extensions that update a working response and weights, then solve a weighted
+cooperative subproblem. In `costablr`, these extensions are delegated to the
+optional `multiview` package for gaussian, binomial, poisson, and Cox
+families. Multinomial cooperative fusion is implemented as a one-vs-rest
+wrapper that fits one binomial cooperative model per class and row-normalizes
+the resulting class probabilities.
+
+The implementation contract for `cooperative_fusion = TRUE` is:
+
+- input views are passed as an aligned `x_list` to `multiview::multiview()` or
+  `multiview::cv.multiview()`;
+- `multiview` handles standardization through its default
+  `standardize = TRUE` and keeps an intercept by default;
+- `rho` is a non-negative scalar or grid, defaulting to `0` when omitted;
+- `cooperation_selection = "cv"` selects over the `rho` grid using shared
+  original-sample fold assignments and the requested `cooperation_selector`;
+- `cooperation_selection = "validation"` fits each `rho` candidate and selects
+  the `(rho, lambda)` pair with best validation-set metric;
+- supported scalar families are `gaussian`, `binomial`, `poisson`, and `cox`;
+- `family = "multinomial"` uses the repository's one-vs-rest cooperative
+  wrapper, not native multinomial `multiview`;
+- selected cooperative biomarkers are extracted from non-zero multiview
+  coefficients and returned per Omic View.
+
 When enabled, `cooperative_fusion = TRUE` remains an additive branch. Its
 results live under `$cooperative_fusion` and do not replace `$early_fusion`,
-`$late_fusion`, `$multiomic_stabl`, or the top-level per-view STABL Selector
-outputs.
+`$late_fusion`, `$stabl_selected_late_fusion`, `$multiomic_stabl`, or the
+top-level per-view STABL Selector outputs.
+
+Cooperative Fusion can outperform Early Fusion or Late Fusion when omic views
+contain correlated signal and the agreement penalty suppresses view-specific
+noise, but this is an empirical modeling hypothesis rather than a package
+guarantee. The contract is that `costablr` exposes Cooperative Fusion as a
+separate comparator branch with explicit tuning diagnostics, not that it is
+always superior on every dataset.
 
 ## Python-to-R Parity Notes
 
@@ -386,8 +516,9 @@ outputs.
   default `q = p` is recovered when `pi = 1`.
 - Python labels Gaussian model-X knockoffs as `"knockoff"`; R uses
   `"modelx_knockoff"` and additionally supports `"mvr_knockoff"`.
-- R uses paper-notation `>=` for FDP+ counts and support extraction. This is an
-  intentional divergence from upstream Python's strict `>` tie behavior.
+- R uses the paper-method `>=` rule for FDP+ counts and support extraction.
+  This is an intentional divergence from upstream Python's strict `>` tie
+  behavior.
 - Both use `abs(coef) >= bootstrap_threshold` for per-bootstrap coefficient
   masks.
 - Both pass the requested `artificial_proportion` directly to FDP+ scaling,
@@ -395,8 +526,8 @@ outputs.
 - R adds optional bootstrap stratification while preserving unstratified
   defaults for parity.
 - Python and R lower the `explore = TRUE` fallback cutoff to the
-  `n_explore`-th largest score minus `0.01`; R then applies paper-notation
-  `>=` support extraction. Ties can therefore select more than `n_explore`
+  `n_explore`-th largest score minus `0.01`; R then applies the paper-method
+  `>=` support rule. Ties can therefore select more than `n_explore`
   features.
 - Gaussian auto-lambda mode follows Python's regression formula. Binomial and
   multinomial auto-lambda mode follows the same `C_min` to `100 * C_min`
@@ -406,7 +537,8 @@ outputs.
 
 ## Reviewer Checklist
 
-- Verify paper-notation `>=` is used in FDP+ and final support extraction.
+- Verify the paper-method `>=` rule is used in FDP+ and final support
+  extraction.
 - Verify per-bootstrap masks use `>= bootstrap_threshold`.
 - Verify `floor(p * artificial_proportion)` is used for artificial-feature
   count.
@@ -433,5 +565,5 @@ outputs.
 - Core STABL selector: `R/stabl_fit.R`
 - Single-matrix final refit: `R/stabl_refit.R`
 - Output API and accessors: `R/stabl_accessors.R`
-- Multi-omic workflows: `R/multiomic_workflows.R`, `R/late_fusion.R`,
+- Multi-omic workflows: `R/multiomic_workflows.R`, `R/stacked_generalization.R`,
   `R/cooperative_fusion.R`, `R/nested_cv.R`

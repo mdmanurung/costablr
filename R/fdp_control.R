@@ -2,9 +2,10 @@
 #'
 #' Sweeps a grid of stability-score thresholds and computes the FDP+ estimate
 #' at each one, then identifies the threshold that minimises it.  Following
-#' the StablSRM paper notation, features are counted when their stability score
-#' is greater than or equal to the candidate threshold. This intentionally
-#' differs from the upstream Python implementation's strict `>` tie behavior.
+#' the StablSRM paper-method implementation, features are counted when their
+#' stability score is greater than or equal to the candidate threshold. This
+#' intentionally differs from the upstream Python implementation's strict `>`
+#' tie behavior.
 #'
 #' The FDP+ at threshold \eqn{\tau} is estimated as:
 #' \deqn{\widehat{\text{FDP}}(\tau) =

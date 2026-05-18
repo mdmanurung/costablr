@@ -19,7 +19,8 @@ The package has no Python or tidymodels runtime dependency.
   supports the family
 - Classic and group-aware bootstrap sampling with reproducible seeds
 - Multi-omic train/validation and outer-CV workflows
-- Early fusion, late fusion, and optional cooperative fusion
+- Early Fusion, canonical Late Fusion, STABL-Selected Late Fusion,
+  Multi-Omic STABL, and optional Cooperative Fusion
 - S3 accessors, plotting helpers, export helpers, and reproducibility metrics
 
 ## Installation
@@ -104,11 +105,12 @@ Important arguments:
 ### Multi-Omic Workflows
 
 Use `stabl_multiomic_train_validate()` for named omic lists with optional
-validation data. Enable `early_fusion`, `late_fusion`, and
-`cooperative_fusion` independently. Use `stabl_multiomic_cv()` when no fixed
-validation split is available. Per-omic STABL results include final refits on
-the selected features, and early-fusion results include the same final-refit
-stage when enabled.
+validation data. Enable `early_fusion`, canonical prediction-level
+`late_fusion`, `stabl_selected_late_fusion`, and `multiomic_stabl`
+independently, with `cooperative_fusion` available as a separate comparator.
+Use `stabl_multiomic_cv()` when no fixed validation split is available.
+Per-omic STABL results include final refits on the selected features, and
+early-fusion results include the same final-refit stage when enabled.
 
 Cooperative-fusion results can be inspected with:
 

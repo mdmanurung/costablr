@@ -21,7 +21,8 @@ stabl_multiomic_cv(
   random_state = NULL,
   early_fusion = FALSE,
   late_fusion = FALSE,
-  n_iter_lf = 10000L,
+  stabl_selected_late_fusion = FALSE,
+  n_iter_stacking = 10000L,
   multiomic_stabl = FALSE,
   cooperative_fusion = FALSE,
   rho = NULL,
@@ -72,10 +73,15 @@ assignment and forwarded to each per-fold \code{\link[=stabl_fit]{stabl_fit()}} 
 \item{early_fusion}{Logical.  Forwarded to each per-fold
 \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.}
 
-\item{late_fusion}{Logical.  Forwarded to each per-fold
-\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.}
+\item{late_fusion}{Logical. Forwarded to each per-fold
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call. This enables canonical
+prediction-level Late Fusion.}
 
-\item{n_iter_lf}{Forwarded to \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+\item{stabl_selected_late_fusion}{Logical. Forwarded to each per-fold
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call. This enables the
+STABL-selected late-fusion comparator.}
+
+\item{n_iter_stacking}{Forwarded to \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
 
 \item{multiomic_stabl}{Forwarded to \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
 
@@ -120,7 +126,8 @@ fold-wise selection diagnostics together with selected train/validation
 matrices for downstream inspection.
 }
 \details{
-Optional early-fusion, late-fusion, Multi-Omic STABL, and
-cooperative-fusion branches are forwarded to each fold-specific
+Optional Early Fusion, canonical Late Fusion, STABL-Selected Late Fusion,
+Multi-Omic STABL, and Cooperative Fusion branches are forwarded to each
+fold-specific
 \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.
 }
