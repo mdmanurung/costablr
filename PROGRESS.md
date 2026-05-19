@@ -102,6 +102,37 @@ git diff --check
 # -> clean
 ```
 
+### README Current API Refresh (2026-05-19)
+
+- Updated `README.md` against the current exported package API.
+- Removed the stale `make_rp_features()` public API reference; the lower-level
+  artificial-feature constructors remain internal and the public entrypoint is
+  `make_artificial_features()`.
+- Added the exported `stabl_multiomic_nested_cv()` workflow to the README API
+  map.
+- Clarified the preferred object-consuming multi-omic surface:
+  `stabl_per_omic()` followed by `stabl_late_fusion()`,
+  `stabl_multiomics()`, or `stabl_cooperative()`.
+- Clarified that wrapper branches remain available for Early Fusion,
+  canonical Late Fusion, STABL-Selected Late Fusion, Multi-Omic STABL, and
+  Cooperative Fusion.
+- Added README coverage for bootstrap stratification, `bootstrap_threshold`,
+  bootstrap-level `workers`, `stabl_refit()` prediction, and the optional
+  `survival` dependency for Cox final refits.
+
+Validation:
+
+```bash
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); required <- c("stabl_fit", "stabl_refit", "stabl_per_omic", "stabl_late_fusion", "stabl_multiomics", "stabl_cooperative", "stabl_multiomic_train_validate", "stabl_multiomic_cv", "stabl_multiomic_nested_cv", "make_artificial_features", "compute_fdp_plus"); missing <- setdiff(required, getNamespaceExports("costablr")); if (length(missing)) stop(paste("Missing exports:", paste(missing, collapse = ", ")), call. = FALSE); cat("README export sanity ok\n")'
+# -> README export sanity ok
+
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); set.seed(42); n <- 80; p <- 20; x <- matrix(rnorm(n * p), nrow = n, dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(p)))); y <- setNames(1.2 * x[, 1] - 0.8 * x[, 2] + rnorm(n), rownames(x)); lambda_grid <- auto_lambda_grid(x, y, family = "gaussian", n_lambda = 10); fit <- stabl_fit(x = x, y = y, lambda_grid = lambda_grid, family = "gaussian", n_bootstraps = 5L, artificial_type = "random_permutation", random_state = 42L); stopifnot(inherits(fit, "stabl_fit")); refit <- stabl_refit(x = x, y = y, lambda_grid = lambda_grid, family = "gaussian", n_bootstraps = 3L, artificial_type = "random_permutation", random_state = 42L); pred <- predict(refit, newdata = x); stopifnot(length(pred) == n); cat("README quick-start/refit smoke ok\n")'
+# -> README quick-start/refit smoke ok
+
+git diff --check
+# -> clean
+```
+
 ### Further Vignette Audit and Render Pass (2026-05-18)
 
 - Re-audited all six source vignettes after the object-consuming API update.

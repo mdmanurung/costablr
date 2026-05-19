@@ -3,24 +3,29 @@
 `costablr` is an R implementation of STABL for sparse, stable biomarker
 selection in high-dimensional clinical and omic data. It ports the
 parity-critical STABL semantics from the Python implementation while exposing
-R-native S3 objects, `glmnet`-ecosystem learners, multi-omic workflows,
-visualization helpers, and CSV/disk export utilities.
+R-native S3 objects, `glmnet`-ecosystem learners, object-consuming multi-omic
+workflows, visualization helpers, and CSV/disk export utilities.
 
 The package has no Python or tidymodels runtime dependency.
 
 ## Feature Summary
 
-- Core STABL selector: `stabl_fit()`
-- End-to-end STABL selector plus unpenalized final refit: `stabl_refit()`
+- Core single-matrix STABL selector: `stabl_fit()`
+- End-to-end selector plus unpenalized final refit: `stabl_refit()`
 - FDP+ thresholding with random-permutation, Gaussian model-X knockoff, or
   MVR knockoff artificial features
 - Lasso, elastic net, adaptive lasso, and optional sparse group lasso learners
-- Gaussian, binomial, multinomial, and Cox outcome support where the backend
-  supports the family
+- Gaussian, binomial, multinomial, and Cox STABL selector paths where the
+  backend supports the family; `stabl_refit()` also supports Poisson final
+  refits
 - Classic and group-aware bootstrap sampling with reproducible seeds
-- Multi-omic train/validation and outer-CV workflows
+- Optional bootstrap stratification and `future`/`furrr` bootstrap parallelism
+- Preferred STABL-selected multi-omic API:
+  `stabl_per_omic()` followed by `stabl_late_fusion()`,
+  `stabl_multiomics()`, or `stabl_cooperative()`
+- Train/validation, outer-CV, and nested-CV multi-omic workflows
 - Early Fusion, canonical Late Fusion, STABL-Selected Late Fusion,
-  Multi-Omic STABL, and optional Cooperative Fusion
+  Multi-Omic STABL, and optional Cooperative Fusion wrapper branches
 - S3 accessors, plotting helpers, export helpers, and reproducibility metrics
 
 ## Installation
@@ -40,6 +45,7 @@ Optional functionality uses optional packages:
 - `future`, `furrr`: parallel bootstrap execution
 - `sparsegl`: `base_learner = "sparse_group_lasso"`
 - `nnet`: multinomial final refit in `stabl_refit()`
+- `survival`: Cox final refit in `stabl_refit()`
 - `multiview`: cooperative multi-omic fusion
 - `mixOmics`: TCGA vignette dataset
 
@@ -87,38 +93,73 @@ fast.
 
 Use `stabl_fit()` for one feature matrix. Inputs are aligned by sample names,
 not position, so `rownames(x)` must match the names or row names of `y`.
-Use `stabl_refit()` for the end-to-end workflow: STABL feature selection
-followed by an unpenalized final model on the selected features.
+Use `stabl_refit()` when you also want the final unpenalized model on the
+selected features:
+
+```r
+refit <- stabl_refit(
+  x = x,
+  y = y,
+  lambda_grid = lambda_grid,
+  family = "gaussian",
+  n_bootstraps = 50L,
+  artificial_type = "random_permutation",
+  random_state = 42L
+)
+
+predict(refit, newdata = x)
+```
 
 Important arguments:
 
-- `lambda_grid`: a data frame with a `lambda` column, or `"auto"`
+- `lambda_grid`: a data frame with a `lambda` column, or `"auto"`; elastic-net
+  grids may also include an `alpha` column
 - `base_learner`: `"lasso"`, `"elastic_net"`, `"adaptive_lasso"`, or
   `"sparse_group_lasso"`
-- `family`: `"gaussian"`, `"binomial"`, `"multinomial"`, or `"cox"`
+- `family`: documented selector paths are `"gaussian"`, `"binomial"`,
+  `"multinomial"`, and `"cox"`; `stabl_refit()` also supports a Poisson final
+  refit path
 - `artificial_type`: `"random_permutation"`, `"modelx_knockoff"`,
   `"mvr_knockoff"`, or `NULL`
 - `groups`: optional named group vector for grouped bootstrap sampling
+- `stratify_bootstrap` / `bootstrap_strata`: optional categorical bootstrap
+  stratification
+- `bootstrap_threshold`: per-bootstrap coefficient cutoff; default `1e-5`
+- `workers`: bootstrap-level parallel workers when optional parallel packages
+  are installed
 - `random_state`: top-level seed for reproducible artificial features,
   bootstrap indices, and learner calls
 
 ### Multi-Omic Workflows
 
 For STABL-selected multi-omic workflows, prefer the explicit object-consuming
-API:
+API. It runs per-omic STABL selection once, then lets downstream methods
+consume the resulting artifact:
 
 ```r
-per_omic <- stabl_per_omic(x_train_list, y_train, lambda_grid,
-                           x_valid_list = x_valid_list, y_valid = y_valid)
-stabl_late_fusion(per_omic)
-stabl_multiomics(per_omic)
-stabl_cooperative(per_omic)
+per_omic <- stabl_per_omic(
+  x_train_list = x_train_list,
+  y_train = y_train,
+  lambda_grid = lambda_grid,
+  x_valid_list = x_valid_list,
+  y_valid = y_valid,
+  family = "gaussian",
+  n_bootstraps = 100L,
+  random_state = 42L
+)
+
+selected_late <- stabl_late_fusion(per_omic)
+multiomics <- stabl_multiomics(per_omic)
+cooperative <- stabl_cooperative(per_omic)
 ```
 
 `stabl_per_omic()` runs independent STABL selection per Omic View and returns a
-reusable selection artifact for a fixed train/validation analysis. Build a fresh
-`stabl_per_omic()` object inside each outer CV training fold when estimating
-generalization.
+reusable selection artifact for a fixed train/validation analysis.
+`stabl_late_fusion(per_omic)` stacks predictions from the per-omic final
+refits, `stabl_multiomics(per_omic)` concatenates the STABL-selected biomarkers
+into one final-layer refit, and `stabl_cooperative(per_omic)` fits the optional
+cooperative final layer on selected features. Build a fresh `stabl_per_omic()`
+object inside each outer CV training fold when estimating generalization.
 
 The older orchestration wrappers remain available. Use
 `stabl_multiomic_train_validate()` for named omic lists with optional
@@ -126,6 +167,10 @@ validation data, and `stabl_multiomic_cv()` when no fixed validation split is
 available. Their optional branches are additive: `early_fusion`,
 canonical prediction-level `late_fusion`, `stabl_selected_late_fusion`,
 `multiomic_stabl`, and `cooperative_fusion`.
+
+Use `stabl_multiomic_nested_cv()` for the explicit nested-CV candidate workflow
+used by the TCGA benchmark scaffold. It has its own candidate abstraction rather
+than forwarding the object-consuming API directly.
 
 Cooperative-fusion results can be inspected with:
 
@@ -151,7 +196,7 @@ Input validation and bootstrapping:
 
 Artificial features and FDP+:
 
-- `make_artificial_features()`, `make_rp_features()`, `compute_fdp_plus()`
+- `make_artificial_features()`, `compute_fdp_plus()`
 
 Accessors:
 
@@ -163,7 +208,8 @@ Multi-omic workflows:
 
 - `stabl_per_omic()`, `stabl_late_fusion()`, `stabl_multiomics()`,
   `stabl_cooperative()`
-- `stabl_multiomic_train_validate()`, `stabl_multiomic_cv()`
+- `stabl_multiomic_train_validate()`, `stabl_multiomic_cv()`,
+  `stabl_multiomic_nested_cv()`
 - `stacked_multi_omic()`, `load_ool_data()`
 
 Visualization and export:

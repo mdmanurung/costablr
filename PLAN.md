@@ -134,6 +134,11 @@ results remains tied to the separate SLURM cache workflow.
   reference code.
 - Package README now documents current workflows, optional dependencies, API
   groups, vignettes, and pkgdown build commands.
+- As of 2026-05-19, the package README has been refreshed against the current
+  exported API: it foregrounds the object-consuming multi-omic surface,
+  includes `stabl_multiomic_nested_cv()`, removes the stale
+  `make_rp_features()` public reference, and documents current bootstrap and
+  final-refit controls.
 - Package-level Rd/API reference has been regenerated from roxygen and reflects
   the current exported API.
 - `_pkgdown.yml` defines grouped reference sections and vignette

@@ -42,6 +42,15 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
+- README API-refresh signal: `README.md` has been refreshed against the current
+  exported API. It now foregrounds the preferred object-consuming multi-omic
+  surface (`stabl_per_omic()` followed by `stabl_late_fusion()`,
+  `stabl_multiomics()`, or `stabl_cooperative()`), keeps the wrapper-branch
+  taxonomy explicit, includes `stabl_multiomic_nested_cv()`, removes the stale
+  `make_rp_features()` public reference, and documents current bootstrap
+  stratification, `bootstrap_threshold`, `workers`, `stabl_refit()`, and Cox
+  final-refit dependency details. Focused README export and quick-start/refit
+  smoke checks passed in `R4_51`; `git diff --check` was clean.
 - STABL algorithm-contract signal: `STABL.md` now uses the Nature
   Biotechnology paper-method implementation for FDP+/support thresholding. The
   canonical `costablr` contract counts and selects stability scores with `>=`,
