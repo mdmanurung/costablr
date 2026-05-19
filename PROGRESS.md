@@ -62,6 +62,9 @@ Logging rule:
 - Updated `README.md`, `ARCHITECTURE.md`, `REFACTORING.md`, roxygen/Rd pages,
   `STABL.md`, `PLAN.md`, and `HANDOFF.md` for the new object-consuming
   `stabl_refit()` boundary.
+- Confirmed after a source scan that remaining retired call-shape references
+  are limited to `scratch/` helper workflows; per user scope, scratch/cache
+  migration is intentionally ignored and no PRD is needed for it.
 
 Validation:
 

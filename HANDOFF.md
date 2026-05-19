@@ -51,6 +51,8 @@ For details that must not be duplicated here:
   a first-class selector-plus-refit family. Focused validation passed for
   `test-stabl-refit.R`, `test-audit-stabl-fit.R`, `test-stabl-fit.R`, and the
   README selector-refit smoke; only existing Cox/glmnet warnings were emitted.
+  Stale scratch/cache callers are explicitly out of scope and should be ignored
+  unless those workflows are revived in a separate task.
 - README API-refresh signal: `README.md` has been refreshed against the current
   exported API. It now foregrounds the preferred object-consuming multi-omic
   surface (`stabl_per_omic()` followed by `stabl_late_fusion()`,

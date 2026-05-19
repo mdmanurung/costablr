@@ -150,9 +150,9 @@ results remains tied to the separate SLURM cache workflow.
 Single-view final-refit API boundary cleanup is implemented as of 2026-05-19:
 `stabl_refit()` now consumes a completed `stabl_fit()` selector plus aligned
 training data, and no longer launches a selector run from raw
-`x`/`y`/`lambda_grid` inputs. Remaining forward follow-up is limited to
-updating downstream scratch/cache callers if any still use the retired
-end-to-end call shape.
+`x`/`y`/`lambda_grid` inputs. No package-facing follow-up remains open. Stale
+scratch/cache callers are intentionally out of scope and should be ignored
+unless the scratch workflows are explicitly revived.
 
 Paper-level **Multi-Omic STABL** final-layer parity is implemented for
 train/validation and CV workflows as of 2026-05-18:
