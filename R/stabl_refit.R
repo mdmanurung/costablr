@@ -1,11 +1,11 @@
-#' Fit STABL and Refit an Unpenalized Final Model
+#' Refit an Unpenalized Final Model After STABL Selection
 #'
-#' Runs [stabl_fit()] to select stable features, then refits an ordinary
-#' unpenalized predictive model on the selected columns.  This mirrors the
-#' Python tutorial pattern where `Stabl` is used as the feature-selection step
-#' in a pipeline and a task-appropriate final model is fitted after selection.
+#' Consumes a fitted [stabl_fit()] selector and refits an ordinary unpenalized
+#' predictive model on the selected columns.  This mirrors the Python tutorial
+#' pattern where `Stabl` is used as the feature-selection step in a pipeline
+#' and a task-appropriate final model is fitted after selection.
 #'
-#' The final refit is determined by `family`:
+#' The final refit is determined by the `family` stored on `object`:
 #' \describe{
 #'   \item{`"gaussian"`}{linear regression via [stats::lm()].}
 #'   \item{`"binomial"`}{logistic regression via [stats::glm()] with a logit
@@ -21,19 +21,15 @@
 #' intercept-only model.  This keeps the end-to-end workflow well-defined while
 #' preserving the selected-feature set as an empty character vector.
 #'
+#' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
 #' @param x A numeric matrix or `data.frame` (samples \eqn{\times} features)
-#'   with row names used as sample IDs.
+#'   with row names used as sample IDs.  It must contain the selected feature
+#'   columns by name, but may contain additional unselected columns.
 #' @param y A named numeric/factor vector whose names are sample IDs, or a
 #'   matrix-like outcome (for example `survival::Surv`) with row names as
 #'   sample IDs.
-#' @param lambda_grid Passed to [stabl_fit()].
-#' @param family Character; one of `"gaussian"`, `"binomial"`,
-#'   `"multinomial"`, `"poisson"`, or `"cox"`.  Passed to [stabl_fit()] and
-#'   used to choose the final refit model.
-#' @param new_hard_threshold Numeric in `(0, 1]` or `NULL`.  When supplied,
-#'   overrides the threshold stored in the STABL selector for extracting
-#'   selected features before refitting.
-#' @param ... Additional arguments forwarded to [stabl_fit()].
+#' @param ... Must be empty.  Selector arguments such as `lambda_grid`,
+#'   `family`, or `n_bootstraps` belong in the preceding [stabl_fit()] call.
 #' @param final_model_args Optional named list of extra arguments forwarded to
 #'   the final model fitter (`lm`, `glm`, `nnet::multinom`, or
 #'   `survival::coxph`).
@@ -53,7 +49,7 @@
 #' )
 #' y <- setNames(1.5 * x[, 1] - x[, 2] + rnorm(n, sd = 0.5), rownames(x))
 #'
-#' fit <- stabl_refit(
+#' selector <- stabl_fit(
 #'   x = x,
 #'   y = y,
 #'   lambda_grid = data.frame(lambda = c(0.05, 0.02)),
@@ -64,38 +60,50 @@
 #'   sample_fraction = 1,
 #'   random_state = 1L
 #' )
+#' fit <- stabl_refit(selector, x = x, y = y)
 #' predict(fit, x)
 #' @export
 stabl_refit <- function(
+    object,
     x,
     y,
-    lambda_grid,
-    family = "gaussian",
-    new_hard_threshold = NULL,
     ...,
     final_model_args = list()
 ) {
+  if (missing(object)) {
+    stop(
+      "`stabl_refit()` requires `object`, a fitted `stabl_fit` object. ",
+      "It no longer runs `stabl_fit()` from raw `x`, `y`, and `lambda_grid` inputs.",
+      call. = FALSE
+    )
+  }
+  .validate_stabl_refit_dots(...)
+  if (!inherits(object, "stabl_fit")) {
+    stop(
+      "`object` must be a fitted `stabl_fit` object returned by `stabl_fit()`. ",
+      "`stabl_refit()` no longer runs `stabl_fit()` from raw inputs.",
+      call. = FALSE
+    )
+  }
+  if (missing(x)) {
+    stop("`x` is required and must contain the selected feature columns.",
+         call. = FALSE)
+  }
+  if (missing(y)) {
+    stop("`y` is required for the final refit.", call. = FALSE)
+  }
   if (is.data.frame(x)) x <- as.matrix(x)
   if (!is.matrix(x) || !is.numeric(x)) {
     stop("`x` must be a numeric matrix or data.frame.", call. = FALSE)
   }
   final_model_args <- .validate_stabl_final_model_args(final_model_args)
 
+  family <- .stabl_refit_selector_family(object)
   task_type <- .stabl_refit_task_type(family)
   validate_sample_alignment(x, y, groups = NULL)
   y_aligned <- .subset_outcome_by_ids(y, rownames(x))
 
-  selector <- stabl_fit(
-    x = x,
-    y = y_aligned,
-    lambda_grid = lambda_grid,
-    family = family,
-    ...
-  )
-  selected_features <- get_feature_names_out(
-    selector,
-    new_hard_threshold = new_hard_threshold
-  )
+  selected_features <- get_feature_names_out(object)
   selected_train <- .stabl_subset_selected_matrix(x, selected_features)
 
   final_refit <- .fit_stabl_final_model(
@@ -107,7 +115,7 @@ stabl_refit <- function(
 
   structure(
     list(
-      stabl_fit = selector,
+      stabl_fit = object,
       final_model = final_refit$model,
       final_model_type = final_refit$model_type,
       family = family,
@@ -117,7 +125,6 @@ stabl_refit <- function(
       training_predictions = final_refit$training_predictions,
       outcome_levels = final_refit$levels,
       training_sample_ids = rownames(x),
-      new_hard_threshold = new_hard_threshold,
       call = match.call()
     ),
     class = "stabl_refit"
@@ -151,11 +158,20 @@ predict.stabl_refit <- function(object,
 #' @export
 print.stabl_refit <- function(x, ...) {
   cat("<stabl_refit>\n")
-  cat("  Family:           ", x$family, "\n", sep = "")
-  cat("  Final model:      ", x$final_model_type, "\n", sep = "")
-  cat("  Features selected:", length(x$selected_features), "\n")
+  cat("  Selector family:     ", x$family, "\n", sep = "")
+  threshold_info <- tryCatch(
+    .resolve_threshold(x$stabl_fit),
+    error = function(e) NULL
+  )
+  if (!is.null(threshold_info)) {
+    cat("  Selector threshold:  ",
+        format(signif(threshold_info$value, 4L), trim = TRUE),
+        " (", threshold_info$source, ")\n", sep = "")
+  }
+  cat("  Final refit:         ", x$final_model_type, "\n", sep = "")
+  cat("  Selected biomarkers: ", length(x$selected_features), "\n", sep = "")
   if (length(x$selected_features) > 0L) {
-    cat("  Selected:         ",
+    cat("  Selected:            ",
         paste(utils::head(x$selected_features, 6L), collapse = ", "),
         if (length(x$selected_features) > 6L) ", ..." else "",
         "\n", sep = "")
@@ -175,6 +191,38 @@ print.stabl_refit <- function(x, ...) {
       "`stabl_refit()` supports family = 'gaussian', 'binomial', 'multinomial', 'poisson', or 'cox'.",
       call. = FALSE
     )
+  )
+}
+
+.stabl_refit_selector_family <- function(object) {
+  family <- object$family
+  if (!is.character(family) || length(family) != 1L ||
+      is.na(family) || !nzchar(family)) {
+    stop(
+      "`object` must contain `family` metadata. ",
+      "Refit the selector with the current `stabl_fit()` before calling `stabl_refit()`.",
+      call. = FALSE
+    )
+  }
+  family
+}
+
+.validate_stabl_refit_dots <- function(...) {
+  dots <- list(...)
+  if (length(dots) == 0L) {
+    return(invisible(NULL))
+  }
+  dot_names <- names(dots)
+  dot_names <- if (is.null(dot_names)) {
+    rep.int("", length(dots))
+  } else {
+    ifelse(nzchar(dot_names), dot_names, "<unnamed>")
+  }
+  stop(
+    "`stabl_refit()` no longer accepts selector arguments in `...`: ",
+    paste(dot_names, collapse = ", "),
+    ". Call `stabl_fit()` first, then pass the fitted object to `stabl_refit()`.",
+    call. = FALSE
   )
 }
 
@@ -427,6 +475,18 @@ print.stabl_refit <- function(x, ...) {
       ncol = 0L,
       dimnames = list(rownames(x), character(0L))
     ))
+  }
+  if (is.null(colnames(x))) {
+    stop("`x` must have column names for STABL-selected features.",
+         call. = FALSE)
+  }
+  missing_features <- setdiff(selected_features, colnames(x))
+  if (length(missing_features) > 0L) {
+    stop(
+      "`x` is missing selected feature columns: ",
+      paste(missing_features, collapse = ", "),
+      call. = FALSE
+    )
   }
   x[, selected_features, drop = FALSE]
 }

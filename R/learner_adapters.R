@@ -23,7 +23,7 @@
 #' directly in [stabl_fit()] rather than calling this factory manually.
 #'
 #' @param family Character; the `glmnet` response family, for example
-#'   `"gaussian"`, `"binomial"`, `"multinomial"`, or `"cox"`.
+#'   `"gaussian"`, `"binomial"`, `"multinomial"`, `"poisson"`, or `"cox"`.
 #' @param alpha_fixed Numeric scalar or `NULL`.  When not `NULL`, this value
 #'   overrides any `alpha` column in `lambda_val`.
 #' @param bootstrap_threshold Numeric scalar, character string, or `NULL`;
@@ -104,7 +104,7 @@ make_glmnet_adapter <- function(
 #' `base_learner = "adaptive_lasso"` in [stabl_fit()].
 #'
 #' @param family Character; the `glmnet` response family, for example
-#'   `"gaussian"`, `"binomial"`, `"multinomial"`, or `"cox"`.
+#'   `"gaussian"`, `"binomial"`, `"multinomial"`, `"poisson"`, or `"cox"`.
 #' @param gamma Positive numeric scalar; controls how sharply the weights
 #'   down-penalise features with large ridge coefficients.  Larger values
 #'   make the penalty more selective.  Default `1.0` matches the Python
@@ -337,8 +337,8 @@ make_sgl_adapter <- function(
 #' `data.frame` suitable for use as the `lambda_grid` argument of
 #' [stabl_fit()].  Gaussian, binomial, and multinomial families use the
 #' upstream Python auto-mode formulas translated to glmnet's `lambda` scale.
-#' Cox remains on glmnet's native path because upstream Python STABL has no Cox
-#' backend.
+#' Poisson and Cox remain on glmnet's native path because upstream Python STABL
+#' has no Poisson or Cox backend.
 #'
 #' For Gaussian outcomes, the path follows Python's
 #' `||X'Y||_inf / (n * l1_ratio)` scale and returns
@@ -355,10 +355,12 @@ make_sgl_adapter <- function(
 #'
 #' @param x Numeric matrix of predictors (samples by features).
 #' @param y Outcome vector.  For `"gaussian"` provide a numeric vector; for
-#'   `"binomial"`/`"multinomial"` provide a factor or 0/1 integer vector;
-#'   for `"cox"` provide a `survival::Surv` object.
+#'   `"binomial"`/`"multinomial"` provide a factor or 0/1 integer vector; for
+#'   `"poisson"` provide numeric counts; for `"cox"` provide a
+#'   `survival::Surv` object.
 #' @param family Character; `glmnet` response family (`"gaussian"`,
-#'   `"binomial"`, `"multinomial"`, or `"cox"`).  Default `"gaussian"`.
+#'   `"binomial"`, `"multinomial"`, `"poisson"`, or `"cox"`).  Default
+#'   `"gaussian"`.
 #' @param n_lambda Positive integer; desired number of lambda values per alpha
 #'   level.  Actual length may be slightly shorter if `glmnet` detects
 #'   saturation early.  Default `30L`.

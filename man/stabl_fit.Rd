@@ -51,7 +51,8 @@ data-driven grid via \code{\link[=auto_lambda_grid]{auto_lambda_grid()}} (uses \
 \code{"adaptive_lasso"}, or \code{"sparse_group_lasso"}. Default: \code{"lasso"}.}
 
 \item{family}{Character; \code{glmnet} response family (\code{"gaussian"},
-\code{"binomial"}, \code{"multinomial"}, or \code{"cox"}). Default: \code{"gaussian"}.}
+\code{"binomial"}, \code{"multinomial"}, \code{"poisson"}, or \code{"cox"}). Default:
+\code{"gaussian"}.}
 
 \item{n_bootstraps}{Positive integer; bootstrap iterations per lambda.
 Default: \code{1000L}.}
@@ -151,6 +152,8 @@ of per-bootstrap selection frequencies (stability scores).}
 features, or \code{NULL} when \code{artificial_type = NULL}.}
 \item{\code{fitted_lambda_grid}}{The \code{data.frame} of lambda combinations
 actually used.}
+\item{\code{family}}{Model family used by the selector and downstream final
+refits.}
 \item{\code{fdr_min_threshold_}}{FDP+-optimal stability threshold, or \code{NULL}.}
 \item{\code{FDRs_}}{Numeric vector of FDP+ estimates per threshold, or \code{NULL}.}
 \item{\code{min_fdr_}}{Minimum FDP+ achieved, or \code{NULL}.}

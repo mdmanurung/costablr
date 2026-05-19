@@ -62,7 +62,7 @@ test_that("AUDIT stabl_refit: multinomial final refit predicts probabilities", {
   )
   x[, 1:3] <- x[, 1:3] + signal
 
-  fit <- suppressWarnings(stabl_refit(
+  selector <- stabl_fit(
     x = x,
     y = y,
     lambda_grid = data.frame(lambda = c(0.05, 0.01)),
@@ -72,7 +72,8 @@ test_that("AUDIT stabl_refit: multinomial final refit predicts probabilities", {
     hard_threshold = 1e-9,
     sample_fraction = 1,
     random_state = 601L
-  ))
+  )
+  fit <- suppressWarnings(stabl_refit(selector, x = x, y = y))
 
   expect_equal(fit$final_model_type, "multinom")
   expect_equal(fit$outcome_levels, levels(y))
@@ -100,7 +101,7 @@ test_that("AUDIT stabl_refit: poisson final refit predicts counts", {
   rate <- exp(0.6 + 0.4 * x[, 1L] - 0.2 * x[, 2L])
   y <- setNames(rpois(n, lambda = rate), ids)
 
-  fit <- suppressWarnings(stabl_refit(
+  selector <- stabl_fit(
     x = x,
     y = y,
     lambda_grid = data.frame(lambda = c(0.02, 0.01)),
@@ -110,9 +111,11 @@ test_that("AUDIT stabl_refit: poisson final refit predicts counts", {
     hard_threshold = 1e-9,
     sample_fraction = 1,
     random_state = 602L
-  ))
+  )
+  fit <- suppressWarnings(stabl_refit(selector, x = x, y = y))
 
   expect_equal(fit$final_model_type, "glm_poisson")
+  expect_equal(selector$family, "poisson")
   pred <- predict(fit, x, type = "response")
   expect_type(pred, "double")
   expect_length(pred, n)
@@ -137,7 +140,7 @@ test_that("AUDIT stabl_refit: cox final refit predicts risk scores", {
   )
   rownames(y) <- ids
 
-  fit <- suppressWarnings(stabl_refit(
+  selector <- stabl_fit(
     x = x,
     y = y,
     lambda_grid = data.frame(lambda = c(0.02, 0.01)),
@@ -147,7 +150,8 @@ test_that("AUDIT stabl_refit: cox final refit predicts risk scores", {
     hard_threshold = 1e-9,
     sample_fraction = 1,
     random_state = 603L
-  ))
+  )
+  fit <- suppressWarnings(stabl_refit(selector, x = x, y = y))
 
   expect_equal(fit$final_model_type, "coxph")
   pred <- predict(fit, x, type = "response")
@@ -167,7 +171,7 @@ test_that("AUDIT stabl_refit: predict validates newdata schema and row ids", {
   )
   y <- setNames(1.2 * x[, 1L] - 0.7 * x[, 2L] + rnorm(n, sd = 0.1), ids)
 
-  fit <- stabl_refit(
+  selector <- stabl_fit(
     x = x,
     y = y,
     lambda_grid = data.frame(lambda = c(0.01, 0.005)),
@@ -178,6 +182,7 @@ test_that("AUDIT stabl_refit: predict validates newdata schema and row ids", {
     sample_fraction = 1,
     random_state = 604L
   )
+  fit <- stabl_refit(selector, x = x, y = y)
   expect_gt(length(fit$selected_features), 0L)
 
   unnamed <- x
@@ -209,7 +214,7 @@ test_that("AUDIT stabl_refit: predict validates newdata schema and row ids", {
   )
 })
 
-test_that("AUDIT stabl_refit: threshold override uses support validator", {
+test_that("AUDIT stabl_refit: threshold override is rejected", {
   withr::local_seed(605)
   n <- 12L
   ids <- paste0("s", seq_len(n))
@@ -219,21 +224,26 @@ test_that("AUDIT stabl_refit: threshold override uses support validator", {
     dimnames = list(ids, paste0("f", seq_len(3L)))
   )
   y <- setNames(rnorm(n), ids)
+  selector <- stabl_fit(
+    x = x,
+    y = y,
+    lambda_grid = data.frame(lambda = 0.1),
+    family = "gaussian",
+    n_bootstraps = 1L,
+    artificial_type = NULL,
+    hard_threshold = 0.5,
+    sample_fraction = 1,
+    random_state = 605L
+  )
 
   expect_error(
     stabl_refit(
+      selector,
       x = x,
       y = y,
-      lambda_grid = data.frame(lambda = 0.1),
-      family = "gaussian",
-      new_hard_threshold = NA_real_,
-      n_bootstraps = 1L,
-      artificial_type = NULL,
-      hard_threshold = 0.5,
-      sample_fraction = 1,
-      random_state = 605L
+      new_hard_threshold = NA_real_
     ),
-    "single non-missing numeric value"
+    "no longer accepts selector arguments"
   )
 })
 

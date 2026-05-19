@@ -42,34 +42,15 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
-- Active single-view final-refit API design signal: `stabl_refit()` will keep
-  its public name, but the intended canonical boundary is changing from the
-  current raw `x`/`y`/`lambda_grid` end-to-end wrapper toward consuming a
-  completed `stabl_fit()` selector plus aligned training data for the
-  downstream unpenalized Final Refit. This is a design decision in progress,
-  not yet implemented. `stabl_fit` objects currently do not store training
-  `x`, training `y`, or `family`; resolved direction is to keep selectors
-  data-light but persist lightweight task metadata such as `family`. The next
-  compatibility direction is to remove the current raw
-  `x`/`y`/`lambda_grid` `stabl_refit()` path with a clear error rather than a
-  deprecation shim. Resolved data-matching direction is to require selected
-  biomarkers by name in the supplied training matrix, without requiring exact
-  full-column equality or original column order. The next design branch is how
-  to present selector/final-refit summary output. Resolved family policy:
-  `stabl_refit()` should not accept a `family` argument and should hard-error
-  when the supplied `stabl_fit` object lacks stored family metadata. Resolved
-  presentation policy: `stabl_refit()` constructs quietly; richer selector and
-  Final Refit summary output belongs in `print.stabl_refit()`. Resolved
-  object-shape policy: keep the consumed selector under `$stabl_fit` on
-  returned `stabl_refit` objects. Resolved signature policy:
-  `stabl_refit(object, x, y, ..., final_model_args = list())`, with `...` used
-  only for targeted stale-argument errors. Resolved threshold-override policy:
-  remove `new_hard_threshold` from `stabl_refit()`; keep alternate-threshold
-  extraction on selector accessors. Resolved final-model customization policy:
-  keep `final_model_args` as the only Final Refit customization hook. Next
-  resolved family-support policy: keep Poisson and document/test it as a
-  first-class selector-plus-refit family rather than a final-refit-only
-  exception.
+- Single-view final-refit API signal: `stabl_refit()` now consumes a completed
+  `stabl_fit()` selector plus aligned training `x`/`y`; it no longer runs a
+  selector from raw `x`/`y`/`lambda_grid` inputs. `stabl_fit` objects now store
+  `family` metadata; `stabl_refit()` has no `family` or `new_hard_threshold`
+  argument, hard-errors for stale selector arguments in `...`, and requires
+  selected biomarkers by name in the supplied training matrix. Poisson is now
+  a first-class selector-plus-refit family. Focused validation passed for
+  `test-stabl-refit.R`, `test-audit-stabl-fit.R`, `test-stabl-fit.R`, and the
+  README selector-refit smoke; only existing Cox/glmnet warnings were emitted.
 - README API-refresh signal: `README.md` has been refreshed against the current
   exported API. It now foregrounds the preferred object-consuming multi-omic
   surface (`stabl_per_omic()` followed by `stabl_late_fusion()`,
@@ -700,9 +681,9 @@ conda run -n R4_51 R CMD INSTALL multiview
     justifies native work; NAT-002 is fixed.
 - Current final-refit workflow:
   - `stabl_fit()` remains the selector boundary for stability scores, FDP+
-    diagnostics, and support masks;
-  - `stabl_refit()` is the single-matrix end-to-end API and performs the
-    compulsory unpenalized final model after selection;
+    diagnostics, support masks, and stored `family` metadata;
+  - `stabl_refit()` is the single-matrix Final Refit API and consumes an
+    existing `stabl_fit()` object plus aligned training data;
   - `stabl_multiomic_train_validate()` now always returns per-omic `$refits`,
     adds `$early_fusion$refit` when early fusion is enabled, and
     STABL-Selected Late Fusion reuses those same refits for stacking;

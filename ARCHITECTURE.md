@@ -22,7 +22,8 @@ dependency.
 Core selector and refit:
 
 - `stabl_fit()` - core STABL selector boundary.
-- `stabl_refit()` - STABL selection plus final unpenalized predictive refit.
+- `stabl_refit()` - final unpenalized predictive refit after a fitted
+  `stabl_fit()` selector.
 - `predict.stabl_refit()` - predictions from the final refit.
 
 Accessors:
@@ -47,8 +48,8 @@ Utilities:
 
 | Class | Constructor | Main fields |
 |---|---|---|
-| `stabl_fit` | `stabl_fit()` | `stabl_scores_`, `stabl_scores_artificial_`, `fdr_min_threshold_`, `FDRs_`, `min_fdr_`, `hard_threshold`, `artificial_type`, `artificial_type_used_`, `feature_names` |
-| `stabl_refit` | `stabl_refit()` | `selection`, `selected_features`, `final_model`, `task_type`, `feature_names`, `call` |
+| `stabl_fit` | `stabl_fit()` | `stabl_scores_`, `stabl_scores_artificial_`, `fitted_lambda_grid`, `family`, `fdr_min_threshold_`, `FDRs_`, `min_fdr_`, `hard_threshold`, `artificial_type`, `artificial_type_used_`, `feature_names` |
+| `stabl_refit` | `stabl_refit()` | `stabl_fit`, `selected_features`, `selected_train`, `final_model`, `final_model_type`, `family`, `task_type`, `training_predictions`, `call` |
 | `stabl_multiomic_fit` | `stabl_multiomic_train_validate()` | `fits`, `refits`, `selected_features`, `early_fusion`, `late_fusion`, `stabl_selected_late_fusion`, optional `multiomic_stabl`, optional `cooperative_fusion` |
 | `stabl_multiomic_cv` | `stabl_multiomic_cv()` | `fold_results`, `diagnostics`, `performance`, `folds` |
 | `stabl_multiomic_nested_cv` | `stabl_multiomic_nested_cv()` | `outer_folds`, `fold_results`, `diagnostics`, `outer_predictions`, `performance` |
@@ -61,7 +62,7 @@ fields directly when they are pinning object contracts.
 | File | Responsibility |
 |---|---|
 | `R/stabl_fit.R` | Core selector, lambda preparation, artificial-feature injection, bootstrap loop, FDP+ result assembly |
-| `R/stabl_refit.R` | Single-matrix selector plus final unpenalized predictive refit and prediction |
+| `R/stabl_refit.R` | Single-matrix final unpenalized predictive refit from an existing selector and prediction |
 | `R/learner_adapters.R` | Glmnet, adaptive-lasso, elastic-net, and sparse-group-lasso adapter surfaces |
 | `R/bootstrap_helpers.R` | Classic and grouped bootstrap sampling with alignment and strata checks |
 | `R/artificial_features.R` | Random-permutation and model-X artificial-feature generation dispatcher |
@@ -92,7 +93,7 @@ bootstrap indices -> learner adapter path fits -> stability scores -> FDP+ ->
 
 Final refit:
 
-`stabl_refit()` -> `stabl_fit()` -> `get_feature_names_out()` -> selected
+`stabl_refit(stabl_fit, x, y)` -> `get_feature_names_out()` -> selected
 matrix -> `.fit_stabl_final_model()` -> `stabl_refit` object.
 
 Multi-omic train/validation:

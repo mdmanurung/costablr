@@ -68,8 +68,9 @@ The following repository decisions are the authoritative reconciliations for
   `||X'Y||_inf / (n * l1_ratio)` scale and
   `geomspace(lambda_max / 30, lambda_max + 5, n_lambda)`. Classification paths
   approximate Python's increasing `C_min` to `100 * C_min` `l1_min_c()` grid
-  and map it to glmnet's inverse penalty scale (`lambda = 1 / C`). Cox remains
-  an R-only glmnet-native path because upstream Python STABL has no Cox backend.
+  and map it to glmnet's inverse penalty scale (`lambda = 1 / C`). Poisson and
+  Cox remain R-only glmnet-native paths because upstream Python STABL has no
+  Poisson or Cox backend.
 - **Subsampling policy:** the paper uses subsamples of size `floor(n / 2)`
   without replacement. `costablr` defaults to the same policy via
   `sample_fraction = 0.5` and `replace = FALSE`, while exposing both controls.

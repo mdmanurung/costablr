@@ -11,13 +11,12 @@ The package has no Python or tidymodels runtime dependency.
 ## Feature Summary
 
 - Core single-matrix STABL selector: `stabl_fit()`
-- End-to-end selector plus unpenalized final refit: `stabl_refit()`
+- Unpenalized final refit after a fitted selector: `stabl_refit()`
 - FDP+ thresholding with random-permutation, Gaussian model-X knockoff, or
   MVR knockoff artificial features
 - Lasso, elastic net, adaptive lasso, and optional sparse group lasso learners
-- Gaussian, binomial, multinomial, and Cox STABL selector paths where the
-  backend supports the family; `stabl_refit()` also supports Poisson final
-  refits
+- Gaussian, binomial, multinomial, Poisson, and Cox STABL selector/refit paths
+  where the backend supports the family
 - Classic and group-aware bootstrap sampling with reproducible seeds
 - Optional bootstrap stratification and `future`/`furrr` bootstrap parallelism
 - Preferred STABL-selected multi-omic API:
@@ -97,7 +96,7 @@ Use `stabl_refit()` when you also want the final unpenalized model on the
 selected features:
 
 ```r
-refit <- stabl_refit(
+fit <- stabl_fit(
   x = x,
   y = y,
   lambda_grid = lambda_grid,
@@ -107,6 +106,7 @@ refit <- stabl_refit(
   random_state = 42L
 )
 
+refit <- stabl_refit(fit, x = x, y = y)
 predict(refit, newdata = x)
 ```
 
@@ -116,9 +116,9 @@ Important arguments:
   grids may also include an `alpha` column
 - `base_learner`: `"lasso"`, `"elastic_net"`, `"adaptive_lasso"`, or
   `"sparse_group_lasso"`
-- `family`: documented selector paths are `"gaussian"`, `"binomial"`,
-  `"multinomial"`, and `"cox"`; `stabl_refit()` also supports a Poisson final
-  refit path
+- `family`: selector/refit paths are `"gaussian"`, `"binomial"`,
+  `"multinomial"`, `"poisson"`, and `"cox"` where the chosen backend supports
+  the family
 - `artificial_type`: `"random_permutation"`, `"modelx_knockoff"`,
   `"mvr_knockoff"`, or `NULL`
 - `groups`: optional named group vector for grouped bootstrap sampling

@@ -638,6 +638,51 @@ test_that("cox family runs with Surv outcomes", {
   expect_equal(dim(fit$stabl_scores_), c(p, 3L))
 })
 
+test_that("poisson family runs with count outcomes", {
+  set.seed(25)
+  n <- 42L; p <- 8L
+  x <- matrix(rnorm(n * p), n, p,
+              dimnames = list(paste0("s", seq_len(n)),
+                              paste0("f", seq_len(p))))
+  rate <- exp(0.3 + 0.5 * x[, 1L] - 0.2 * x[, 2L])
+  y <- setNames(stats::rpois(n, lambda = rate), rownames(x))
+
+  fit <- stabl_fit(
+    x               = x,
+    y               = y,
+    lambda_grid     = data.frame(lambda = seq(0.01, 0.08, length.out = 3L)),
+    base_learner    = "lasso",
+    family          = "poisson",
+    n_bootstraps    = 4L,
+    artificial_type = NULL,
+    hard_threshold  = 1e-9,
+    sample_fraction = 1,
+    random_state    = 25L
+  )
+
+  expect_s3_class(fit, "stabl_fit")
+  expect_equal(fit$family, "poisson")
+  expect_equal(dim(fit$stabl_scores_), c(p, 3L))
+})
+
+test_that("auto_lambda_grid supports poisson family", {
+  set.seed(26)
+  n <- 30L; p <- 5L
+  x <- matrix(rnorm(n * p), n, p)
+  y <- stats::rpois(n, lambda = exp(0.2 + 0.3 * x[, 1L]))
+
+  grid <- auto_lambda_grid(
+    x = x,
+    y = y,
+    family = "poisson",
+    n_lambda = 4L
+  )
+
+  expect_s3_class(grid, "data.frame")
+  expect_true("lambda" %in% names(grid))
+  expect_true(all(grid$lambda > 0))
+})
+
 test_that("sparse_group_lasso rejects cox family", {
   skip_if_not_installed("survival")
 

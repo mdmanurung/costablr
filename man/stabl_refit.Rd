@@ -2,37 +2,23 @@
 % Please edit documentation in R/stabl_refit.R
 \name{stabl_refit}
 \alias{stabl_refit}
-\title{Fit STABL and Refit an Unpenalized Final Model}
+\title{Refit an Unpenalized Final Model After STABL Selection}
 \usage{
-stabl_refit(
-  x,
-  y,
-  lambda_grid,
-  family = "gaussian",
-  new_hard_threshold = NULL,
-  ...,
-  final_model_args = list()
-)
+stabl_refit(object, x, y, ..., final_model_args = list())
 }
 \arguments{
+\item{object}{A fitted \code{"stabl_fit"} object returned by \code{\link[=stabl_fit]{stabl_fit()}}.}
+
 \item{x}{A numeric matrix or \code{data.frame} (samples \eqn{\times} features)
-with row names used as sample IDs.}
+with row names used as sample IDs.  It must contain the selected feature
+columns by name, but may contain additional unselected columns.}
 
 \item{y}{A named numeric/factor vector whose names are sample IDs, or a
 matrix-like outcome (for example \code{survival::Surv}) with row names as
 sample IDs.}
 
-\item{lambda_grid}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
-
-\item{family}{Character; one of \code{"gaussian"}, \code{"binomial"},
-\code{"multinomial"}, \code{"poisson"}, or \code{"cox"}.  Passed to \code{\link[=stabl_fit]{stabl_fit()}} and
-used to choose the final refit model.}
-
-\item{new_hard_threshold}{Numeric in \verb{(0, 1]} or \code{NULL}.  When supplied,
-overrides the threshold stored in the STABL selector for extracting
-selected features before refitting.}
-
-\item{...}{Additional arguments forwarded to \code{\link[=stabl_fit]{stabl_fit()}}.}
+\item{...}{Must be empty.  Selector arguments such as \code{lambda_grid},
+\code{family}, or \code{n_bootstraps} belong in the preceding \code{\link[=stabl_fit]{stabl_fit()}} call.}
 
 \item{final_model_args}{Optional named list of extra arguments forwarded to
 the final model fitter (\code{lm}, \code{glm}, \code{nnet::multinom}, or
@@ -44,13 +30,13 @@ An S3 object of class \code{"stabl_refit"} containing the lower-level
 unpenalized final model, and in-sample final-model predictions.
 }
 \description{
-Runs \code{\link[=stabl_fit]{stabl_fit()}} to select stable features, then refits an ordinary
-unpenalized predictive model on the selected columns.  This mirrors the
-Python tutorial pattern where \code{Stabl} is used as the feature-selection step
-in a pipeline and a task-appropriate final model is fitted after selection.
+Consumes a fitted \code{\link[=stabl_fit]{stabl_fit()}} selector and refits an ordinary unpenalized
+predictive model on the selected columns.  This mirrors the Python tutorial
+pattern where \code{Stabl} is used as the feature-selection step in a pipeline
+and a task-appropriate final model is fitted after selection.
 }
 \details{
-The final refit is determined by \code{family}:
+The final refit is determined by the \code{family} stored on \code{object}:
 \describe{
 \item{\code{"gaussian"}}{linear regression via \code{\link[stats:lm]{stats::lm()}}.}
 \item{\code{"binomial"}}{logistic regression via \code{\link[stats:glm]{stats::glm()}} with a logit
@@ -77,7 +63,7 @@ x <- matrix(
 )
 y <- setNames(1.5 * x[, 1] - x[, 2] + rnorm(n, sd = 0.5), rownames(x))
 
-fit <- stabl_refit(
+selector <- stabl_fit(
   x = x,
   y = y,
   lambda_grid = data.frame(lambda = c(0.05, 0.02)),
@@ -88,5 +74,6 @@ fit <- stabl_refit(
   sample_fraction = 1,
   random_state = 1L
 )
+fit <- stabl_refit(selector, x = x, y = y)
 predict(fit, x)
 }

@@ -10,11 +10,13 @@ auto_lambda_grid(x, y, family = "gaussian", n_lambda = 30L, l1_ratio = NULL)
 \item{x}{Numeric matrix of predictors (samples by features).}
 
 \item{y}{Outcome vector.  For \code{"gaussian"} provide a numeric vector; for
-\code{"binomial"}/\code{"multinomial"} provide a factor or 0/1 integer vector;
-for \code{"cox"} provide a \code{survival::Surv} object.}
+\code{"binomial"}/\code{"multinomial"} provide a factor or 0/1 integer vector; for
+\code{"poisson"} provide numeric counts; for \code{"cox"} provide a
+\code{survival::Surv} object.}
 
 \item{family}{Character; \code{glmnet} response family (\code{"gaussian"},
-\code{"binomial"}, \code{"multinomial"}, or \code{"cox"}).  Default \code{"gaussian"}.}
+\code{"binomial"}, \code{"multinomial"}, \code{"poisson"}, or \code{"cox"}).  Default
+\code{"gaussian"}.}
 
 \item{n_lambda}{Positive integer; desired number of lambda values per alpha
 level.  Actual length may be slightly shorter if \code{glmnet} detects
@@ -34,8 +36,8 @@ Returns a Python STABL-compatible penalty sequence as a pre-expanded
 \code{data.frame} suitable for use as the \code{lambda_grid} argument of
 \code{\link[=stabl_fit]{stabl_fit()}}.  Gaussian, binomial, and multinomial families use the
 upstream Python auto-mode formulas translated to glmnet's \code{lambda} scale.
-Cox remains on glmnet's native path because upstream Python STABL has no Cox
-backend.
+Poisson and Cox remain on glmnet's native path because upstream Python STABL
+has no Poisson or Cox backend.
 }
 \details{
 For Gaussian outcomes, the path follows Python's

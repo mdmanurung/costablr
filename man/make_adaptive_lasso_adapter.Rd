@@ -13,7 +13,7 @@ make_adaptive_lasso_adapter(
 }
 \arguments{
 \item{family}{Character; the \code{glmnet} response family, for example
-\code{"gaussian"}, \code{"binomial"}, \code{"multinomial"}, or \code{"cox"}.}
+\code{"gaussian"}, \code{"binomial"}, \code{"multinomial"}, \code{"poisson"}, or \code{"cox"}.}
 
 \item{gamma}{Positive numeric scalar; controls how sharply the weights
 down-penalise features with large ridge coefficients.  Larger values

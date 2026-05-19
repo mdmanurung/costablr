@@ -17,7 +17,8 @@
 #'   (reads `alpha` from the `lambda_grid` `alpha` column), or
 #'   `"adaptive_lasso"`, or `"sparse_group_lasso"`. Default: `"lasso"`.
 #' @param family Character; `glmnet` response family (`"gaussian"`,
-#'   `"binomial"`, `"multinomial"`, or `"cox"`). Default: `"gaussian"`.
+#'   `"binomial"`, `"multinomial"`, `"poisson"`, or `"cox"`). Default:
+#'   `"gaussian"`.
 #' @param n_bootstraps Positive integer; bootstrap iterations per lambda.
 #'   Default: `1000L`.
 #' @param artificial_type Character or `NULL`; `"random_permutation"`,
@@ -94,6 +95,8 @@
 #'       features, or `NULL` when `artificial_type = NULL`.}
 #'     \item{`fitted_lambda_grid`}{The `data.frame` of lambda combinations
 #'       actually used.}
+#'     \item{`family`}{Model family used by the selector and downstream final
+#'       refits.}
 #'     \item{`fdr_min_threshold_`}{FDP+-optimal stability threshold, or `NULL`.}
 #'     \item{`FDRs_`}{Numeric vector of FDP+ estimates per threshold, or `NULL`.}
 #'     \item{`min_fdr_`}{Minimum FDP+ achieved, or `NULL`.}
@@ -210,6 +213,7 @@ stabl_fit <- function(
     corr_group_threshold  = NULL
 ) {
   workers <- .normalize_worker_count(workers)
+  family <- .validate_stabl_family(family)
 
   # ---- Input coercion -------------------------------------------------------
   if (is.data.frame(x)) x <- as.matrix(x)
@@ -496,6 +500,7 @@ stabl_fit <- function(
       stabl_scores_         = stabl_scores_,
       stabl_scores_artificial_ = stabl_scores_art,
       fitted_lambda_grid    = lambda_grid,
+      family                = family,
       fdr_min_threshold_    = if (!is.null(fdp)) fdp$fdr_min_threshold else NULL,
       FDRs_                 = if (!is.null(fdp)) fdp$FDRs              else NULL,
       min_fdr_              = if (!is.null(fdp)) fdp$min_fdr            else NULL,
@@ -517,6 +522,19 @@ stabl_fit <- function(
     ),
     class = "stabl_fit"
   )
+}
+
+.validate_stabl_family <- function(family) {
+  supported <- c("gaussian", "binomial", "multinomial", "poisson", "cox")
+  if (!is.character(family) || length(family) != 1L ||
+      is.na(family) || !(family %in% supported)) {
+    stop(
+      "`family` must be one of: \"gaussian\", \"binomial\", ",
+      "\"multinomial\", \"poisson\", or \"cox\".",
+      call. = FALSE
+    )
+  }
+  family
 }
 
 # ---- Internal param validator ------------------------------------------------

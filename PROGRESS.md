@@ -39,61 +39,57 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
-### Single-View Final Refit Boundary Design (2026-05-19)
+### Single-View Final Refit Boundary Implementation (2026-05-19)
 
-- Resolved the public naming direction for the single-view final-refit API:
-  keep `stabl_refit()` rather than renaming it to `stabl_final_fit()`.
-- Confirmed from `R/stabl_fit.R` that fitted `stabl_fit` selector objects do
-  not store the original training matrix, outcome, or `family`; a
-  selector-consuming `stabl_refit()` therefore still needs aligned training
-  data, and either explicit `family` input or new selector metadata.
-- Resolved the metadata direction: `stabl_fit()` should stay data-light and
-  not store training `x`/`y`, but it should store lightweight task metadata
-  such as `family` so `stabl_refit(fit, x, y)` can infer the final-refit
-  family from the selector object.
-- Resolved the compatibility direction: remove the current end-to-end
-  `stabl_refit(x, y, lambda_grid, ...)` call shape with a clear error, rather
-  than retaining a deprecation shim that reruns selection.
-- Resolved the training-matrix matching direction: require `stabl_refit()` to
-  find the selector's selected biomarkers in the supplied training matrix by
-  name, but do not require an exact full-column match or the selector input's
-  original column order.
-- Resolved the family-metadata policy: `stabl_refit()` should not accept a
-  separate `family` argument. It should require `family` metadata on the
-  supplied `stabl_fit` object and hard-error for older selector objects that do
-  not contain it.
-- Resolved the presentation policy: `stabl_refit()` should construct quietly;
-  selector family, threshold, final-refit type, and selected-biomarker count
-  should be shown by `print.stabl_refit()` rather than emitted as constructor
-  messages.
-- Resolved the returned-object field policy: keep the consumed selector under
-  the existing `$stabl_fit` field name on `stabl_refit` objects.
-- Resolved the signature/ellipsis policy: `stabl_refit()` should use
-  `stabl_refit(object, x, y, ..., final_model_args = list())`, where `...` is
-  accepted only to detect and reject stale end-to-end selector arguments with
-  targeted errors.
-- Resolved the threshold-override policy: remove `new_hard_threshold` from
-  `stabl_refit()`. Alternate-threshold extraction remains available on
-  selector accessors such as `get_support()` and `get_feature_names_out()`.
-- Resolved the final-model customization policy: keep `final_model_args` as
-  the only Final Refit customization hook on `stabl_refit()`.
-- Resolved the Poisson family policy: keep Poisson and document/test it as a
-  first-class selector-plus-refit family rather than a final-refit-only
-  exception.
-- Updated `CONTEXT.md` to define `stabl_refit()` as the canonical public API
-  for a single-view **Final Refit** after a completed `stabl_fit()` **STABL
-  Selector**.
-- Updated `STABL.md` so the Step 6 contract says `stabl_refit()` consumes a
-  completed `stabl_fit()` selector result and must not launch a new selector
-  run internally.
-- No implementation or validation commands have been run yet for this API
-  change; the remaining open branch is whether to proceed directly into
-  implementation or keep this turn as design-only.
+- Changed `stabl_refit()` so it consumes a fitted `stabl_fit` selector plus
+  aligned `x`/`y` training data instead of running `stabl_fit()` internally.
+- Added `family` metadata to `stabl_fit` objects and made `stabl_refit()`
+  derive the Final Refit family from that selector metadata. Older selector
+  objects without `family` now error clearly.
+- Removed `family`, `lambda_grid`, and `new_hard_threshold` from the
+  `stabl_refit()` API. `...` is accepted only to reject stale selector
+  arguments with a targeted error. Alternate threshold extraction remains on
+  selector accessors (`get_support()` and `get_feature_names_out()`).
+- Kept `final_model_args` as the only Final Refit customization hook and kept
+  the consumed selector under `$stabl_fit` in returned `stabl_refit` objects.
+- Added training-matrix validation so `stabl_refit()` requires selected
+  biomarkers by name but does not require exact full-column equality or the
+  selector input's original column order.
+- Expanded `print.stabl_refit()` to summarize selector family, selector
+  threshold, Final Refit type, and selected-biomarker count while keeping
+  construction quiet.
+- Promoted Poisson to a first-class selector-plus-refit family in docs/tests.
+- Updated `README.md`, `ARCHITECTURE.md`, `REFACTORING.md`, roxygen/Rd pages,
+  `STABL.md`, `PLAN.md`, and `HANDOFF.md` for the new object-consuming
+  `stabl_refit()` boundary.
 
 Validation:
 
 ```bash
-# Not run; design/documentation clarification only.
+conda run -n R4_51 Rscript -e "invisible(parse('R/stabl_refit.R')); invisible(parse('R/stabl_fit.R')); invisible(parse('R/learner_adapters.R')); invisible(parse('tests/testthat/test-stabl-refit.R')); invisible(parse('tests/testthat/test-audit-stabl-fit.R')); cat('parse ok\n')"
+# -> parse ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-stabl-refit.R', reporter = 'summary')"
+# -> stabl-refit DONE, no failures
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-audit-stabl-fit.R', reporter = 'summary')"
+# -> audit-stabl-fit DONE, no failures; Cox/glmnet tie-handling warnings only
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-stabl-fit.R', reporter = 'summary')"
+# -> stabl-fit DONE, no failures; existing Cox/glmnet warnings only
+
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); set.seed(42); n <- 80; p <- 20; x <- matrix(rnorm(n * p), nrow = n, dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(p)))); y <- setNames(1.2 * x[, 1] - 0.8 * x[, 2] + rnorm(n), rownames(x)); lambda_grid <- auto_lambda_grid(x, y, family = "gaussian", n_lambda = 10); fit <- stabl_fit(x = x, y = y, lambda_grid = lambda_grid, family = "gaussian", n_bootstraps = 5L, artificial_type = "random_permutation", random_state = 42L); stopifnot(inherits(fit, "stabl_fit"), identical(fit$family, "gaussian")); refit <- stabl_refit(fit, x = x, y = y); pred <- predict(refit, newdata = x); stopifnot(length(pred) == n); cat("README selector-refit smoke ok\n")'
+# -> README selector-refit smoke ok
+
+conda run -n R4_51 Rscript -e "devtools::load_all('.', quiet = TRUE); testthat::test_file('tests/testthat/test-stabl-refit.R', reporter = 'summary'); testthat::test_file('tests/testthat/test-audit-stabl-fit.R', reporter = 'summary'); testthat::test_file('tests/testthat/test-stabl-fit.R', reporter = 'summary')"
+# -> combined focused rerun passed; refit tests clean; audit/stabl-fit warnings
+#    are existing Cox/glmnet tie-handling/convergence messages only
+
+rg -n "stabl_refit\\([^\\n]*lambda_grid\\s*=|stabl_refit\\([^\\n]*new_hard_threshold\\s*=|stabl_refit\\([^\\n]*family\\s*=" README.md STABL.md CONTEXT.md PLAN.md HANDOFF.md ARCHITECTURE.md REFACTORING.md man vignettes
+# -> no stale raw-selector/refit documentation call shape found
+
+git diff --check
+# -> clean
 ```
 
 ### Object-Consuming API Consistency Pass (2026-05-18)
@@ -183,7 +179,7 @@ Validation:
 conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); required <- c("stabl_fit", "stabl_refit", "stabl_per_omic", "stabl_late_fusion", "stabl_multiomics", "stabl_cooperative", "stabl_multiomic_train_validate", "stabl_multiomic_cv", "stabl_multiomic_nested_cv", "make_artificial_features", "compute_fdp_plus"); missing <- setdiff(required, getNamespaceExports("costablr")); if (length(missing)) stop(paste("Missing exports:", paste(missing, collapse = ", ")), call. = FALSE); cat("README export sanity ok\n")'
 # -> README export sanity ok
 
-conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); set.seed(42); n <- 80; p <- 20; x <- matrix(rnorm(n * p), nrow = n, dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(p)))); y <- setNames(1.2 * x[, 1] - 0.8 * x[, 2] + rnorm(n), rownames(x)); lambda_grid <- auto_lambda_grid(x, y, family = "gaussian", n_lambda = 10); fit <- stabl_fit(x = x, y = y, lambda_grid = lambda_grid, family = "gaussian", n_bootstraps = 5L, artificial_type = "random_permutation", random_state = 42L); stopifnot(inherits(fit, "stabl_fit")); refit <- stabl_refit(x = x, y = y, lambda_grid = lambda_grid, family = "gaussian", n_bootstraps = 3L, artificial_type = "random_permutation", random_state = 42L); pred <- predict(refit, newdata = x); stopifnot(length(pred) == n); cat("README quick-start/refit smoke ok\n")'
+conda run -n R4_51 Rscript -e 'devtools::load_all(".", quiet = TRUE); set.seed(42); n <- 80; p <- 20; x <- matrix(rnorm(n * p), nrow = n, dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(p)))); y <- setNames(1.2 * x[, 1] - 0.8 * x[, 2] + rnorm(n), rownames(x)); lambda_grid <- auto_lambda_grid(x, y, family = "gaussian", n_lambda = 10); fit <- stabl_fit(x = x, y = y, lambda_grid = lambda_grid, family = "gaussian", n_bootstraps = 5L, artificial_type = "random_permutation", random_state = 42L); stopifnot(inherits(fit, "stabl_fit"), identical(fit$family, "gaussian")); refit <- stabl_refit(fit, x = x, y = y); pred <- predict(refit, newdata = x); stopifnot(length(pred) == n); cat("README quick-start/refit smoke ok\n")'
 # -> README quick-start/refit smoke ok
 
 git diff --check
@@ -1145,9 +1141,10 @@ COSTABLR_JOB_IDS=__none__ conda run -n R4_51 Rscript /tmp/costablr_baseline_cont
 
 ### Compulsory Final Refit Workflow (2026-05-13)
 
-- Added exported `stabl_refit()` as the single-matrix end-to-end workflow:
-  run `stabl_fit()` for feature selection, then fit an unpenalized final model
-  on the selected features.
+- Added exported `stabl_refit()` for the single-matrix final model after STABL
+  feature selection. As of the 2026-05-19 API cleanup, it consumes a fitted
+  `stabl_fit` selector plus aligned training data instead of rerunning
+  selection internally.
 - Final refit backends now cover `gaussian` (`stats::lm()`), `binomial`
   (`stats::glm(..., binomial(link = "logit"))`), `multinomial`
   (`nnet::multinom()`), `poisson` (`stats::glm(..., poisson(link = "log"))`),

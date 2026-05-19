@@ -91,7 +91,7 @@ stabl_fit(x, y, lambda_grid, ...)
   ← compute_fdp_plus()                 [fdp_control.R]
   → S3 object "stabl_fit"
 
-stabl_refit()  ←  stabl_fit()  →  final model (lm / glm / multinom / coxph)
+stabl_refit(stabl_fit, x, y)  →  final model (lm / glm / multinom / coxph)
 
 stabl_multiomic_train_validate()   [multiomic_workflows.R:95]
   ← per-omic stabl_fit()
@@ -113,8 +113,8 @@ stabl_multiomic_nested_cv()        [nested_cv.R:50]
 
 | Class | Constructor | Key fields |
 |---|---|---|
-| `stabl_fit` | `stabl_fit()` | `stabl_scores_` (p×L matrix), `fdr_min_threshold_`, `hard_threshold`, `feature_names`, `artificial_type`, `fitted_lambda_grid` |
-| `stabl_refit` | `stabl_refit()` | inherits `stabl_fit` fields + `final_model_`, `family` |
+| `stabl_fit` | `stabl_fit()` | `stabl_scores_` (p×L matrix), `fdr_min_threshold_`, `hard_threshold`, `feature_names`, `artificial_type`, `fitted_lambda_grid`, `family` |
+| `stabl_refit` | `stabl_refit()` | embeds `$stabl_fit`, selected features/matrix, final model, final model type, family |
 | `stabl_multiomic_fit` | `stabl_multiomic_train_validate()` | `fits`, `refits`, `selected_features`, `early_fusion`, `late_fusion`, `stabl_selected_late_fusion`, `cooperative_fusion` |
 | `stabl_multiomic_cv` | `stabl_multiomic_cv()` | per-fold summaries of the above |
 | `stabl_multiomic_nested_cv` | `stabl_multiomic_nested_cv()` | outer-fold results, candidate selection |
