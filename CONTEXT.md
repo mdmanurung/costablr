@@ -90,6 +90,8 @@ _Avoid_: multiview model, cooperative learning branch
 
 - A **STABL Selector** produces zero or more selected biomarkers.
 - `stabl_fit()` is the canonical public API for a single-view **STABL Selector**.
+- `stabl_refit()` is the canonical public API for a single-view **Final Refit** after a completed `stabl_fit()` **STABL Selector**.
+- `stabl_refit()` consumes a completed single-view **STABL Selector** result; it does not run a new **STABL Selector**.
 - `stabl_per_omic()` is the canonical public API for fitting independent **STABL Selectors** across multiple **Omic Views**.
 - `stabl_multiomics()` is the canonical public API name for paper-level **Multi-Omic STABL**.
 - `stabl_late_fusion()` is the canonical public API name for **STABL-Selected Late Fusion**.

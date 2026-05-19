@@ -81,6 +81,10 @@ The following repository decisions are the authoritative reconciliations for
   stability scores, FDP+ diagnostics, reliability threshold, and support.
   `stabl_refit()` and the workflow-level refit branches own Step 6, the
   downstream final predictive refit.
+- **Poisson family:** Poisson is a supported `costablr` selector-plus-refit
+  family. `stabl_fit(family = "poisson")` owns selector computation, and
+  `stabl_refit()` derives the Poisson Final Refit from the fitted selector's
+  stored family metadata.
 
 These decisions are parity-critical unless a future change explicitly updates
 this contract, implementation, and tests together. The `>=` stability-score
@@ -264,7 +268,19 @@ Poisson, and Cox workflows, the final loss is the task-appropriate model loss.
 In `costablr`:
 
 - `stabl_fit()` stops after computing `S_hat(theta)` and selector diagnostics.
-- `stabl_refit()` performs the end-to-end final refit on `X_{S_hat(theta)}`.
+- `stabl_refit()` consumes a completed `stabl_fit()` selector result and the
+  aligned training data needed to fit the final model on `X_{S_hat(theta)}`.
+  It must not launch a new STABL selector run internally.
+- The selector object supplied to `stabl_refit()` must contain its original
+  task family metadata. `stabl_refit()` does not accept a separate `family`
+  override; selectors created before family metadata existed must be refit with
+  the current `stabl_fit()` contract.
+- `stabl_refit()` does not accept a one-off threshold override. Alternate
+  threshold inspection remains a selector-accessor concern through
+  `get_support()` and `get_feature_names_out()`, not a Final Refit concern.
+- The training matrix supplied to `stabl_refit()` must contain the selected
+  original features by name. It may contain unselected extra columns and does
+  not need to preserve the selector input's original column order.
 - If no features pass the reliability threshold, the final refit remains
   explicit and is fitted as an intercept-only model where the family supports
   that behavior.

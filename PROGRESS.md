@@ -39,6 +39,63 @@ Logging rule:
 7. Phase 7 (Reporting + exports): Complete
 8. Phase 8 (Hardening): Parity coverage complete (elastic-net, binomial, gaussian, multinomial)
 
+### Single-View Final Refit Boundary Design (2026-05-19)
+
+- Resolved the public naming direction for the single-view final-refit API:
+  keep `stabl_refit()` rather than renaming it to `stabl_final_fit()`.
+- Confirmed from `R/stabl_fit.R` that fitted `stabl_fit` selector objects do
+  not store the original training matrix, outcome, or `family`; a
+  selector-consuming `stabl_refit()` therefore still needs aligned training
+  data, and either explicit `family` input or new selector metadata.
+- Resolved the metadata direction: `stabl_fit()` should stay data-light and
+  not store training `x`/`y`, but it should store lightweight task metadata
+  such as `family` so `stabl_refit(fit, x, y)` can infer the final-refit
+  family from the selector object.
+- Resolved the compatibility direction: remove the current end-to-end
+  `stabl_refit(x, y, lambda_grid, ...)` call shape with a clear error, rather
+  than retaining a deprecation shim that reruns selection.
+- Resolved the training-matrix matching direction: require `stabl_refit()` to
+  find the selector's selected biomarkers in the supplied training matrix by
+  name, but do not require an exact full-column match or the selector input's
+  original column order.
+- Resolved the family-metadata policy: `stabl_refit()` should not accept a
+  separate `family` argument. It should require `family` metadata on the
+  supplied `stabl_fit` object and hard-error for older selector objects that do
+  not contain it.
+- Resolved the presentation policy: `stabl_refit()` should construct quietly;
+  selector family, threshold, final-refit type, and selected-biomarker count
+  should be shown by `print.stabl_refit()` rather than emitted as constructor
+  messages.
+- Resolved the returned-object field policy: keep the consumed selector under
+  the existing `$stabl_fit` field name on `stabl_refit` objects.
+- Resolved the signature/ellipsis policy: `stabl_refit()` should use
+  `stabl_refit(object, x, y, ..., final_model_args = list())`, where `...` is
+  accepted only to detect and reject stale end-to-end selector arguments with
+  targeted errors.
+- Resolved the threshold-override policy: remove `new_hard_threshold` from
+  `stabl_refit()`. Alternate-threshold extraction remains available on
+  selector accessors such as `get_support()` and `get_feature_names_out()`.
+- Resolved the final-model customization policy: keep `final_model_args` as
+  the only Final Refit customization hook on `stabl_refit()`.
+- Resolved the Poisson family policy: keep Poisson and document/test it as a
+  first-class selector-plus-refit family rather than a final-refit-only
+  exception.
+- Updated `CONTEXT.md` to define `stabl_refit()` as the canonical public API
+  for a single-view **Final Refit** after a completed `stabl_fit()` **STABL
+  Selector**.
+- Updated `STABL.md` so the Step 6 contract says `stabl_refit()` consumes a
+  completed `stabl_fit()` selector result and must not launch a new selector
+  run internally.
+- No implementation or validation commands have been run yet for this API
+  change; the remaining open branch is whether to proceed directly into
+  implementation or keep this turn as design-only.
+
+Validation:
+
+```bash
+# Not run; design/documentation clarification only.
+```
+
 ### Object-Consuming API Consistency Pass (2026-05-18)
 
 - Audited package R code, tests, roxygen docs, README, pkgdown reference

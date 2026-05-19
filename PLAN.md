@@ -147,6 +147,38 @@ results remains tied to the separate SLURM cache workflow.
 
 ## Current Planning Focus (Forward Only)
 
+Single-view final-refit API boundary clarification is active as of
+2026-05-19. The intended direction is to keep the public `stabl_refit()` name
+but change its canonical boundary so it consumes a completed `stabl_fit()`
+selector plus the aligned training data needed for the downstream unpenalized
+Final Refit, rather than launching a new selector run internally. This is not
+implemented yet. Open design decisions remain around where task-family metadata
+is stored and how much backward compatibility to retain for the current raw
+`x`/`y`/`lambda_grid` end-to-end call shape. Resolved design direction:
+`stabl_fit()` should not store training `x`/`y`, but should store lightweight
+task metadata such as `family` so `stabl_refit(fit, x, y)` can infer the final
+refit family from the selector object. Resolved compatibility direction:
+remove the current end-to-end `stabl_refit(x, y, lambda_grid, ...)` path with a
+clear error instead of keeping a deprecation shim. Resolved data-matching
+direction: `stabl_refit()` should require the supplied training matrix to
+contain the selector's selected biomarkers by name, but should not require an
+exact full-column match or original column order. Resolved family direction:
+`stabl_refit()` should not accept `family`; it should hard-error when the
+supplied `stabl_fit` object has no stored family metadata. Resolved
+presentation direction: `stabl_refit()` should construct quietly, with selector
+family, threshold, final-refit type, and selected-biomarker count shown through
+`print.stabl_refit()` rather than constructor messages. Resolved object-shape
+direction: the returned `stabl_refit` object should keep the consumed selector
+under the existing `$stabl_fit` field name. Resolved signature direction:
+`stabl_refit(object, x, y, ..., final_model_args = list())` should keep `...`
+only to reject stale end-to-end selector arguments with targeted errors.
+Resolved threshold-override direction: remove `new_hard_threshold` from
+`stabl_refit()` and keep alternate-threshold extraction on selector accessors.
+Resolved final-model customization direction: keep `final_model_args` as the
+only Final Refit customization hook. Resolved family-support direction: keep
+Poisson and document/test it as a first-class selector-plus-refit family rather
+than a final-refit-only exception.
+
 Paper-level **Multi-Omic STABL** final-layer parity is implemented for
 train/validation and CV workflows as of 2026-05-18:
 `stabl_multiomic_train_validate(multiomic_stabl = TRUE)` returns a
