@@ -212,10 +212,9 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
   )
 }
 
-# Internal indirection so tests can mock the optional-dep check via
-# `testthat::local_mocked_bindings(.has_multiview = function() FALSE)`.
+# Internal indirection for cooperative backend availability checks.
 .has_multiview <- function() {
-  requireNamespace("multiview", quietly = TRUE)
+  .has_cooperative_backend()
 }
 
 .resolve_cooperation_type_measure <- function(family, type_measure) {
@@ -257,9 +256,9 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
   cooperative_selection <- match.arg(cooperative_selection)
   cooperation_selector <- match.arg(cooperation_selector)
 
-  if (!.has_multiview()) {
+  if (!.has_cooperative_backend()) {
     stop(
-      "`cooperative_fusion = TRUE` requires the optional 'multiview' package to be installed.",
+      "Cooperative fusion backend is unavailable.",
       call. = FALSE
     )
   }
@@ -271,9 +270,9 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
     )
   }
 
-  if (!(family %in% c("gaussian", "binomial", "poisson", "cox"))) {
+  if (!(family %in% c("gaussian", "binomial"))) {
     stop(
-      "`cooperative_fusion = TRUE` currently supports family = 'gaussian', 'binomial', 'poisson', or 'cox'.",
+      "`cooperative_fusion = TRUE` currently supports family = 'gaussian' or 'binomial'.",
       call. = FALSE
     )
   }
@@ -300,13 +299,6 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
   }
 
   if (identical(cooperative_selection, "validation")) {
-    if (identical(family, "cox")) {
-      stop(
-        "`cooperation_selection = 'validation'` is not supported for family = 'cox'; use `cooperation_selection = 'cv'`.",
-        call. = FALSE
-      )
-    }
-
     if (is.null(x_valid_list) || is.null(y_valid)) {
       stop(
         "`cooperation_selection = 'validation'` requires both `x_valid_list` and `y_valid`.",

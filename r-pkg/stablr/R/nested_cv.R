@@ -43,6 +43,10 @@
 #'   execution on Windows.
 #' @param ... Additional arguments passed to [stabl_fit()].
 #'
+#' @note Cooperative fusion (`cooperative_fusion = TRUE`) is not supported in
+#'   nested CV. Use [stabl_multiomic_train_validate()] or
+#'   [stabl_multiomic_cv()] for cooperative workflows.
+#'
 #' @return An object of class `"stabl_multiomic_nested_cv"` containing fold
 #'   definitions, inner candidate diagnostics, outer held-out predictions,
 #'   selected features, and aggregate performance.

@@ -45,11 +45,12 @@
 #' @param n_iter_lf Number of random weight draws passed to
 #'   [stacked_multi_omic()] during late fusion.  Ignored when
 #'   `late_fusion = FALSE`.
-#' @param cooperative_fusion Logical. When `TRUE`, fit a multiview-based
-#'   cooperative learning branch in addition to the existing per-omic STABL
-#'   fits. Requires the optional `multiview` package.
+#' @param cooperative_fusion Logical. When `TRUE`, fit a built-in cooperative
+#'   learning branch (vendored multiview engine) in addition to the existing
+#'   per-omic STABL fits. Native v1 supports `family = "gaussian"` and
+#'   `"binomial"` only.
 #' @param rho Numeric scalar or vector of non-negative cooperation strengths.
-#'   When `NULL`, defaults to `0` following [multiview::multiview()].
+#'   When `NULL`, defaults to `0`.
 #' @param cooperation_selection Character scalar. Either `"cv"` or
 #'   `"validation"`. `"cv"` tunes over `rho` with shared inner fold
 #'   assignments. `"validation"` tunes over `rho` and `lambda` on the
@@ -727,20 +728,6 @@ stabl_multiomic_cv <- function(
   out
 }
 
-.cooperative_family_to_multiview <- function(family) {
-  switch(
-    family,
-    gaussian = stats::gaussian(),
-    binomial = stats::binomial(),
-    poisson = stats::poisson(),
-    cox = "cox",
-    stop(
-      "`cooperative_fusion = TRUE` only supports family = 'gaussian', 'binomial', 'poisson', or 'cox'.",
-      call. = FALSE
-    )
-  )
-}
-
 .cooperative_prediction_type <- function(family, type_measure) {
   if (identical(type_measure, "class")) {
     return("class")
@@ -974,7 +961,7 @@ stabl_multiomic_cv <- function(
   omic_names <- names(x_train_list)
   x_train_mv <- .coerce_multiomic_matrix_list(x_train_list)
   x_valid_mv <- if (is.null(x_valid_list)) NULL else .coerce_multiomic_matrix_list(x_valid_list)
-  mv_family <- .cooperative_family_to_multiview(family)
+  mv_family <- .cooperative_family_to_backend(family)
   direction <- .cooperative_metric_direction(cooperative_args$cooperation_type_measure)
 
   if (identical(cooperative_args$cooperative_selection, "cv")) {
@@ -986,10 +973,10 @@ stabl_multiomic_cv <- function(
     )
 
     cv_fits <- lapply(cooperative_args$rho, function(rho_value) {
-      multiview::cv.multiview(
+      .cooperative_backend_cv(
         x_list = x_train_mv,
         y = y_train,
-        family = mv_family,
+        family = family,
         rho = rho_value,
         type.measure = cooperative_args$cooperation_type_measure,
         foldid = foldid
@@ -1042,10 +1029,10 @@ stabl_multiomic_cv <- function(
   } else {
     foldid <- NULL
     mv_fits <- lapply(cooperative_args$rho, function(rho_value) {
-      multiview::multiview(
+      .cooperative_backend_fit(
         x_list = x_train_mv,
         y = y_train,
-        family = mv_family,
+        family = family,
         rho = rho_value
       )
     })

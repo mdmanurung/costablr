@@ -687,8 +687,6 @@ test_that("default multi-omic return structure is unchanged when cooperative_fus
 })
 
 test_that("cooperative_fusion with cv selection returns a multiview-backed branch", {
-  skip_if_not_installed("multiview")
-
   set.seed(37)
   n <- 18L
 
@@ -743,8 +741,6 @@ test_that("cooperative_fusion with cv selection returns a multiview-backed branc
 })
 
 test_that("cooperative_fusion supports validation-based gaussian tuning", {
-  skip_if_not_installed("multiview")
-
   set.seed(38)
   n_tr <- 18L
   n_va <- 10L
@@ -789,10 +785,7 @@ test_that("cooperative_fusion supports validation-based gaussian tuning", {
   expect_true(nrow(cf$diagnostics) >= length(cf$rho_grid))
 })
 
-test_that("cooperative_fusion supports binomial, poisson, and cox families", {
-  skip_if_not_installed("multiview")
-  skip_if_not_installed("survival")
-
+test_that("cooperative_fusion supports binomial family", {
   set.seed(39)
   n <- 20L
   x_a <- matrix(rnorm(n * 4L), nrow = n,
@@ -818,61 +811,53 @@ test_that("cooperative_fusion supports binomial, poisson, and cox families", {
     cooperation_nfolds = 3L
   ))
 
-  y_pois <- setNames(rpois(n, lambda = exp(0.2 + 0.4 * x_a[, 1L] - 0.2 * x_b[, 1L])),
-                     rownames(x_a))
-  fit_pois <- stabl_multiomic_train_validate(
-    x_train_list = list(omic_a = x_a, omic_b = x_b),
-    y_train = y_pois,
-    lambda_grid = data.frame(lambda = c(0.2, 0.1)),
-    artificial_type = NULL,
-    hard_threshold = 0.3,
-    n_bootstraps = 3L,
-    family = "poisson",
-    random_state = 18L,
-    cooperative_fusion = TRUE,
-    rho = c(0, 0.2),
-    cooperation_selection = "cv",
-    cooperation_selector = "lambda.min",
-    cooperation_nfolds = 3L
+  expect_s3_class(fit_bin$cooperative_fusion$fit, "cv.multiview")
+  expect_equal(fit_bin$cooperative_fusion$selector, "lambda.1se")
+})
+
+test_that("cooperative_fusion rejects poisson and cox families in native v1", {
+  set.seed(39)
+  n <- 20L
+  x_a <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(4L))))
+  x_b <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(4L))))
+  y_pois <- setNames(rpois(n, lambda = 2), rownames(x_a))
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list = list(omic_a = x_a, omic_b = x_b),
+      y_train = y_pois,
+      lambda_grid = data.frame(lambda = c(0.2, 0.1)),
+      artificial_type = NULL,
+      hard_threshold = 0.3,
+      n_bootstraps = 3L,
+      family = "poisson",
+      cooperative_fusion = TRUE,
+      rho = 0.2
+    ),
+    regexp = "gaussian.*binomial|binomial.*gaussian"
   )
 
-  y_cox <- survival::Surv(
-    time = pmax(rexp(n, rate = 1), 0.05),
-    event = rep(1L, n)
-  )
+  skip_if_not_installed("survival")
+  y_cox <- survival::Surv(time = rexp(n, 1), event = rep(1L, n))
   rownames(y_cox) <- rownames(x_a)
-  fit_cox <- tryCatch(
-    suppressWarnings(stabl_multiomic_train_validate(
+  expect_error(
+    stabl_multiomic_train_validate(
       x_train_list = list(omic_a = x_a, omic_b = x_b),
       y_train = y_cox,
       lambda_grid = data.frame(lambda = c(0.2, 0.1)),
       artificial_type = "random_permutation",
       n_bootstraps = 3L,
       family = "cox",
-      random_state = 19L,
       cooperative_fusion = TRUE,
-      rho = c(0, 0.2),
-      cooperation_selection = "cv",
-      cooperation_selector = "lambda.min",
-      cooperation_nfolds = 3L
-    )),
-    error = function(e) e
+      rho = 0.2
+    ),
+    regexp = "gaussian.*binomial|binomial.*gaussian"
   )
-  if (inherits(fit_cox, "error")) {
-    skip(sprintf("multiview cooperative Cox did not converge: %s", fit_cox$message))
-  }
-
-  expect_s3_class(fit_bin$cooperative_fusion$fit, "cv.multiview")
-  expect_equal(fit_bin$cooperative_fusion$selector, "lambda.1se")
-  expect_s3_class(fit_pois$cooperative_fusion$fit, "cv.multiview")
-  expect_equal(length(fit_pois$cooperative_fusion$train_predictions), n)
-  expect_s3_class(fit_cox$cooperative_fusion$fit, "cv.multiview")
-  expect_equal(length(fit_cox$cooperative_fusion$train_predictions), n)
 })
 
 test_that("cooperative_fusion rejects unsupported selection combinations", {
-  skip_if_not_installed("multiview")
-
   set.seed(40)
   n <- 12L
   x <- matrix(rnorm(n * 3L), nrow = n,
@@ -939,8 +924,6 @@ test_that("cooperative_fusion rejects multinomial family", {
 })
 
 test_that("stabl_multiomic_cv adds cooperative diagnostics when enabled", {
-  skip_if_not_installed("multiview")
-
   set.seed(41)
   n <- 18L
   x_a <- matrix(rnorm(n * 4L), nrow = n,
@@ -992,8 +975,6 @@ test_that("stabl_multiomic_cv adds cooperative diagnostics when enabled", {
 }
 
 test_that("cooperative_fusion: rho > 0 alters selection vs rho = 0 (gaussian, cv)", {
-  skip_if_not_installed("multiview")
-
   d <- .cf_make_two_omic(n = 30L, seed = 100L)
 
   call_with_rho <- function(rho_value) {
@@ -1033,8 +1014,6 @@ test_that("cooperative_fusion: rho > 0 alters selection vs rho = 0 (gaussian, cv
 })
 
 test_that("cooperative_fusion: cooperative selections differ from per-omic and early fusion", {
-  skip_if_not_installed("multiview")
-
   d <- .cf_make_two_omic(n = 30L, seed = 101L)
 
   fit <- stabl_multiomic_train_validate(
@@ -1068,8 +1047,7 @@ test_that("cooperative_fusion: cooperative selections differ from per-omic and e
                info = "cooperative, early, and per-omic should not all coincide")
 })
 
-test_that("cooperative_fusion rejects cox + validation selection", {
-  skip_if_not_installed("multiview")
+test_that("cooperative_fusion rejects cox family in native v1", {
   skip_if_not_installed("survival")
 
   set.seed(114L)
@@ -1098,16 +1076,15 @@ test_that("cooperative_fusion rejects cox + validation selection", {
       cooperation_selection = "validation",
       cooperation_selector = "lambda.min"
     ),
-    regexp = "cox.*validation|validation.*cox",
-    perl = TRUE
+    regexp = "gaussian.*binomial|binomial.*gaussian"
   )
 })
 
-test_that("cooperative_fusion fails cleanly when multiview is unavailable", {
+test_that("cooperative_fusion fails cleanly when backend is unavailable", {
   d <- .cf_make_two_omic(n = 12L, seed = 130L)
 
   testthat::local_mocked_bindings(
-    .has_multiview = function() FALSE,
+    .has_cooperative_backend = function() FALSE,
     .package = "stablr"
   )
 
@@ -1123,7 +1100,7 @@ test_that("cooperative_fusion fails cleanly when multiview is unavailable", {
       cooperative_fusion = TRUE,
       rho = 0
     ),
-    regexp = "multiview"
+    regexp = "Cooperative fusion backend is unavailable"
   )
 })
 
@@ -1132,8 +1109,6 @@ test_that("cooperative_fusion fails cleanly when multiview is unavailable", {
 # ---------------------------------------------------------------------------
 
 test_that("print.stabl_multiomic_fit reports cooperative fusion when present", {
-  skip_if_not_installed("multiview")
-
   d <- .cf_make_two_omic(n = 18L, seed = 200L)
 
   fit <- stabl_multiomic_train_validate(

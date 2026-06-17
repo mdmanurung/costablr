@@ -14,8 +14,7 @@ test_that("validate_multiomic_inputs rejects mismatched sample order across omic
   )
 })
 
-test_that("cooperative_fusion + family = 'cox' + selection = 'validation' is rejected", {
-  skip_if_not_installed("multiview")
+test_that("cooperative_fusion + family = 'cox' is rejected in native v1", {
   skip_if_not_installed("survival")
 
   s_ids <- paste0("s", 1:30)
@@ -24,34 +23,29 @@ test_that("cooperative_fusion + family = 'cox' + selection = 'validation' is rej
   y  <- survival::Surv(time = abs(rnorm(30)) + 0.1,
                         event = sample(0:1, 30, replace = TRUE))
   rownames(y) <- s_ids
-  x_valid <- list(omicA = x1, omicB = x2)
-  y_valid <- y
 
   expect_error(
     stabl_multiomic_train_validate(
       x_train_list           = list(omicA = x1, omicB = x2),
       y_train                = y,
-      x_valid_list           = x_valid,
-      y_valid                = y_valid,
       lambda_grid            = data.frame(lambda = c(0.2, 0.1)),
       family                 = "cox",
       cooperative_fusion     = TRUE,
-      cooperation_selection  = "validation",
       n_bootstraps           = 5L,
       artificial_type        = "random_permutation",
       random_state           = 1L
     ),
-    "validation.*not supported.*cox|cox.*validation"
+    "gaussian.*binomial|binomial.*gaussian"
   )
 })
 
-test_that("cooperative_fusion errors when 'multiview' is not available", {
+test_that("cooperative_fusion errors when cooperative backend is unavailable", {
   s_ids <- paste0("s", 1:30)
   x1 <- matrix(rnorm(30 * 4), nrow = 30, dimnames = list(s_ids, paste0("a", 1:4)))
   x2 <- matrix(rnorm(30 * 4), nrow = 30, dimnames = list(s_ids, paste0("b", 1:4)))
   y  <- setNames(rnorm(30), s_ids)
 
-  testthat::local_mocked_bindings(.has_multiview = function() FALSE)
+  testthat::local_mocked_bindings(.has_cooperative_backend = function() FALSE)
 
   expect_error(
     stabl_multiomic_train_validate(
@@ -64,6 +58,6 @@ test_that("cooperative_fusion errors when 'multiview' is not available", {
       artificial_type   = "random_permutation",
       random_state      = 1L
     ),
-    "multiview"
+    "Cooperative fusion backend is unavailable"
   )
 })
