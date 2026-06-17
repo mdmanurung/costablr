@@ -175,6 +175,18 @@ conda run -n R4_51 Rscript -e "pkgdown::build_site('r-pkg/stablr', install = FAL
 
 The site reference index is configured in `_pkgdown.yml`.
 
+## Application Note reproduction
+
+Publication-scale OOL parity metrics (Bioinformatics Advances track):
+
+```bash
+# Manuscript reference path (requires Sample Data/Onset of Labor)
+conda run -n R4_51 Rscript r-pkg/stablr/inst/analysis/generate_publication_parity_table.R
+
+# Smoke check on bundled extdata only
+conda run -n R4_51 Rscript r-pkg/stablr/inst/analysis/generate_publication_parity_table.R --allow-bundled
+```
+
 ## Citation
 
 If you use STABL, cite:

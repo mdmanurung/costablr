@@ -135,12 +135,6 @@ dmypy.json
 
 *.csv
 
-# Package-shipped data and test fixtures (override global *.csv / *.gz)
-!r-pkg/stablr/inst/extdata/
-!r-pkg/stablr/inst/extdata/**
-!r-pkg/stablr/tests/testthat/fixtures/
-!r-pkg/stablr/tests/testthat/fixtures/**
-
 /Benchmarks results/
 
 # Synthetic dataset
@@ -156,9 +150,30 @@ AGENTS.md
 *.rd*
 multiview/
 
-# Package-shipped data (override global *.gz above)
+# Package-shipped data and test fixtures (override global *.csv / *.gz)
 !r-pkg/stablr/inst/extdata/
 !r-pkg/stablr/inst/extdata/**
+!r-pkg/stablr/inst/analysis/data/
+!r-pkg/stablr/inst/analysis/data/**
+!r-pkg/stablr/tests/testthat/fixtures/
+!r-pkg/stablr/tests/testthat/fixtures/**
+
+# Stray duplicate parity extracts (canonical tree: fixtures/python_parity/)
+r-pkg/stablr/tests/testthat/fixtures/binomial/
+r-pkg/stablr/tests/testthat/fixtures/binomial_elastic_net/
+r-pkg/stablr/tests/testthat/fixtures/gaussian/
+r-pkg/stablr/tests/testthat/fixtures/gaussian_elastic_net/
+r-pkg/stablr/tests/testthat/fixtures/multinomial/
+r-pkg/stablr/tests/testthat/fixtures/multinomial_elastic_net/
+r-pkg/stablr/tests/testthat/fixtures/metrics_scalars.csv
+r-pkg/stablr/tests/testthat/fixtures/metrics_vectors.csv
+
+# Generated publication artifacts (keep OUTLINE.md tracked)
+papers/application-note/artifacts/
+
+# R package check/build debris
+stablr.Rcheck/
+stablr_*.tar.gz
 
 # Scratch workflow sources are intentionally trackable; ignore only generated
 # analysis artifacts written by notebooks and branch runners.

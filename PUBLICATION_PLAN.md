@@ -49,7 +49,9 @@ Three reviewers evaluated the plan on 2026-06-17:
 
 - [x] Add `inst/analysis/generate_publication_parity_table.R`
 - [x] Run publication-scale OOL proteomics fit (500 bootstraps, seed 42)
-- [x] Export parity metrics CSV: 7/7 tutorial recall, Jaccard 0.78, 9 selected
+- [x] Export parity metrics CSV (requires Sample Data; 7/7 recall, Jaccard 0.78)
+- [x] Harden parity script: fail without tutorial data, pkgload load path, reference CSV
+- [x] Add `ool_python_tutorial_scores.csv` for Spearman metric (ρ = 0.81 on full OOL tutorial data)
 - [ ] Generate Figure 1 (workflow schematic) — manuscript asset
 - [ ] Generate Figure 2 (FDP+ curve + stability path) — from OOL fit
 - [ ] Write divergence ledger paragraph (glmnet vs sklearn, documented in STABL.md)

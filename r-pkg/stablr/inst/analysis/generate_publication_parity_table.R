@@ -1,6 +1,9 @@
 #!/usr/bin/env Rscript
 # Generate publication-scale OOL proteomics parity metrics for the Application Note.
 #
+# Requires the full repository tutorial data at Sample Data/Onset of Labor unless
+# --allow-bundled is passed (development only; not the manuscript reference).
+#
 # Usage (from repository root):
 #   Rscript r-pkg/stablr/inst/analysis/generate_publication_parity_table.R
 #   Rscript r-pkg/stablr/inst/analysis/generate_publication_parity_table.R --outdir papers/application-note/artifacts
@@ -10,9 +13,13 @@
 parse_args <- function() {
   args <- commandArgs(trailingOnly = TRUE)
   outdir <- "papers/application-note/artifacts"
-  i <- match("--outdir", args)
-  if (!is.na(i) && i < length(args)) outdir <- args[[i + 1L]]
-  list(outdir = outdir)
+  allow_bundled <- FALSE
+  if (length(args) > 0L) {
+    i <- match("--outdir", args)
+    if (!is.na(i) && i < length(args)) outdir <- args[[i + 1L]]
+    allow_bundled <- "--allow-bundled" %in% args
+  }
+  list(outdir = outdir, allow_bundled = allow_bundled)
 }
 
 find_repo_root <- function() {
@@ -61,17 +68,65 @@ preprocess_fit <- function(x, min_var = 0, max_nan_fraction = 0.2) {
   col_means <- colMeans(x)
   col_sds <- sqrt(colMeans(sweep(x, 2, col_means)^2))
   col_sds[col_sds < 1e-10] <- 1
-  x <- sweep(sweep(x, 2, col_means), 2, col_sds, "/")
-  list(x = x, keep_cols = keep_cols, col_medians = col_medians,
-       col_means = col_means, col_sds = col_sds)
+  sweep(sweep(x, 2, col_means), 2, col_sds, "/")
 }
 
-python_tutorial_features <- c(
-  "Angiopoietin.2", "Siglec.6", "Activin.A", "IL.1.R4",
-  "SLPI", "MMP.12", "PLXB2"
-)
+jaccard_sets <- function(a, b) {
+  a <- unique(a)
+  b <- unique(b)
+  if (length(a) == 0L && length(b) == 0L) return(1)
+  length(intersect(a, b)) / length(union(a, b))
+}
 
-load_ool_proteomics <- function(repo) {
+load_stablr <- function(pkg_root) {
+  if (dir.exists(file.path(pkg_root, "R"))) {
+    if (requireNamespace("pkgload", quietly = TRUE)) {
+      suppressPackageStartupMessages(pkgload::load_all(pkg_root, quiet = TRUE))
+      return(invisible(getNamespace("stablr")))
+    }
+    if (requireNamespace("devtools", quietly = TRUE)) {
+      suppressPackageStartupMessages(devtools::load_all(pkg_root, quiet = TRUE))
+      return(invisible(getNamespace("stablr")))
+    }
+  }
+  if (requireNamespace("stablr", quietly = TRUE)) {
+    suppressPackageStartupMessages(library(stablr))
+    return(invisible(getNamespace("stablr")))
+  }
+  stop(
+    "Load stablr before running this script: install the package or add ",
+    "pkgload/devtools to run from source.",
+    call. = FALSE
+  )
+}
+
+package_version_string <- function(pkg_root, pkg = "stablr") {
+  ver <- tryCatch(
+    as.character(utils::packageVersion(pkg)),
+    error = function(e) NULL
+  )
+  if (!is.null(ver)) return(ver)
+  desc_path <- file.path(pkg_root, "DESCRIPTION")
+  if (!file.exists(desc_path)) return("unknown")
+  fields <- read.dcf(desc_path)
+  unname(fields[1, "Version"])
+}
+
+load_python_reference <- function(pkg_root) {
+  ref_path <- file.path(pkg_root, "inst", "analysis", "data",
+                        "ool_python_tutorial_reference.csv")
+  if (!file.exists(ref_path)) {
+    stop("Missing reference file: ", ref_path, call. = FALSE)
+  }
+  ref <- read.csv(ref_path, stringsAsFactors = FALSE)
+  list(
+    features = ref$feature,
+    scores_path = file.path(pkg_root, "inst", "analysis", "data",
+                            "ool_python_tutorial_scores.csv")
+  )
+}
+
+load_ool_proteomics <- function(repo, allow_bundled = FALSE) {
   ool_dir <- find_tutorial_dir(repo)
   if (!is.na(ool_dir)) {
     prot_train <- read.csv(
@@ -86,6 +141,14 @@ load_ool_proteomics <- function(repo) {
       data_source = "repository_tutorial"
     ))
   }
+  if (!isTRUE(allow_bundled)) {
+    stop(
+      "Publication parity requires Sample Data/Onset of Labor at the repository root. ",
+      "The bundled extdata subset is not the manuscript reference dataset. ",
+      "Pass --allow-bundled only for local smoke checks.",
+      call. = FALSE
+    )
+  }
   ool_train <- load_ool_data("train")
   list(
     x_raw = ool_train$x_list$proteomics,
@@ -94,21 +157,24 @@ load_ool_proteomics <- function(repo) {
   )
 }
 
+spearman_on_common <- function(r_scores, py_scores) {
+  common <- intersect(names(r_scores), names(py_scores))
+  if (length(common) < 2L) return(NA_real_)
+  stats::cor(r_scores[common], py_scores[common], method = "spearman")
+}
+
 main <- function() {
   cfg <- parse_args()
   repo <- find_repo_root()
   pkg_root <- file.path(repo, "r-pkg", "stablr")
-  if (!requireNamespace("devtools", quietly = TRUE)) {
-    stop("Install devtools to load stablr from source.", call. = FALSE)
-  }
-  suppressPackageStartupMessages(devtools::load_all(pkg_root, quiet = TRUE))
+  load_stablr(pkg_root)
 
   outdir <- file.path(repo, cfg$outdir)
   dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
-  loaded <- load_ool_proteomics(repo)
-  pipe <- preprocess_fit(loaded$x_raw)
-  x_fit <- pipe$x
+  py_ref <- load_python_reference(pkg_root)
+  loaded <- load_ool_proteomics(repo, allow_bundled = cfg$allow_bundled)
+  x_fit <- preprocess_fit(loaded$x_raw)
   y <- loaded$y[rownames(x_fit)]
 
   n_boot <- 500L
@@ -136,7 +202,16 @@ main <- function() {
   runtime_sec <- proc.time()[["elapsed"]] - t0
   selected <- get_feature_names_out(fit)
   importances <- get_importances(fit)
-  overlap <- intersect(selected, python_tutorial_features)
+  py_features <- py_ref$features
+  overlap <- intersect(selected, py_features)
+
+  py_scores <- NULL
+  if (file.exists(py_ref$scores_path)) {
+    score_tbl <- read.csv(py_ref$scores_path, stringsAsFactors = FALSE)
+    if (all(c("feature", "python_max_score") %in% names(score_tbl))) {
+      py_scores <- stats::setNames(score_tbl$python_max_score, score_tbl$feature)
+    }
+  }
 
   metrics <- data.frame(
     dataset = "OOL_proteomics",
@@ -148,31 +223,33 @@ main <- function() {
     artificial_type = "knockoff",
     n_bootstraps = n_boot,
     n_lambda = n_lambda,
-    n_selected = length(selected),
+    n_selected_r = length(selected),
+    n_selected_python_reference = length(py_features),
+    jaccard_r_vs_python_reference = jaccard_sets(selected, py_features),
     tutorial_recall = length(overlap),
-    tutorial_total = length(python_tutorial_features),
-    jaccard_tutorial = if (length(union(selected, python_tutorial_features)) == 0L) {
-      1
+    tutorial_total = length(py_features),
+    spearman_max_importance = if (is.null(py_scores)) {
+      NA_real_
     } else {
-      length(overlap) / length(union(selected, python_tutorial_features))
+      spearman_on_common(importances, py_scores)
     },
     runtime_min = round(runtime_sec / 60, 2),
     glmnet_version = as.character(utils::packageVersion("glmnet")),
-    stablr_version = as.character(utils::packageVersion("stablr")),
+    stablr_version = package_version_string(pkg_root),
     stringsAsFactors = FALSE
   )
 
   selected_df <- data.frame(
     feature = selected,
     importance = importances[selected],
-    in_python_tutorial_top = selected %in% python_tutorial_features,
+    in_python_tutorial_reference = selected %in% py_features,
     stringsAsFactors = FALSE
   )
   selected_df <- selected_df[order(-selected_df$importance), , drop = FALSE]
 
   overlap_df <- data.frame(
-    feature = python_tutorial_features,
-    selected_by_stablr = python_tutorial_features %in% selected,
+    feature = py_features,
+    selected_by_stablr = py_features %in% selected,
     stringsAsFactors = FALSE
   )
 
@@ -191,6 +268,13 @@ main <- function() {
   message("Wrote publication parity artifacts to: ", outdir)
   print(metrics)
   message("Tutorial overlap: ", paste(overlap, collapse = ", "))
+  if (is.na(metrics$spearman_max_importance)) {
+    message(
+      "Note: spearman_max_importance is NA. Add ",
+      basename(py_ref$scores_path),
+      " to record Python max-score concordance."
+    )
+  }
 }
 
 if (identical(environment(), globalenv()) &&

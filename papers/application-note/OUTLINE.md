@@ -71,9 +71,9 @@ Parity metrics CSV, extended vignettes, Python cross-reference notebook mapping.
 ## Reproduction commands
 
 ```bash
-# Package checks
-conda run -n R4_51 Rscript -e "devtools::test('r-pkg/stablr')"
-
-# Publication parity artifacts
+# Requires Sample Data/Onset of Labor at repo root (manuscript reference).
 conda run -n R4_51 Rscript r-pkg/stablr/inst/analysis/generate_publication_parity_table.R
+
+# Development smoke check on bundled extdata only:
+conda run -n R4_51 Rscript r-pkg/stablr/inst/analysis/generate_publication_parity_table.R --allow-bundled
 ```
