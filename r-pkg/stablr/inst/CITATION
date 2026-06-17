@@ -1,0 +1,30 @@
+bibentry(
+  bibtype = "Article",
+  title = "Discovery of sparse, reliable omic biomarkers with Stabl",
+  author = c(
+    person(given = "Jean", family = "H{\'e}dou"),
+    person(given = "Ivana", family = "Mari{\'c}"),
+    person(given = "Gregory", family = "Bellan"),
+    person(given = "David", family = "Gfeller")
+  ),
+  journal = "Nature Biotechnology",
+  year = 2024,
+  volume = 42,
+  pages = "941--950",
+  doi = "10.1038/s41587-023-02033-x",
+  note = "Original STABL method publication"
+)
+
+bibentry(
+  bibtype = "Manual",
+  title = "stablr: Sparse and Reliable Biomarker Discovery in R",
+  author = person(given = "Mika{\"e}l", family = "Manurung", role = "aut", email = "mikhael.manurung@gmail.com"),
+  year = 2026,
+  note = "R package implementing STABL with glmnet backends and multi-omic workflows",
+  url = "https://github.com/gregbellan/Stabl/tree/main/r-pkg/stablr",
+  textVersion = paste(
+    "Manurung M (2026). stablr: Sparse and Reliable Biomarker Discovery in R.",
+    "R package version 0.1.0.",
+    "https://github.com/gregbellan/Stabl/tree/main/r-pkg/stablr"
+  )
+)

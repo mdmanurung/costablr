@@ -30,8 +30,6 @@
 #'
 #' @seealso [stabl_fit()], [stabl_multiomic_train_validate()],
 #'   [get_support()], [get_importances()], [plot_stabl_path()]
-#'
-#' @keywords internal
 "_PACKAGE"
 
 utils::globalVariables(c(

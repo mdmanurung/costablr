@@ -135,6 +135,12 @@ dmypy.json
 
 *.csv
 
+# Package-shipped data and test fixtures (override global *.csv / *.gz)
+!r-pkg/stablr/inst/extdata/
+!r-pkg/stablr/inst/extdata/**
+!r-pkg/stablr/tests/testthat/fixtures/
+!r-pkg/stablr/tests/testthat/fixtures/**
+
 /Benchmarks results/
 
 # Synthetic dataset
@@ -149,6 +155,10 @@ AGENTS.md
 *.RData
 *.rd*
 multiview/
+
+# Package-shipped data (override global *.gz above)
+!r-pkg/stablr/inst/extdata/
+!r-pkg/stablr/inst/extdata/**
 
 # Scratch workflow sources are intentionally trackable; ignore only generated
 # analysis artifacts written by notebooks and branch runners.

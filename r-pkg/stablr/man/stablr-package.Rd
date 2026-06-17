@@ -45,12 +45,11 @@ output.
 \code{\link[=get_support]{get_support()}}, \code{\link[=get_importances]{get_importances()}}, \code{\link[=plot_stabl_path]{plot_stabl_path()}}
 }
 \author{
-\strong{Maintainer}: stablr contributors \email{maintainer@example.org}
+\strong{Maintainer}: Mikaël Manurung \email{mikhael.manurung@gmail.com}
 
 Authors:
 \itemize{
-  \item stablr contributors \email{maintainer@example.org}
+  \item Mikaël Manurung \email{mikhael.manurung@gmail.com}
 }
 
 }
-\keyword{internal}

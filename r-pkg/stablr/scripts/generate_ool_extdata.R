@@ -3,18 +3,27 @@
 ## Usage:
 ##   conda run -n R4_51 Rscript r-pkg/stablr/scripts/generate_ool_extdata.R
 
-pkg_root <- file.path(dirname(dirname(normalizePath(sys.frame(0)$ofile,
-                                                    mustWork = FALSE))),
-                      "stablr")
-
-# Fallback: allow running from repo root or package root
-if (!dir.exists(file.path(pkg_root, "R"))) {
+resolve_pkg_root <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  script_file <- grep("^--file=", args, value = TRUE)
+  if (length(script_file) > 0L) {
+    script_path <- normalizePath(sub("^--file=", "", script_file[[1L]]),
+                                 winslash = "/", mustWork = TRUE)
+    candidate <- dirname(dirname(script_path))
+    if (dir.exists(file.path(candidate, "R"))) return(candidate)
+  }
   candidates <- c(
-    "r-pkg/stablr",
-    file.path(getwd(), "r-pkg/stablr")
+    file.path(getwd(), "r-pkg", "stablr"),
+    "r-pkg/stablr"
   )
-  pkg_root <- candidates[sapply(candidates, function(p) dir.exists(file.path(p, "R")))][1]
+  hit <- candidates[vapply(candidates, function(p) dir.exists(file.path(p, "R")), logical(1L))]
+  if (length(hit) == 0L) {
+    stop("Could not locate stablr package root.", call. = FALSE)
+  }
+  normalizePath(hit[[1L]], winslash = "/", mustWork = TRUE)
 }
+
+pkg_root <- resolve_pkg_root()
 
 out_dir <- file.path(pkg_root, "inst", "extdata")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)

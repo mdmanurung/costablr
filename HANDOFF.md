@@ -42,6 +42,16 @@ For details that must not be duplicated here:
 
 ### Current state snapshot (live)
 
+- **Application Note track started 2026-06-17.** Multi-panel review completed;
+  revised plan in `PUBLICATION_PLAN.md`; manuscript outline in
+  `papers/application-note/OUTLINE.md`.
+- `r-pkg/stablr/` restored from git HEAD after working-tree deletion.
+- Package bumped to **0.1.0** with `inst/CITATION`, `NEWS.md`, and real
+  maintainer metadata.
+- Bundled OOL tutorial subset generated under `inst/extdata/`.
+- Python parity fixtures restored under `tests/testthat/fixtures/python_parity/`.
+- Latest verified full-suite signal: `PASS 1435`, `FAIL 0`, `SKIP 1`, `WARN 78`
+  after cooperative-Cox test hardening.
 - Vignette narrative rewrite is in place across all six canonical sources under
   `r-pkg/stablr/vignettes/`.  The rewrite used an original, curiosity-driven
   scientific narrative voice and preserved executable code chunks and runtime

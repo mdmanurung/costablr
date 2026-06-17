@@ -1,15 +1,18 @@
 Package: stablr
 Title: Sparse and Reliable Biomarker Discovery in R
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R:
-    person(given = "stablr", family = "contributors", role = c("aut", "cre"), email = "maintainer@example.org")
+    person(given = "Mikaël", family = "Manurung", role = c("aut", "cre"),
+           email = "mikhael.manurung@gmail.com")
 Description: Pure-R implementation of STABL for sparse and reliable biomarker
     discovery. Provides glmnet-based stability selection, FDP+ thresholding,
     artificial-feature controls, grouped bootstrapping, multi-omic early,
     late, and cooperative fusion workflows, visualization helpers, and
     export utilities without a Python or tidymodels runtime dependency.
+    Cite the original STABL method (Hédou et al., Nat Biotechnol 2024) when
+    reporting stability-selection results; cite this package for the R software.
 License: MIT + file LICENSE
-URL: https://gregbellan.github.io/Stabl/stablr/, https://github.com/gregbellan/Stabl
+URL: https://gregbellan.github.io/Stabl/stablr/, https://github.com/gregbellan/Stabl/tree/main/r-pkg/stablr
 BugReports: https://github.com/gregbellan/Stabl/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

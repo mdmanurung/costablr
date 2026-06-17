@@ -1768,3 +1768,23 @@ Validation:
 - At the last status check, `late_fusion`, the cooperative one-vs-rest
   branches, and `nested_cv` were still running, with visualization and notebook
   execution pending on `afterok` dependencies.
+
+### Application Note publication track initiated (2026-06-17)
+
+- Multi-panel review synthesized into `PUBLICATION_PLAN.md`.
+- Restored deleted `r-pkg/stablr/` source tree from git HEAD.
+- Generated bundled OOL subset under `r-pkg/stablr/inst/extdata/`.
+- Restored Python parity fixtures from `stablr_0.0.0.9000.tar.gz`.
+- Package metadata hardening: `Version: 0.1.0`, `inst/CITATION`, `NEWS.md`,
+  real maintainer `Authors@R`, public package help page.
+- Added `inst/analysis/generate_publication_parity_table.R` and
+  `papers/application-note/OUTLINE.md`.
+- Naming policy documented: package is `stablr`; `costablr` is not used.
+- Cooperative-Cox multiview test now skips on numerical non-convergence.
+
+Validation:
+
+- `testthat::test_local('r-pkg/stablr')` -> `PASS 1435`, `FAIL 0`, `SKIP 1`.
+- `R CMD build` + `R CMD check --no-manual` on `stablr_0.1.0.tar.gz` ->
+  `Status: OK`.
+

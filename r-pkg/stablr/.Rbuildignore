@@ -1,5 +1,7 @@
 ^doc$
 ^Meta$
+^docs$
+^scripts$
 ^vignettes/.*\.html$
 ^vignettes/.*-cache$
 ^vignettes/tcga_results$

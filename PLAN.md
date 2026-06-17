@@ -119,6 +119,23 @@ narrative rewrite, parallel render validation completed as SLURM array job
 
 ## Current Planning Focus (Forward Only)
 
+### Application Note track (Bioinformatics Advances) — ACTIVE 2026-06-17
+
+Publication planning lives in `PUBLICATION_PLAN.md` with manuscript outline at
+`papers/application-note/OUTLINE.md`.
+
+Active gates:
+
+1. Package release candidate `v0.1.0` with bundled `inst/extdata/`, CITATION,
+   NEWS, and green local test suite.
+2. Publication-scale OOL parity artifacts via
+   `inst/analysis/generate_publication_parity_table.R`.
+3. OUP Application Note draft (≤4 pages, software name `stablr` in title).
+4. Zenodo DOI before manuscript submission.
+
+Naming policy: package is **`stablr`**; cooperative fusion is a workflow inside
+`stablr`, not a separate package (`costablr` is not used).
+
 0. ~~**[ACTIVE] Vignette render validation after narrative rewrite.**~~
    **CLOSED 2026-05-12.** SLURM array `24752130` created HTML output for all
    five non-nested-CV vignettes; see `PROGRESS.md`.

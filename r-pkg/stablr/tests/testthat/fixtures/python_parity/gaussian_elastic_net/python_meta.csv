@@ -1,0 +1,4 @@
+key,value
+fdr_min_threshold,0.99
+min_fdr,0.3333333333333333
+n_bootstraps,60.0

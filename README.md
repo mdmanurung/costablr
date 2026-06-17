@@ -12,7 +12,8 @@ for the main learners, and does not require Python or tidymodels at runtime.
 ## Current R Package Scope
 
 - Core STABL stability selection via `stabl_fit()`
-- FDP+ thresholding with random-permutation or knockoff artificial features
+- FDP+ thresholding with random-permutation, Gaussian model-X knockoff, or
+  MVR knockoff artificial features
 - Lasso, elastic net, adaptive lasso, and optional sparse group lasso learners
 - Gaussian, binomial, multinomial, and Cox outcome support where the backend
   learner supports the family
@@ -26,7 +27,9 @@ for the main learners, and does not require Python or tidymodels at runtime.
 
 The algorithm and parity contract for the R port is maintained in
 [STABL.md](STABL.md). Forward work and validation evidence are tracked in
-[PLAN.md](PLAN.md), [PROGRESS.md](PROGRESS.md), and [HANDOFF.md](HANDOFF.md).
+[PLAN.md](PLAN.md), [PROGRESS.md](PROGRESS.md), [HANDOFF.md](HANDOFF.md), and
+the Bioinformatics Advances submission plan in
+[PUBLICATION_PLAN.md](PUBLICATION_PLAN.md).
 
 ## Install the R Package
 
@@ -40,7 +43,7 @@ devtools::install_local("r-pkg/stablr")
 Optional features use optional dependencies:
 
 - `ggplot2` for plotting helpers
-- `knockoff` for knockoff artificial features
+- `knockoff` for Gaussian model-X knockoff artificial features
 - `future` and `furrr` for parallel bootstrap execution
 - `sparsegl` for sparse group lasso
 - `multiview` for cooperative multi-omic fusion
