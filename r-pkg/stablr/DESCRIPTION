@@ -11,7 +11,7 @@ Description: Pure-R implementation of STABL for sparse and reliable biomarker
     export utilities without a Python or tidymodels runtime dependency.
     Cite the original STABL method (Hédou et al., Nat Biotechnol 2024) when
     reporting stability-selection results; cite this package for the R software.
-License: MIT + file LICENSE
+License: MIT + file LICENSE + file inst/COPYING.cooperative
 URL: https://gregbellan.github.io/Stabl/stablr/, https://github.com/gregbellan/Stabl/tree/main/r-pkg/stablr
 BugReports: https://github.com/gregbellan/Stabl/issues
 Encoding: UTF-8
@@ -20,8 +20,15 @@ Depends:
     R (>= 4.4.0)
 Imports:
     glmnet,
+    Matrix,
+    methods,
+    RColorBrewer,
+    Rcpp,
     stats,
     utils
+LinkingTo:
+    Rcpp,
+    RcppEigen
 Suggests:
     furrr,
     future,
@@ -38,6 +45,44 @@ Suggests:
     survival,
     testthat (>= 3.0.0),
     withr
+NeedsCompilation: yes
+SystemRequirements: C++17
+Collate:
+    'artificial_features.R'
+    'bootstrap_helpers.R'
+    'data_helpers.R'
+    'exports.R'
+    'fdp_control.R'
+    'learner_adapters.R'
+    'metrics.R'
+    'stabl_fit.R'
+    'cooperative-utils.R'
+    'cooperative-multiview.control.R'
+    'cooperative-RcppExports.R'
+    'cooperative-get_start.R'
+    'cooperative-mvglmnet.fit.R'
+    'cooperative-multiview.path.R'
+    'cooperative-multiview.R'
+    'cooperative-predict.multiview.R'
+    'cooperative-auc.R'
+    'cooperative-auc.mat.R'
+    'cooperative-cvtype.R'
+    'cooperative-cvstats.R'
+    'cooperative-cvcompute.R'
+    'cooperative-build_predmat.R'
+    'cooperative-cv.elnet.R'
+    'cooperative-cv.glmnetfit.R'
+    'cooperative-cv.lognet.R'
+    'cooperative-getOptcv.R'
+    'cooperative-cv.multiview.R'
+    'cooperative-predict.cv.multiview.R'
+    'cooperative-family.multiview.R'
+    'cooperative-backend.R'
+    'input_validation.R'
+    'multiomic_workflows.R'
+    'nested_cv.R'
+    'stabl_accessors.R'
+    'visualization.R'
 VignetteBuilder: knitr
 Config/testthat/edition: 3
 Config/roxygen2/version: 8.0.0

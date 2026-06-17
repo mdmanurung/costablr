@@ -1,0 +1,15 @@
+Cooperative-learning engine vendored from the R package multiview (GPL-2).
+
+Upstream authors:
+  Daisy Yi Ding, Robert J. Tibshirani, Balasubramanian Narasimhan,
+  Trevor Hastie, Kenneth Tay, James Yang, Jonathan Taylor
+
+Source: CRAN multiview version 1.0 (2026-05-11)
+https://cran.r-project.org/package=multiview
+
+This component is licensed under the GNU General Public License, version 2.
+See https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+
+When distributing stablr, the cooperative-learning sources in
+R/cooperative-*.R and src/ (including glmnetpp headers) remain
+under GPL-2. The remainder of stablr is under the MIT license (file LICENSE).

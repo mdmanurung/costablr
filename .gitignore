@@ -158,6 +158,12 @@ multiview/
 !r-pkg/stablr/tests/testthat/fixtures/
 !r-pkg/stablr/tests/testthat/fixtures/**
 
+# Compiled package artifacts
+r-pkg/stablr/src/*.o
+r-pkg/stablr/src/*.so
+r-pkg/stablr/src/**/*.o
+r-pkg/stablr/src/**/*.so
+
 # Stray duplicate parity extracts (canonical tree: fixtures/python_parity/)
 r-pkg/stablr/tests/testthat/fixtures/binomial/
 r-pkg/stablr/tests/testthat/fixtures/binomial_elastic_net/
