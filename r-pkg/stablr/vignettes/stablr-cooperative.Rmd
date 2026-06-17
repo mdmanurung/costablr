@@ -17,20 +17,6 @@ knitr::opts_chunk$set(
 set.seed(42)
 ```
 
-```{r multiview-check, include = FALSE}
-# Cooperative fusion requires the optional multiview package.
-# If it is not installed, code chunks are shown but not evaluated.
-if (!requireNamespace("multiview", quietly = TRUE)) {
-  knitr::opts_chunk$set(eval = FALSE)
-  message(
-    "The 'multiview' package is not installed. ",
-    "Code chunks will be displayed but not evaluated. ",
-    "Install it with: install.packages('multiview') ",
-    "or R CMD INSTALL <path/to/multiview>."
-  )
-}
-```
-
 ## Overview
 
 Early fusion asks all features to compete in one wide matrix.  Late fusion lets
@@ -38,10 +24,12 @@ each omic make its own prediction and combines the answers afterward.
 Cooperative fusion asks a subtler question: can the views be fitted together
 without erasing their identities?
 
-In `stablr`, cooperative fusion uses the optional `multiview` package.  Each
-view keeps its own coefficient path, but the paths are encouraged to agree
-through a cooperation strength `rho`.  The omics are neither fully pooled nor
-fully isolated.
+In `stablr`, cooperative fusion is built in natively (vendored from the
+[multiview](https://cran.r-project.org/package=multiview) cooperative-learning
+engine). Each view keeps its own coefficient path, but the paths are encouraged
+to agree through a cooperation strength `rho`. The omics are neither fully
+pooled nor fully isolated. Native v1 supports **gaussian** and **binomial**
+families.
 
 **When should you use cooperative fusion?**
 
@@ -124,7 +112,9 @@ vapply(lambda_list, nrow, integer(1L))
 
 Activate cooperative fusion with `cooperative_fusion = TRUE` and a `rho` grid.
 `stablr` fits one multiview model per `rho` value using shared inner CV folds,
-then picks the best `rho` by the chosen `cooperation_type_measure`.
+then picks the best `rho` by the chosen `cooperation_type_measure`. This is
+**sequential** tuning over `rho` (one full CV path per value), not a single
+joint CV over `(rho, lambda)` pairs.
 
 Key arguments:
 
@@ -259,13 +249,13 @@ stabl_multiomic_train_validate(
 )
 ```
 
-### Constraint 2 - Cox family cannot use validation-based tuning
+### Constraint 2 - Cox and Poisson families are not supported in native v1
 
-The multiview Cox path does not support external validation scoring, so
-`cooperation_selection = "validation"` with `family = "cox"` is not supported.
-Use `cooperation_selection = "cv"` for Cox models:
+Native cooperative fusion in `stablr` currently supports **gaussian** and
+**binomial** families only. Poisson and Cox cooperative paths are deferred to a
+future release:
 
-```{r guard-cox-validation, error = TRUE}
+```{r guard-cox-family, error = TRUE}
 library(survival)
 
 set.seed(42)
@@ -282,41 +272,24 @@ stabl_multiomic_train_validate(
   x_train_list          = list(omic_a = x_a, omic_b = x_b),
   y_train               = y_surv,
   lambda_grid           = data.frame(lambda = c(0.2, 0.1)),
-  x_valid_list          = list(omic_a = x_a, omic_b = x_b),
-  y_valid               = y_surv,
   family                = "cox",
   n_bootstraps          = 2L,
   artificial_type       = NULL,
   cooperative_fusion    = TRUE,
-  rho                   = 0,
-  cooperation_selection = "validation"
+  rho                   = 0
 )
 ```
 
 ---
 
-## 6. What happens when `multiview` is not installed
+## 6. Built-in cooperative engine
 
-Cooperative fusion is optional.  If `multiview` is absent and
-`cooperative_fusion = TRUE`, `stablr` stops immediately with an informative
-error before any computation runs:
+Cooperative fusion is built into `stablr`; no separate `multiview` install is
+required. The engine is vendored from CRAN `multiview` v1.0 (GPL-2; see
+`inst/COPYING.cooperative`) and is enabled with `cooperative_fusion = TRUE`.
 
-```
-Error: `cooperative_fusion = TRUE` requires the optional 'multiview' package
-to be installed.
-```
-
-Install the bundled version with:
-
-```r
-# From the stablr repository root:
-R CMD INSTALL multiview
-# or from CRAN when available:
-install.packages("multiview")
-```
-
-Setting `cooperative_fusion = FALSE`, the default, never triggers this check, so
-the rest of `stablr` works without `multiview`.
+Setting `cooperative_fusion = FALSE`, the default, runs only the per-omic STABL
+paths and never invokes the cooperative engine.
 
 ---
 

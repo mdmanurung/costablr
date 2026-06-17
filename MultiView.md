@@ -12,18 +12,19 @@ This file is the cooperative-fusion planning and evidence bridge between the mai
 ## Scope decision (active)
 
 - Cooperative fusion is tracked as an experimental, non-parity-blocking extension.
-- Cooperative source-of-truth is restricted to the in-repo `multiview/` implementation.
+- Cooperative source-of-truth is the vendored CRAN `multiview` v1.0 engine under
+  `r-pkg/stablr/R/cooperative-*.R` and `r-pkg/stablr/src/` (see
+  `third_party/multiview/VENDOR.md` and `inst/COPYING.cooperative`).
 - Historical references to removed `cooperative-learning/` paths are out of active scope.
 
-## Active source anchors (multiview)
+## Active source anchors (native cooperative engine)
 
-- `multiview/R/multiview.R`
-- `multiview/R/multiview.path.R`
-- `multiview/R/cv.multiview.R`
-- `multiview/R/predict.cv.multiview.R`
-- `multiview/R/coxpath.R`
-- `multiview/R/get_start.R`
-- `multiview/R/view.contribution.R`
+- `r-pkg/stablr/R/cooperative-multiview.R`
+- `r-pkg/stablr/R/cooperative-multiview.path.R`
+- `r-pkg/stablr/R/cooperative-cv.multiview.R`
+- `r-pkg/stablr/R/cooperative-predict.cv.multiview.R`
+- `r-pkg/stablr/R/cooperative-get_start.R`
+- `r-pkg/stablr/src/wls_exp.cpp` (binomial path)
 
 ## Verified capabilities from active source
 
@@ -39,12 +40,14 @@ This file is the cooperative-fusion planning and evidence bridge between the mai
 
 Add a middle-fusion option to `stabl_multiomic_train_validate()` and `stabl_multiomic_cv()` while preserving backward-compatible defaults and keeping core STABL parity work unblocked.
 
-Implementation status (2026-05-04):
+Implementation status (2026-06):
 
-- The cooperative branch is now implemented as a `stablr`-only experimental extension in the workflow layer.
-- Public workflow arguments are `cooperative_fusion`, `rho`, `cooperation_selection`, `cooperation_selector`, `cooperation_type_measure`, and `cooperation_nfolds`.
-- CV-based cooperative tuning is implemented for gaussian, binomial, poisson, and cox.
-- Validation-based cooperative tuning is implemented for gaussian, binomial, and poisson; cox validation-mode tuning remains intentionally unsupported.
+- The cooperative branch is implemented with a **native** vendored multiview engine
+  (gaussian and binomial in v1; poisson and cox deferred).
+- Public workflow arguments are `cooperative_fusion`, `rho`, `cooperation_selection`,
+  `cooperation_selector`, `cooperation_type_measure`, and `cooperation_nfolds`.
+- CV-based cooperative tuning is implemented for gaussian and binomial.
+- Validation-based cooperative tuning is implemented for gaussian and binomial.
 - Default non-cooperative behavior remains unchanged and is covered by deterministic regression tests.
 
 ## stablr implementation touchpoints
@@ -60,8 +63,10 @@ Implementation status (2026-05-04):
 - `cooperative_fusion = FALSE` preserves the current top-level return shape.
 - `rho` is the only public cooperation-strength name in `stablr`.
 - `lambda.1se` is available only for CV-based cooperative selection.
-- Cox cooperative tuning must use `cooperation_selection = "cv"`; validation-mode Cox tuning is intentionally unsupported.
-- `multiview` is an optional dependency and should not become a hard install requirement for non-cooperative users.
+- Native v1 cooperative fusion supports `family = "gaussian"` and `"binomial"` only.
+- Cox and Poisson cooperative paths are deferred; workflow validation rejects them.
+- `stabl_multiomic_nested_cv()` does not support `cooperative_fusion`; use train/validate or outer CV workflows.
+- `multiview` remains in `Suggests` only for optional live parity tests in development.
 
 Suggested API direction (RFC draft):
 

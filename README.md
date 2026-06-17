@@ -20,8 +20,8 @@ for the main learners, and does not require Python or tidymodels at runtime.
 - Strict sample-name alignment checks for matrices, outcomes, and groups
 - Classic and group-aware bootstrap sampling
 - Multi-omic train/validation and outer-CV workflows
-- Early fusion, late fusion, and optional cooperative fusion through
-  `multiview`
+- Early fusion, late fusion, and built-in cooperative fusion (vendored multiview
+  engine; gaussian and binomial in native v1)
 - Stable S3 accessors, plotting helpers, export helpers, and selection
   reproducibility metrics
 
@@ -46,7 +46,7 @@ Optional features use optional dependencies:
 - `knockoff` for Gaussian model-X knockoff artificial features
 - `future` and `furrr` for parallel bootstrap execution
 - `sparsegl` for sparse group lasso
-- `multiview` for cooperative multi-omic fusion
+- `multiview` for optional development parity checks (cooperative fusion is built in)
 - `mixOmics` for the TCGA vignette dataset
 
 ## Quick R Example
@@ -112,7 +112,7 @@ conda run -n R4_51 Rscript -e "pkgdown::build_site('r-pkg/stablr', install = FAL
 - `stablr-multiomic.Rmd`: real OOL multi-omic train/validation workflow
 - `stablr-python-parity.Rmd`: Python-to-R workflow mapping
 - `stablr-tcga.Rmd`: TCGA Breast Cancer multi-omic workflow
-- `stablr-cooperative.Rmd`: cooperative fusion with optional `multiview`
+- `stablr-cooperative.Rmd`: cooperative fusion with the built-in multiview engine
 
 ## Python Reference Code
 

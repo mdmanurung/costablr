@@ -69,6 +69,11 @@ stabl_multiomic_nested_cv(
 
 \item{...}{Additional arguments passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 }
+\note{
+Cooperative fusion (\code{cooperative_fusion = TRUE}) is not supported in nested CV.
+Use \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} or
+\code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} for cooperative workflows.
+}
 \value{
 An object of class \code{"stabl_multiomic_nested_cv"} containing fold definitions, inner candidate diagnostics, outer held-out predictions, selected features, and aggregate performance.
 }

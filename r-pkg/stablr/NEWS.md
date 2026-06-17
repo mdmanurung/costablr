@@ -1,5 +1,13 @@
 # stablr 0.1.0
 
+## Native cooperative learning (multiview engine)
+
+- Vendored CRAN `multiview` v1.0 cooperative-learning engine (GPL-2 submodule in
+  `inst/COPYING.cooperative`) for gaussian and binomial cooperative fusion.
+- No runtime dependency on the external `multiview` package for cooperative
+  workflows.
+- Compiled C++ core (`wls_exp`, glmnetpp headers) with `NeedsCompilation: yes`.
+
 ## Application-note release candidate
 
 - Pure-R STABL implementation with glmnet backends (lasso, elastic net,

@@ -222,8 +222,11 @@ For details that must not be duplicated here:
 ### Runtime constraints to preserve
 
 - `cooperative_fusion = FALSE` must preserve current top-level return shape.
-- `multiview` remains optional and cooperative mode must fail cleanly when absent.
+- Cooperative fusion uses the native vendored multiview engine (gaussian and
+  binomial in v1); no external `multiview` install is required at runtime.
+- `stabl_multiomic_nested_cv()` does not support cooperative fusion.
 - `cooperation_selection = "validation"` is unsupported for `family = "cox"`.
+- Cooperative fusion with `family = "cox"` or `"poisson"` is rejected in native v1.
 - `cooperation_selector = "lambda.1se"` is valid only with `cooperation_selection = "cv"`.
 - Outer fold construction behavior (`.make_multiomic_cv_folds()`) is stable; cooperative diagnostics are additive only.
 - Cooperative result inspection should use `get_cooperative_features()` and

@@ -16,6 +16,24 @@ bibentry(
 )
 
 bibentry(
+  bibtype = "Article",
+  title = "Cooperative learning for multi-view analysis",
+  author = c(
+    person(given = "Daisy Yi", family = "Ding"),
+    person(given = "Shuangning", family = "Li"),
+    person(given = "Balasubramanian", family = "Narasimhan"),
+    person(given = "Robert J.", family = "Tibshirani")
+  ),
+  journal = "Proceedings of the National Academy of Sciences",
+  year = 2022,
+  volume = 119,
+  number = 38,
+  pages = "e2202113119",
+  doi = "10.1073/pnas.2202113119",
+  note = "Cooperative fusion method implemented in the native stablr engine"
+)
+
+bibentry(
   bibtype = "Manual",
   title = "stablr: Sparse and Reliable Biomarker Discovery in R",
   author = person(given = "Mika{\"e}l", family = "Manurung", role = "aut", email = "mikhael.manurung@gmail.com"),

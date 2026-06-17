@@ -89,12 +89,13 @@ field.}
 \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} during late fusion.  Ignored when
 \code{late_fusion = FALSE}.}
 
-\item{cooperative_fusion}{Logical. When \code{TRUE}, fit a multiview-based
-cooperative learning branch in addition to the existing per-omic STABL
-fits. Requires the optional \code{multiview} package.}
+\item{cooperative_fusion}{Logical. When \code{TRUE}, fit a built-in cooperative
+learning branch (vendored multiview engine) in addition to the existing
+per-omic STABL fits. Native v1 supports \code{family = "gaussian"} and
+\code{"binomial"} only.}
 
 \item{rho}{Numeric scalar or vector of non-negative cooperation strengths.
-When \code{NULL}, defaults to \code{0} following \code{\link[multiview:multiview]{multiview::multiview()}}.}
+When \code{NULL}, defaults to \code{0}.}
 
 \item{cooperation_selection}{Character scalar. Either \code{"cv"} or
 \code{"validation"}. \code{"cv"} tunes over \code{rho} with shared inner fold
