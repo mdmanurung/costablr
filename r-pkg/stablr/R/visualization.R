@@ -45,19 +45,11 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
   lam_grid   <- object$fitted_lambda_grid
   n_lambda   <- ncol(scores)
 
-  threshold <- if (!is.null(new_hard_threshold)) {
-    new_hard_threshold
-  } else if (!is.null(object$hard_threshold)) {
-    object$hard_threshold
-  } else {
-    object$fdr_min_threshold_
-  }
-
-  support <- get_support(object, new_hard_threshold = new_hard_threshold)
+  threshold <- .resolve_stabl_threshold(object, new_hard_threshold, on_missing = "null")
+  support   <- get_support(object, new_hard_threshold = new_hard_threshold)
 
   # Determine whether to facet by alpha
   has_alpha <- "alpha" %in% names(lam_grid)
-  x_var     <- if (has_alpha) "lambda_idx" else "lambda_idx"
 
   # Build long data frame for real features
   lambda_vals <- unname(lam_grid$lambda)
@@ -187,16 +179,6 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 
 # ── FDR diagnostic graph ──────────────────────────────────────────────────────
 
-#' Plot the FDP+ FDR Estimate Curve
-#'
-#' Plots the estimated FDR at each stability threshold, with a vertical dashed
-#' line marking the optimal threshold (the one minimising the FDR estimate) and
-#' a horizontal dashed line marking the FDP target.
-#' Requires that `object` was fitted with `artificial_type` set (not `NULL`).
-#'
-#' @param object A fitted `"stabl_fit"` object.
-#' @param title Character; plot title.
-#'
 #' Plot the FDP+ FDR Estimate Curve
 #'
 #' Displays how the estimated False Discovery Proportion (FDP+) changes across

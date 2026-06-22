@@ -386,3 +386,29 @@ fscore_similarity <- function(list1, list2, beta = 1) {
     )
   }
 }
+
+# ── Classification metrics (used by multiomic nested-CV workflows) ────────────
+
+# Compute per-class and aggregate classification metrics from truth/predicted
+# factor vectors.  Called by both nested_cv.R and multiomic_workflows.R so it
+# lives here rather than in either caller file.
+.classification_metrics <- function(truth, predicted) {
+  truth     <- factor(truth)
+  predicted <- factor(predicted, levels = levels(truth))
+  tab       <- table(truth = truth, predicted = predicted)
+  recalls    <- diag(tab) / pmax(rowSums(tab), 1L)
+  precisions <- diag(tab) / pmax(colSums(tab), 1L)
+  f1 <- ifelse(
+    precisions + recalls > 0,
+    2 * precisions * recalls / (precisions + recalls),
+    0
+  )
+  accuracy <- sum(diag(tab)) / sum(tab)
+  list(
+    accuracy           = unname(accuracy),
+    balanced_error_rate = unname(1 - mean(recalls)),
+    per_class_recall   = recalls,
+    macro_f1           = unname(mean(f1)),
+    confusion          = tab
+  )
+}

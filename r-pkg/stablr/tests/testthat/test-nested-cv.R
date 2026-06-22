@@ -4,10 +4,11 @@ test_that("repeated stratified folds cover all samples once per repeat", {
     paste0("s", seq_len(18L))
   )
 
-  folds <- .make_repeated_stratified_folds(
+  folds <- .make_repeated_cv_folds(
     y = y,
     v = 3L,
     repeats = 2L,
+    stratified = TRUE,
     random_state = 42L
   )
 

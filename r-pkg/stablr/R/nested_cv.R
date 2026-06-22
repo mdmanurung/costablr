@@ -353,16 +353,6 @@ stabl_multiomic_nested_cv <- function(
   folds
 }
 
-.make_repeated_stratified_folds <- function(y, v, repeats = 1L, random_state = NULL) {
-  .make_repeated_cv_folds(
-    y = y,
-    v = v,
-    repeats = repeats,
-    stratified = TRUE,
-    random_state = random_state
-  )
-}
-
 .make_cv_folds <- function(y, v, stratified = TRUE, random_state = NULL) {
   if (isTRUE(stratified)) {
     return(.make_stratified_folds(y = y, v = v, random_state = random_state))
@@ -376,35 +366,26 @@ stabl_multiomic_nested_cv <- function(
   if (min(table(y)) < v) {
     stop("Each class must have at least `v` samples for stratified folds.", call. = FALSE)
   }
-  if (!is.null(random_state)) {
-    old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (old_seed_exists) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    on.exit({
-      if (old_seed_exists) {
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
+  .with_local_seed(
+    if (!is.null(random_state)) as.integer(random_state),
+    {
+      ids <- names(y)
+      fold_ids <- integer(length(y))
+      names(fold_ids) <- ids
+      for (lvl in levels(y)) {
+        class_ids <- sample(ids[y == lvl])
+        fold_ids[class_ids] <- rep(seq_len(v), length.out = length(class_ids))
       }
-    }, add = TRUE)
-    set.seed(as.integer(random_state))
-  }
-
-  ids <- names(y)
-  fold_ids <- integer(length(y))
-  names(fold_ids) <- ids
-  for (lvl in levels(y)) {
-    class_ids <- sample(ids[y == lvl])
-    fold_ids[class_ids] <- rep(seq_len(v), length.out = length(class_ids))
-  }
-
-  lapply(seq_len(v), function(i) {
-    valid_ids <- names(fold_ids)[fold_ids == i]
-    list(
-      train_ids = setdiff(ids, valid_ids),
-      valid_ids = valid_ids,
-      fold = paste0("Fold", i)
-    )
-  })
+      lapply(seq_len(v), function(i) {
+        valid_ids <- names(fold_ids)[fold_ids == i]
+        list(
+          train_ids = setdiff(ids, valid_ids),
+          valid_ids = valid_ids,
+          fold = paste0("Fold", i)
+        )
+      })
+    }
+  )
 }
 
 .make_unstratified_folds <- function(y, v, random_state = NULL) {
@@ -413,30 +394,22 @@ stabl_multiomic_nested_cv <- function(
   if (length(ids) < v) {
     stop("The number of samples must be at least `v`.", call. = FALSE)
   }
-  if (!is.null(random_state)) {
-    old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (old_seed_exists) old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    on.exit({
-      if (old_seed_exists) {
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
-      }
-    }, add = TRUE)
-    set.seed(as.integer(random_state))
-  }
-
-  shuffled <- sample(ids)
-  fold_ids <- rep(seq_len(v), length.out = length(shuffled))
-  names(fold_ids) <- shuffled
-  lapply(seq_len(v), function(i) {
-    valid_ids <- names(fold_ids)[fold_ids == i]
-    list(
-      train_ids = setdiff(ids, valid_ids),
-      valid_ids = valid_ids,
-      fold = paste0("Fold", i)
-    )
-  })
+  .with_local_seed(
+    if (!is.null(random_state)) as.integer(random_state),
+    {
+      shuffled <- sample(ids)
+      fold_ids <- rep(seq_len(v), length.out = length(shuffled))
+      names(fold_ids) <- shuffled
+      lapply(seq_len(v), function(i) {
+        valid_ids <- names(fold_ids)[fold_ids == i]
+        list(
+          train_ids = setdiff(ids, valid_ids),
+          valid_ids = valid_ids,
+          fold = paste0("Fold", i)
+        )
+      })
+    }
+  )
 }
 
 .derive_nested_seed <- function(random_state, index, offset) {
@@ -658,23 +631,6 @@ stabl_multiomic_nested_cv <- function(
     ))
   }
   do.call(rbind, rows)
-}
-
-.classification_metrics <- function(truth, predicted) {
-  truth <- factor(truth)
-  predicted <- factor(predicted, levels = levels(truth))
-  tab <- table(truth = truth, predicted = predicted)
-  recalls <- diag(tab) / pmax(rowSums(tab), 1L)
-  precisions <- diag(tab) / pmax(colSums(tab), 1L)
-  f1 <- ifelse(precisions + recalls > 0, 2 * precisions * recalls / (precisions + recalls), 0)
-  accuracy <- sum(diag(tab)) / sum(tab)
-  list(
-    accuracy = unname(accuracy),
-    balanced_error_rate = unname(1 - mean(recalls)),
-    per_class_recall = recalls,
-    macro_f1 = unname(mean(f1)),
-    confusion = tab
-  )
 }
 
 #' @export

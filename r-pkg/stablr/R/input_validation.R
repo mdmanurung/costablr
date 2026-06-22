@@ -212,11 +212,6 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
   )
 }
 
-# Internal indirection for cooperative backend availability checks.
-.has_multiview <- function() {
-  .has_cooperative_backend()
-}
-
 .resolve_cooperation_type_measure <- function(family, type_measure) {
   allowed <- .supported_cooperation_type_measures(family)
 

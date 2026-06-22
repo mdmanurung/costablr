@@ -617,21 +617,24 @@ stabl_fit <- function(
 
 # Internal: scoped seed helper.  Saves & restores `.Random.seed` so that the
 # wrapped expression has its own deterministic RNG state without polluting the
-# caller's RNG.  Used by `stabl_fit()` to make per-bootstrap learner calls
-# reproducible regardless of sequential vs parallel execution (audit V-7).
+# caller's RNG.  Used throughout the package to make per-bootstrap and
+# per-fold calls reproducible.  When `seed` is NULL, `expr` is evaluated
+# without any seeding (the caller's RNG state is left untouched).
 .with_local_seed <- function(seed, expr) {
-  has_old <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
-  if (has_old) {
-    old <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
-    on.exit(assign(".Random.seed", old, envir = globalenv()), add = TRUE)
-  } else {
-    on.exit(
-      if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
-        rm(".Random.seed", envir = globalenv())
-      },
-      add = TRUE
-    )
+  if (!is.null(seed)) {
+    has_old <- exists(".Random.seed", envir = globalenv(), inherits = FALSE)
+    if (has_old) {
+      old <- get(".Random.seed", envir = globalenv(), inherits = FALSE)
+      on.exit(assign(".Random.seed", old, envir = globalenv()), add = TRUE)
+    } else {
+      on.exit(
+        if (exists(".Random.seed", envir = globalenv(), inherits = FALSE)) {
+          rm(".Random.seed", envir = globalenv())
+        },
+        add = TRUE
+      )
+    }
+    set.seed(seed)
   }
-  set.seed(seed)
   expr
 }

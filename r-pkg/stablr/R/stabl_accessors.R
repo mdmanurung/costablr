@@ -41,22 +41,7 @@ get_support <- function(object, new_hard_threshold = NULL) {
 get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
   .check_fitted_stabl(object)
 
-  threshold <- if (!is.null(new_hard_threshold)) {
-    new_hard_threshold
-  } else if (!is.null(object$hard_threshold)) {
-    object$hard_threshold
-  } else {
-    object$fdr_min_threshold_
-  }
-
-  if (is.null(threshold)) {
-    stop(
-      "No threshold available: fit with `artificial_type` or supply ",
-      "`hard_threshold`.",
-      call. = FALSE
-    )
-  }
-
+  threshold  <- .resolve_stabl_threshold(object, new_hard_threshold)
   max_scores <- get_importances(object)
   mask       <- max_scores > threshold
 
@@ -256,7 +241,7 @@ get_importances <- function(object) {
 #' @export
 get_importances.stabl_fit <- function(object) {
   .check_fitted_stabl(object)
-  scores        <- apply(object$stabl_scores_, 1L, max)
+  scores        <- rowMaxs(object$stabl_scores_)
   names(scores) <- object$feature_names
   scores
 }
@@ -336,6 +321,40 @@ print.stabl_multiomic_cv <- function(x, ...) {
 }
 
 # ---- Internal helpers --------------------------------------------------------
+
+# Resolve the effective threshold for a fitted stabl_fit object.
+# Precedence: new_hard_threshold > object$hard_threshold > object$fdr_min_threshold_.
+# on_missing controls what happens when all three are NULL:
+#   "error"  — stop() with the canonical accessor error message (default)
+#   "null"   — return NULL silently (used when threshold is optional, e.g. plot annotations)
+#   "na"     — return NA_real_ (used in multiomic threshold helpers)
+.resolve_stabl_threshold <- function(object, new_hard_threshold = NULL,
+                                     on_missing = c("error", "null", "na")) {
+  on_missing <- match.arg(on_missing)
+  threshold  <- if (!is.null(new_hard_threshold)) {
+    new_hard_threshold
+  } else if (!is.null(object$hard_threshold)) {
+    object$hard_threshold
+  } else {
+    object$fdr_min_threshold_
+  }
+
+  if (!is.null(threshold)) {
+    return(threshold)
+  }
+
+  switch(
+    on_missing,
+    error = stop(
+      "No threshold available: fit with `artificial_type` or supply ",
+      "`hard_threshold`.",
+      call. = FALSE
+    ),
+    null = NULL,
+    na   = NA_real_
+  )
+}
+
 .check_fitted_stabl <- function(object) {
   if (is.null(object$stabl_scores_)) {
     stop(

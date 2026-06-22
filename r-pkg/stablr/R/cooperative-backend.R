@@ -1,9 +1,5 @@
 # Internal cooperative-learning backend (vendored multiview engine).
 
-.cooperative_supported_families <- function() {
-  c("gaussian", "binomial")
-}
-
 .cooperative_family_to_backend <- function(family) {
   switch(
     family,

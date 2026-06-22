@@ -319,13 +319,7 @@ stabl_multiomic_train_validate <- function(
     } else if (identical(task_type, "multiclass")) {
       .apply_multiclass_stack_weights(valid_preds, stacked$weights$Associated_weight)
     } else {
-      w      <- stacked$weights$Associated_weight
-      w_mat  <- matrix(w, nrow = nrow(valid_preds),
-                       ncol = length(w), byrow = TRUE)
-      is_obs <- !is.na(valid_preds)
-      denom  <- rowSums(is_obs * w_mat)
-      num    <- rowSums(ifelse(is_obs, valid_preds * w_mat, 0))
-      ifelse(denom > 0, num / denom, NA_real_)
+      .weighted_masked_mean(valid_preds, stacked$weights$Associated_weight)
     }
 
     lf_result <- list(
@@ -655,30 +649,14 @@ stabl_multiomic_cv <- function(
 }
 
 .permute_for_cv <- function(x, random_state = NULL) {
-  if (is.null(random_state)) {
-    return(sample(x, length(x), replace = FALSE))
-  }
-
-  if (length(random_state) != 1L || is.na(random_state)) {
+  if (!is.null(random_state) && (length(random_state) != 1L || is.na(random_state))) {
     stop("`random_state` must be a single non-missing integer when supplied.",
          call. = FALSE)
   }
-
-  old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-  if (old_seed_exists) {
-    old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-  }
-
-  on.exit({
-    if (old_seed_exists) {
-      assign(".Random.seed", old_seed, envir = .GlobalEnv)
-    } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-      rm(".Random.seed", envir = .GlobalEnv)
-    }
-  }, add = TRUE)
-
-  set.seed(as.integer(random_state))
-  sample(x, length(x), replace = FALSE)
+  .with_local_seed(
+    if (!is.null(random_state)) as.integer(random_state),
+    sample(x, length(x), replace = FALSE)
+  )
 }
 
 .summarize_multiomic_fold <- function(fold_fit, fold_name) {
@@ -709,15 +687,7 @@ stabl_multiomic_cv <- function(
 }
 
 .effective_multiomic_threshold <- function(fit) {
-  if (!is.null(fit$hard_threshold)) {
-    return(fit$hard_threshold)
-  }
-
-  if (!is.null(fit$fdr_min_threshold_)) {
-    return(fit$fdr_min_threshold_)
-  }
-
-  NA_real_
+  .resolve_stabl_threshold(fit, on_missing = "na")
 }
 
 .coerce_multiomic_matrix_list <- function(x_list) {
@@ -1222,58 +1192,44 @@ stacked_multi_omic <- function(
     stop("`predictions` must have at least one column.", call. = FALSE)
   }
 
-  if (!is.null(random_state)) {
-    old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (old_seed_exists) {
-      old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    }
-    on.exit({
-      if (old_seed_exists) {
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
+  .with_local_seed(
+    if (!is.null(random_state)) as.integer(random_state),
+    {
+      best_score   <- -Inf
+      best_weights <- rep(1 / n_omics, n_omics)
+      best_probs   <- rep(NA_real_, n_samples)
+
+      for (i in seq_len(as.integer(n_iter))) {
+        weights <- stats::runif(n_omics, 0, 10)
+        weighted_probs <- .weighted_masked_mean(predictions, weights)
+
+        complete_idx <- !is.na(weighted_probs) & !is.na(y)
+        if (sum(complete_idx) < 2L) next
+
+        score <- tryCatch(
+          if (task_type == "binary") {
+            .r_auc(y[complete_idx], weighted_probs[complete_idx])
+          } else {
+            .r_squared(y[complete_idx], weighted_probs[complete_idx])
+          },
+          error = function(e) NA_real_
+        )
+
+        if (!is.na(score) && score > best_score) {
+          best_score   <- score
+          best_weights <- weights
+          best_probs   <- weighted_probs
+        }
       }
-    }, add = TRUE)
-    set.seed(as.integer(random_state))
-  }
 
-  best_score   <- -Inf
-  best_weights <- rep(1 / n_omics, n_omics)
-  best_probs   <- rep(NA_real_, n_samples)
+      weights_df        <- data.frame(Associated_weight = best_weights,
+                                      row.names = colnames(predictions))
+      preds_df          <- as.data.frame(predictions)
+      preds_df[["Stacked Gen. Predictions"]] <- best_probs
 
-  for (i in seq_len(as.integer(n_iter))) {
-    weights <- stats::runif(n_omics, 0, 10)
-    w_mat   <- matrix(weights, nrow = n_samples, ncol = n_omics, byrow = TRUE)
-    is_obs  <- !is.na(predictions)
-    denom   <- rowSums(is_obs * w_mat)
-    num     <- rowSums(ifelse(is_obs, predictions * w_mat, 0))
-    weighted_probs <- ifelse(denom > 0, num / denom, NA_real_)
-
-    complete_idx <- !is.na(weighted_probs) & !is.na(y)
-    if (sum(complete_idx) < 2L) next
-
-    score <- tryCatch(
-      if (task_type == "binary") {
-        .r_auc(y[complete_idx], weighted_probs[complete_idx])
-      } else {
-        .r_squared(y[complete_idx], weighted_probs[complete_idx])
-      },
-      error = function(e) NA_real_
-    )
-
-    if (!is.na(score) && score > best_score) {
-      best_score   <- score
-      best_weights <- weights
-      best_probs   <- weighted_probs
+      list(predictions = preds_df, weights = weights_df, score = best_score)
     }
-  }
-
-  weights_df        <- data.frame(Associated_weight = best_weights,
-                                  row.names = colnames(predictions))
-  preds_df          <- as.data.frame(predictions)
-  preds_df[["Stacked Gen. Predictions"]] <- best_probs
-
-  list(predictions = preds_df, weights = weights_df, score = best_score)
+  )
 }
 
 .stacked_multi_omic_multiclass <- function(predictions,
@@ -1298,52 +1254,42 @@ stacked_multi_omic <- function(
     )
   }
 
-  if (!is.null(random_state)) {
-    old_seed_exists <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    if (old_seed_exists) {
-      old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
-    }
-    on.exit({
-      if (old_seed_exists) {
-        assign(".Random.seed", old_seed, envir = .GlobalEnv)
-      } else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
-        rm(".Random.seed", envir = .GlobalEnv)
+  .with_local_seed(
+    if (!is.null(random_state)) as.integer(random_state),
+    {
+      best_score <- -Inf
+      best_loss <- Inf
+      best_weights <- rep(1 / n_omics, n_omics)
+      best_probs <- matrix(NA_real_, nrow = n_samples, ncol = n_classes,
+                           dimnames = list(dimnames(arr)[[1L]], classes))
+
+      for (i in seq_len(as.integer(n_iter))) {
+        weights <- stats::runif(n_omics, 0, 10)
+        probs <- .weighted_multiclass_probabilities(arr, weights)
+        loss <- .multiclass_log_loss(y, probs)
+        score <- -loss
+        if (is.finite(score) && score > best_score) {
+          best_score <- score
+          best_loss <- loss
+          best_weights <- weights
+          best_probs <- probs
+        }
       }
-    }, add = TRUE)
-    set.seed(as.integer(random_state))
-  }
 
-  best_score <- -Inf
-  best_loss <- Inf
-  best_weights <- rep(1 / n_omics, n_omics)
-  best_probs <- matrix(NA_real_, nrow = n_samples, ncol = n_classes,
-                       dimnames = list(dimnames(arr)[[1L]], classes))
+      weights_df <- data.frame(Associated_weight = best_weights,
+                               row.names = omic_names)
+      preds_df <- as.data.frame(best_probs, check.names = FALSE)
+      names(preds_df) <- paste0("prob_", names(preds_df))
+      preds_df$predicted_class <- classes[max.col(best_probs, ties.method = "first")]
 
-  for (i in seq_len(as.integer(n_iter))) {
-    weights <- stats::runif(n_omics, 0, 10)
-    probs <- .weighted_multiclass_probabilities(arr, weights)
-    loss <- .multiclass_log_loss(y, probs)
-    score <- -loss
-    if (is.finite(score) && score > best_score) {
-      best_score <- score
-      best_loss <- loss
-      best_weights <- weights
-      best_probs <- probs
+      list(
+        predictions = preds_df,
+        weights = weights_df,
+        score = best_score,
+        log_loss = best_loss,
+        levels = classes
+      )
     }
-  }
-
-  weights_df <- data.frame(Associated_weight = best_weights,
-                           row.names = omic_names)
-  preds_df <- as.data.frame(best_probs, check.names = FALSE)
-  names(preds_df) <- paste0("prob_", names(preds_df))
-  preds_df$predicted_class <- classes[max.col(best_probs, ties.method = "first")]
-
-  list(
-    predictions = preds_df,
-    weights = weights_df,
-    score = best_score,
-    log_loss = best_loss,
-    levels = classes
   )
 }
 
@@ -1379,6 +1325,19 @@ stacked_multi_omic <- function(
     arr[, , i] <- mats[[i]]
   }
   arr
+}
+
+# NA-aware weighted row-mean of a samples × omics numeric matrix.
+# Each row is averaged over observed (non-NA) columns, re-weighted to the sum
+# of observed-column weights.  Rows where every column is NA return NA_real_.
+# Used for binary/regression late-fusion; see .weighted_multiclass_probabilities
+# for the analogous multiclass helper.
+.weighted_masked_mean <- function(P, weights) {
+  w_mat  <- matrix(weights, nrow = nrow(P), ncol = length(weights), byrow = TRUE)
+  is_obs <- !is.na(P)
+  denom  <- rowSums(is_obs * w_mat)
+  num    <- rowSums(ifelse(is_obs, P * w_mat, 0))
+  ifelse(denom > 0, num / denom, NA_real_)
 }
 
 .weighted_multiclass_probabilities <- function(pred_array, weights) {
