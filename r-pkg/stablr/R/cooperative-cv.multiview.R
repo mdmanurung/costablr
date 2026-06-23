@@ -277,14 +277,13 @@
   lambda <- multiview.object$lambda
   class(outlist) <- paste0(subclass, "list")
   if (inherits(outlist, "coxnetlist")) {
-    predmat <- build_predmat_coxnetlist(outlist, lambda, x_list, offset, foldid, alignment, y = y,
-                                        weights = weights,
-                                        grouped = grouped, type.measure = type.measure,
-                                        family = family(multiview.object))
-  } else {
-    predmat <- build_predmat(outlist, lambda, x_list, offset, foldid, alignment, y = y, weights = weights,
-                             grouped = grouped, type.measure = type.measure, family = family(multiview.object))
+    stop(
+      "Native cooperative learning in stablr currently supports gaussian and binomial only.",
+      call. = FALSE
+    )
   }
+  predmat <- build_predmat(outlist, lambda, x_list, offset, foldid, alignment, y = y, weights = weights,
+                           grouped = grouped, type.measure = type.measure, family = family(multiview.object))
   ### we include type.measure for the special case of coxnet with the deviance vs C-index discrepancy
   ### family is included for the new GLM crowd
   ### Next we compute the measures
@@ -296,7 +295,10 @@
   if (lognet_class) {
     cvstuff <- cv.lognet(predmat, y, type.measure, weights, foldid, grouped)
   } else if (coxnet_class) {
-    cvstuff <- cv.coxnet(predmat, y, type.measure, weights, foldid, grouped)
+    stop(
+      "Native cooperative learning in stablr currently supports gaussian and binomial only.",
+      call. = FALSE
+    )
   } else {
     #cvstuff <- do.call(cv.glmnetfit, list(predmat, y, type.measure, weights, foldid, grouped))
     cvstuff <- cv.glmnetfit(predmat, y, type.measure, weights, foldid, grouped)
