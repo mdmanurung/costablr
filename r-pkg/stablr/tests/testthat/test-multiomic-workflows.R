@@ -1502,3 +1502,31 @@ test_that("[char-F2-val] cooperative validation selection branch produces bit-id
   expect_null(cfv$foldid)
   expect_equal(which(cfv$diagnostics$selected), 43L)
 })
+
+# [B3] late_fusion + cox fail-fast -----------------------------------------------
+
+test_that("[B3] late_fusion = TRUE rejects family = 'cox' with clear error", {
+  skip_if_not_installed("survival")
+  set.seed(77L)
+  n <- 20L
+  ids <- paste0("s", seq_len(n))
+  x_a <- matrix(rnorm(n * 4L), nrow = n,
+                dimnames = list(ids, paste0("a", seq_len(4L))))
+  x_b <- matrix(rnorm(n * 3L), nrow = n,
+                dimnames = list(ids, paste0("b", seq_len(3L))))
+  y_cox <- survival::Surv(time = rexp(n, 1), event = rep(1L, n))
+  rownames(y_cox) <- ids
+
+  expect_error(
+    stabl_multiomic_train_validate(
+      x_train_list    = list(omic_a = x_a, omic_b = x_b),
+      y_train         = y_cox,
+      lambda_grid     = data.frame(lambda = c(0.2, 0.1)),
+      artificial_type = "random_permutation",
+      n_bootstraps    = 3L,
+      family          = "cox",
+      late_fusion     = TRUE
+    ),
+    regexp = "cox"
+  )
+})

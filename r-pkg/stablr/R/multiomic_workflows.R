@@ -140,6 +140,17 @@ stabl_multiomic_train_validate <- function(
     )
   }
 
+  if (isTRUE(late_fusion) && identical(family, "cox")) {
+    stop(
+      "`late_fusion = TRUE` does not support family = 'cox' ",
+      "(survival scoring is not implemented for late fusion; ",
+      "the stacked generalisation step requires a regression or classification ",
+      "metric that cannot handle censored Surv outcomes). ",
+      "Use per-omic or early_fusion only, or switch to family = 'gaussian'/'binomial'.",
+      call. = FALSE
+    )
+  }
+
   fit_params <- list(
     base_learner       = base_learner,
     family             = family,
@@ -1473,7 +1484,13 @@ stacked_multi_omic <- function(
 # ---------------------------------------------------------------------------
 
 # Infer task_type from glm family string.
+# Note: "cox" is intentionally excluded — late_fusion blocks it upstream via an
+# explicit stop(); reaching this helper with family = "cox" is a programming error.
 .family_to_task_type <- function(family) {
+  if (identical(family, "cox")) {
+    stop(".family_to_task_type: cox is not supported in late-fusion scoring; ",
+         "this should have been caught earlier.", call. = FALSE)
+  }
   switch(family, binomial = "binary", multinomial = "multiclass", "regression")
 }
 
