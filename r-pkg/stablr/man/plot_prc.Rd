@@ -34,6 +34,14 @@ number of true negatives.  Use this plot after applying STABL feature
 selection and fitting a downstream binary classifier.  The Area Under the
 PRC (AUPRC) is shown in the caption.
 }
+\examples{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  set.seed(1L)
+  y_true  <- sample(0:1, 50, replace = TRUE)
+  y_preds <- pmin(pmax(y_true * 0.6 + rnorm(50, 0, 0.3), 0), 1)
+  plot_prc(y_true, y_preds)
+}
+}
 \seealso{
 \code{\link[=plot_roc]{plot_roc()}} for the ROC curve alternative.
 }

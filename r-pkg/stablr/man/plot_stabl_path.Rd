@@ -33,3 +33,15 @@ is shown as a dashed horizontal line.
 When the lambda grid contains an \code{alpha} column (elastic-net mixed-alpha
 path), the plot is automatically faceted by \code{alpha}.
 }
+\examples{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  set.seed(1L)
+  x <- matrix(rnorm(40 * 6), 40, 6,
+               dimnames = list(paste0("s", 1:40), paste0("f", 1:6)))
+  y <- setNames(rnorm(40), rownames(x))
+  fit <- stabl_fit(x, y,
+                   lambda_grid = data.frame(lambda = c(0.3, 0.1, 0.05)),
+                   n_bootstraps = 6L, hard_threshold = 0.3, random_state = 1L)
+  plot_stabl_path(fit)
+}
+}

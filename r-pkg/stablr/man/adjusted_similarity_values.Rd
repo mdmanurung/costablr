@@ -23,3 +23,7 @@ a flat vector.  This format is convenient for computing summary statistics
 (see \code{\link[=adjusted_similarity_measure]{adjusted_similarity_measure()}}) or for Wilcoxon/permutation tests
 comparing reproducibility across methods.
 }
+\examples{
+sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
+adjusted_similarity_values(sets, nb_total_elements = 10L)
+}

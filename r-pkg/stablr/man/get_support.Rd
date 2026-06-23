@@ -42,6 +42,19 @@ feature's score exceeds the threshold, the function returns the top
 exploratory analyses where you want at least some candidates even when the
 signal is weak.
 }
+\examples{
+set.seed(1L)
+x <- matrix(rnorm(30 * 5), 30, 5,
+            dimnames = list(paste0("s", 1:30), paste0("f", 1:5)))
+y <- setNames(rnorm(30), rownames(x))
+fit <- stabl_fit(x, y,
+                 lambda_grid    = data.frame(lambda = c(0.2, 0.1, 0.05)),
+                 n_bootstraps   = 4L,
+                 hard_threshold = 0.3,
+                 random_state   = 1L)
+get_support(fit)                        # named logical vector
+get_support(fit, new_hard_threshold = 0.5)  # stricter threshold
+}
 \seealso{
 \code{\link[=get_feature_names_out]{get_feature_names_out()}} to get names directly,
 \code{\link[=get_importances]{get_importances()}} to inspect raw stability scores.

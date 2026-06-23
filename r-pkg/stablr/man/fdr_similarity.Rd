@@ -21,3 +21,9 @@ selection and \code{list2} as the known ground-truth.  This metric is only
 meaningful in simulation benchmarks where the true signal features are
 known in advance.
 }
+\examples{
+true_signal <- c("f1", "f2", "f3")
+predicted   <- c("f1", "f2", "f4", "f5")  # f4, f5 are false discoveries
+fdr_similarity(predicted, true_signal)      # 2/4 = 0.5
+fdr_similarity(character(0), true_signal)   # 0 (empty prediction)
+}

@@ -32,6 +32,11 @@
 #'
 #' @return Numeric scalar in \eqn{[0, 1]}.  A value of 1 means the two sets
 #'   are identical; 0 means they share no features.
+#'
+#' @examples
+#' jaccard_similarity(c("A", "B", "C"), c("B", "C", "D"))  # 0.5
+#' jaccard_similarity(c("A", "B"),      c("A", "B"))        # 1
+#' jaccard_similarity(character(0),     character(0))       # 0 (both empty)
 #' @export
 jaccard_similarity <- function(list1, list2) {
   s1 <- unique(list1)
@@ -60,6 +65,11 @@ jaccard_similarity <- function(list1, list2) {
 #'
 #' @return Numeric matrix of dimension N\eqn{\times}N (or N\eqn{\times}(N-1)
 #'   when `remove_diag = TRUE`).  Row/column order matches `list_of_lists`.
+#'
+#' @examples
+#' sets <- list(c("A","B","C"), c("B","C","D"), c("A","C","E"))
+#' jaccard_matrix(sets)           # 3 x 2 (diagonal removed)
+#' jaccard_matrix(sets, remove_diag = FALSE)  # 3 x 3
 #' @export
 jaccard_matrix <- function(list_of_lists, remove_diag = TRUE) {
   n <- length(list_of_lists)
@@ -105,6 +115,12 @@ jaccard_matrix <- function(list_of_lists, remove_diag = TRUE) {
 #' @return Numeric scalar in \eqn{(-1, 1]}.  Values above 0 indicate more
 #'   overlap than expected by chance; 1 means perfect agreement; negative
 #'   values indicate less overlap than chance.
+#'
+#' @examples
+#' # 10-feature universe; sets A and B share 2 out of 3 features each
+#' adjusted_similarity(c("f1","f2","f3"), c("f2","f3","f4"), nb_total_elements = 10L)
+#' adjusted_similarity(c("f1","f2"),      c("f1","f2"),      nb_total_elements = 10L) # 1
+#' adjusted_similarity(character(0),      c("f1"),           nb_total_elements = 10L) # 0
 #' @export
 adjusted_similarity <- function(list1, list2, nb_total_elements) {
   s1 <- unique(list1)
@@ -142,6 +158,10 @@ adjusted_similarity <- function(list1, list2, nb_total_elements) {
 #' @return Numeric vector of length N*(N-1)/2 containing the pairwise
 #'   adjusted-similarity values for all unique pairs (row-major upper-triangle
 #'   order, matching the Python convention).
+#'
+#' @examples
+#' sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
+#' adjusted_similarity_values(sets, nb_total_elements = 10L)
 #' @export
 adjusted_similarity_values <- function(list_of_lists, nb_total_elements) {
   n <- length(list_of_lists)
@@ -186,6 +206,11 @@ adjusted_similarity_values <- function(list_of_lists, nb_total_elements) {
 #'       (IQR bounds).  For `"mean"`: the root-mean-squared deviation
 #'       (RMSD / population SD).}
 #'   }
+#'
+#' @examples
+#' sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
+#' adjusted_similarity_measure(sets, nb_total_elements = 10L)
+#' adjusted_similarity_measure(sets, nb_total_elements = 10L, stat = "mean")
 #' @export
 adjusted_similarity_measure <- function(list_of_lists, nb_total_elements,
                                         stat = "median") {
@@ -218,6 +243,11 @@ adjusted_similarity_measure <- function(list_of_lists, nb_total_elements,
 #'
 #' @return Numeric scalar.  Positive values indicate more overlap than chance;
 #'   the maximum is typically close to 1 for perfectly matching sets.
+#'
+#' @examples
+#' pearson_similarity(c("f1","f2","f3"), c("f2","f3","f4"), d = 10L)
+#' pearson_similarity(c("f1","f2"),      c("f1","f2"),      d = 10L) # near 1
+#' pearson_similarity(character(0),      c("f1","f2"),      d = 10L) # 0
 #' @export
 pearson_similarity <- function(list_i, list_j, d) {
   si <- unique(list_i)
@@ -253,6 +283,10 @@ pearson_similarity <- function(list_i, list_j, d) {
 #' @param d Integer; total number of candidate features.
 #'
 #' @return Numeric vector of length N*(N-1)/2.
+#'
+#' @examples
+#' sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
+#' pearson_similarity_values(sets, d = 10L)
 #' @export
 pearson_similarity_values <- function(list_of_lists, d) {
   n <- length(list_of_lists)
@@ -288,6 +322,11 @@ pearson_similarity_values <- function(list_of_lists, d) {
 #'
 #' @return A named list with `statistic` and `err` (see
 #'   [adjusted_similarity_measure()] for the exact definitions).
+#'
+#' @examples
+#' sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
+#' pearson_similarity_measure(sets, d = 10L)
+#' pearson_similarity_measure(sets, d = 10L, stat = "mean")
 #' @export
 pearson_similarity_measure <- function(list_of_lists, d, stat = "median") {
   vals <- pearson_similarity_values(list_of_lists, d)
@@ -308,6 +347,12 @@ pearson_similarity_measure <- function(list_of_lists, d, stat = "median") {
 #'
 #' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when the predicted set
 #'   is empty (no false discoveries possible).
+#'
+#' @examples
+#' true_signal <- c("f1", "f2", "f3")
+#' predicted   <- c("f1", "f2", "f4", "f5")  # f4, f5 are false discoveries
+#' fdr_similarity(predicted, true_signal)      # 2/4 = 0.5
+#' fdr_similarity(character(0), true_signal)   # 0 (empty prediction)
 #' @export
 fdr_similarity <- function(list1, list2) {
   tp <- length(intersect(list1, list2))
@@ -328,6 +373,13 @@ fdr_similarity <- function(list1, list2) {
 #'
 #' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when the true set is
 #'   empty.
+#'
+#' @examples
+#' true_signal <- c("f1", "f2", "f3")
+#' predicted   <- c("f1", "f2", "f4")  # misses f3
+#' tpr_similarity(predicted, true_signal)       # 2/3
+#' tpr_similarity(character(0), true_signal)    # 0
+#' tpr_similarity(c("f1","f2","f3"), true_signal)  # 1
 #' @export
 tpr_similarity <- function(list1, list2) {
   tp <- length(intersect(list1, list2))
@@ -354,6 +406,13 @@ tpr_similarity <- function(list1, list2) {
 #'
 #' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when both the predicted
 #'   and true sets are empty.
+#'
+#' @examples
+#' true_signal <- c("f1", "f2", "f3")
+#' predicted   <- c("f1", "f2", "f4")  # 2 TP, 1 FP, 1 FN
+#' fscore_similarity(predicted, true_signal)           # F1
+#' fscore_similarity(predicted, true_signal, beta = 2) # recall-weighted
+#' fscore_similarity(character(0), character(0))       # 0
 #' @export
 fscore_similarity <- function(list1, list2, beta = 1) {
   tp <- length(intersect(list1, list2))

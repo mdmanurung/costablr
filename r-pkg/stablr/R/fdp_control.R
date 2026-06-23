@@ -31,6 +31,16 @@
 #'     \item{fdrs_table}{Numeric matrix (lambdas \eqn{\times} thresholds) of
 #'       per-lambda FDP+ values.}
 #'   }
+#'
+#' @examples
+#' # Small synthetic stability-score matrices (3 real + 3 artificial features,
+#' # 2 lambda values)
+#' scores_real <- matrix(c(0.8, 0.6, 0.1, 0.9, 0.5, 0.05), nrow = 3)
+#' scores_art  <- matrix(c(0.1, 0.2, 0.3, 0.15, 0.25, 0.1), nrow = 3)
+#' result <- compute_fdp_plus(scores_real, scores_art,
+#'                            artificial_proportion = 1.0)
+#' result$min_fdr           # minimum FDP+ estimate
+#' result$fdr_min_threshold # threshold that achieves it
 #' @export
 compute_fdp_plus <- function(
     stabl_scores,
@@ -50,15 +60,23 @@ compute_fdp_plus <- function(
   n_art  <- colSums(outer(max_art,    fdr_threshold_range, ">"))
   FDRs   <- (inv_prop * n_art + 1.0) / pmax(1.0, n_real)
 
-  # Per-lambda FDP+ table: vectorized per lambda column (outer replaces inner
-  # vapply loop).
+  # Per-lambda FDP+ table: for each threshold sweep the full score matrix at
+  # once (colSums on the n_features × n_lambdas comparison result), then
+  # collect into an (n_lambdas × n_thresh) matrix in one pass.
   n_lambdas  <- ncol(stabl_scores)
-  fdrs_table <- matrix(0.0, nrow = n_lambdas, ncol = n_thresh)
-  for (i in seq_len(n_lambdas)) {
-    nr_l <- colSums(outer(stabl_scores[, i],            fdr_threshold_range, ">"))
-    na_l <- colSums(outer(stabl_scores_artificial[, i], fdr_threshold_range, ">"))
-    fdrs_table[i, ] <- (inv_prop * na_l + 1.0) / pmax(1.0, nr_l)
-  }
+  nr_table <- matrix(
+    vapply(fdr_threshold_range,
+           function(t) colSums(stabl_scores > t),
+           numeric(n_lambdas)),
+    nrow = n_lambdas, ncol = n_thresh
+  )
+  na_table <- matrix(
+    vapply(fdr_threshold_range,
+           function(t) colSums(stabl_scores_artificial > t),
+           numeric(n_lambdas)),
+    nrow = n_lambdas, ncol = n_thresh
+  )
+  fdrs_table <- (inv_prop * na_table + 1.0) / pmax(1.0, nr_table)
 
   min_fdr <- min(FDRs)
   fdr_min_threshold <- if (min_fdr > 1.0) {

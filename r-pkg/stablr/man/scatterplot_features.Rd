@@ -31,6 +31,15 @@ smooth helps reveal non-linear relationships that might be missed by
 reporting correlation coefficients alone.  Use after STABL feature
 selection for regression tasks.
 }
+\examples{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  set.seed(1L)
+  x <- matrix(rnorm(40 * 4), 40, 4,
+               dimnames = list(paste0("s", 1:40), c("A", "B", "C", "D")))
+  y <- x[, "A"] * 0.8 + rnorm(40, 0, 0.5)
+  scatterplot_features(c("A", "B"), x, y)
+}
+}
 \seealso{
 \code{\link[=boxplot_features]{boxplot_features()}} for classification tasks,
 \code{\link[=save_stabl_results]{save_stabl_results()}} which calls this automatically.

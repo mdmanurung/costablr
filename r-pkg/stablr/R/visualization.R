@@ -31,6 +31,18 @@
 #' @param title Character; plot title (default `"STABL Stability Path"`).
 #'
 #' @return A `ggplot` object.
+#'
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(1L)
+#'   x <- matrix(rnorm(40 * 6), 40, 6,
+#'                dimnames = list(paste0("s", 1:40), paste0("f", 1:6)))
+#'   y <- setNames(rnorm(40), rownames(x))
+#'   fit <- stabl_fit(x, y,
+#'                    lambda_grid = data.frame(lambda = c(0.3, 0.1, 0.05)),
+#'                    n_bootstraps = 6L, hard_threshold = 0.3, random_state = 1L)
+#'   plot_stabl_path(fit)
+#' }
 #' @export
 plot_stabl_path <- function(object, new_hard_threshold = NULL,
                             title = "STABL Stability Path") {
@@ -205,6 +217,23 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 #'   `fdr_target` when supplied.
 #'
 #' @seealso [stabl_fit()], [plot_stabl_path()]
+#'
+#' @examples
+#' \donttest{
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(1L)
+#'   x <- matrix(rnorm(60 * 8), 60, 8,
+#'                dimnames = list(paste0("s", 1:60), paste0("f", 1:8)))
+#'   y <- setNames(rnorm(60), rownames(x))
+#'   fit <- stabl_fit(x, y,
+#'                    lambda_grid        = data.frame(lambda = c(0.3, 0.1, 0.05)),
+#'                    n_bootstraps       = 6L,
+#'                    hard_threshold     = NULL,
+#'                    artificial_type    = "random_permutation",
+#'                    random_state       = 1L)
+#'   plot_fdr_graph(fit)
+#' }
+#' }
 #' @export
 plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
   .check_fitted_stabl(object)
@@ -303,6 +332,14 @@ plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
 #'
 #' @seealso [plot_prc()] for precision-recall curves (preferred when classes
 #'   are severely imbalanced).
+#'
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(1L)
+#'   y_true  <- sample(0:1, 50, replace = TRUE)
+#'   y_preds <- pmin(pmax(y_true * 0.6 + rnorm(50, 0, 0.3), 0), 1)
+#'   plot_roc(y_true, y_preds)
+#' }
 #' @export
 plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -365,6 +402,14 @@ plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
 #' @return A `ggplot` object.  The AUPRC is shown as a caption.
 #'
 #' @seealso [plot_roc()] for the ROC curve alternative.
+#'
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(1L)
+#'   y_true  <- sample(0:1, 50, replace = TRUE)
+#'   y_preds <- pmin(pmax(y_true * 0.6 + rnorm(50, 0, 0.3), 0), 1)
+#'   plot_prc(y_true, y_preds)
+#' }
 #' @export
 plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall Curve") {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -444,6 +489,15 @@ plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall
 #'
 #' @seealso [scatterplot_features()] for regression tasks,
 #'   [save_stabl_results()] which calls this automatically.
+#'
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(1L)
+#'   x <- matrix(rnorm(40 * 4), 40, 4,
+#'                dimnames = list(paste0("s", 1:40), c("A", "B", "C", "D")))
+#'   y <- factor(rep(c("ctrl", "case"), 20))
+#'   boxplot_features(c("A", "B"), x, y)
+#' }
 #' @export
 boxplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -495,6 +549,15 @@ boxplot_features <- function(features, x, y, title = "Selected Features", ncol =
 #'
 #' @seealso [boxplot_features()] for classification tasks,
 #'   [save_stabl_results()] which calls this automatically.
+#'
+#' @examples
+#' if (requireNamespace("ggplot2", quietly = TRUE)) {
+#'   set.seed(1L)
+#'   x <- matrix(rnorm(40 * 4), 40, 4,
+#'                dimnames = list(paste0("s", 1:40), c("A", "B", "C", "D")))
+#'   y <- x[, "A"] * 0.8 + rnorm(40, 0, 0.5)
+#'   scatterplot_features(c("A", "B"), x, y)
+#' }
 #' @export
 scatterplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {

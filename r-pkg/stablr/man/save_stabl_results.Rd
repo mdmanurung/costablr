@@ -62,6 +62,23 @@ The function orchestrates several lower-level helpers:
 All graphics are saved using \code{ggplot2::ggsave()} in the format specified
 by \code{figure_fmt}.
 }
+\examples{
+\donttest{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  set.seed(1L)
+  x <- matrix(rnorm(40 * 6), 40, 6,
+               dimnames = list(paste0("s", 1:40), paste0("f", 1:6)))
+  y <- setNames(rnorm(40), rownames(x))
+  fit <- stabl_fit(x, y,
+                   lambda_grid  = data.frame(lambda = c(0.3, 0.1, 0.05)),
+                   n_bootstraps = 6L, hard_threshold = 0.3, random_state = 1L)
+  out_dir <- file.path(tempdir(), "stabl_results")
+  save_stabl_results(fit, out_dir, x = x, y = y,
+                     task_type = "regression", figure_fmt = "png")
+  list.files(out_dir)
+}
+}
+}
 \seealso{
 \code{\link[=export_stabl_to_csv]{export_stabl_to_csv()}} for the CSV-only variant,
 \code{\link[=plot_stabl_path]{plot_stabl_path()}}, \code{\link[=plot_fdr_graph]{plot_fdr_graph()}}

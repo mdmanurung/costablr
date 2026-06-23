@@ -20,3 +20,7 @@ N\eqn{\times}(N-1)/2 upper-triangle values as a flat vector (same layout
 as \code{\link[=adjusted_similarity_values]{adjusted_similarity_values()}}, enabling direct comparison between the
 two metrics on the same data).
 }
+\examples{
+sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
+pearson_similarity_values(sets, d = 10L)
+}

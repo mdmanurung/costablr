@@ -29,3 +29,10 @@ Use \code{\link[=fdr_similarity]{fdr_similarity()}} and \code{\link[=tpr_similar
 precision and recall separately; use \code{fscore_similarity()} when you need
 a single number that balances both.
 }
+\examples{
+true_signal <- c("f1", "f2", "f3")
+predicted   <- c("f1", "f2", "f4")  # 2 TP, 1 FP, 1 FN
+fscore_similarity(predicted, true_signal)           # F1
+fscore_similarity(predicted, true_signal, beta = 2) # recall-weighted
+fscore_similarity(character(0), character(0))       # 0
+}

@@ -69,6 +69,17 @@ retries (without a seed) until a class-diverse subsample is found.  This
 prevents downstream model failures in classifiers that require at least two
 classes.
 }
+\examples{
+set.seed(42L)
+y <- c(rep(0, 15), rep(1, 15))  # balanced binary outcome
+idx <- classic_bootstrap_indices(y, n_subsamples = 20L, seed = 1L)
+table(y[idx])  # class distribution in the bootstrap
+
+# Stratified sampling preserves class proportions
+idx_str <- classic_bootstrap_indices(y, n_subsamples = 20L,
+                                     stratify = TRUE, seed = 1L)
+table(y[idx_str])
+}
 \seealso{
 \code{\link[=group_bootstrap_indices]{group_bootstrap_indices()}} for repeated-measures/grouped data,
 \code{\link[=stabl_fit]{stabl_fit()}} which calls this sampler automatically.

@@ -28,6 +28,19 @@ The stability score for feature \eqn{j} at regularisation strength
 which feature \eqn{j} received a non-zero coefficient when the model was
 fitted at \eqn{\lambda_k}.  Values lie in \eqn{[0, 1]}.
 }
+\examples{
+set.seed(1L)
+x <- matrix(rnorm(30 * 5), 30, 5,
+            dimnames = list(paste0("s", 1:30), paste0("f", 1:5)))
+y <- setNames(rnorm(30), rownames(x))
+fit <- stabl_fit(x, y,
+                 lambda_grid    = data.frame(lambda = c(0.2, 0.1, 0.05)),
+                 n_bootstraps   = 4L,
+                 hard_threshold = 0.3,
+                 random_state   = 1L)
+scores <- get_stabl_scores(fit)  # features x lambdas matrix
+dim(scores)
+}
 \seealso{
 \code{\link[=get_importances]{get_importances()}} for the per-feature maximum score (scalar
 summary), \code{\link[=get_support]{get_support()}} for the binary selection mask.

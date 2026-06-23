@@ -28,3 +28,8 @@ By default the self-similarity diagonal (always 1) is removed, so the
 returned matrix has \eqn{N \times (N - 1)} columns and each row contains
 the \eqn{N - 1} similarities of run \eqn{i} with every other run.
 }
+\examples{
+sets <- list(c("A","B","C"), c("B","C","D"), c("A","C","E"))
+jaccard_matrix(sets)           # 3 x 2 (diagonal removed)
+jaccard_matrix(sets, remove_diag = FALSE)  # 3 x 3
+}

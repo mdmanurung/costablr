@@ -34,3 +34,8 @@ size, and \eqn{\upsilon_i = \sqrt{\pi_i (1 - \pi_i)}} with
 Edge cases: returns 1 when both sets are empty or both equal the universe;
 returns 0 when one set is empty or equals the universe.
 }
+\examples{
+pearson_similarity(c("f1","f2","f3"), c("f2","f3","f4"), d = 10L)
+pearson_similarity(c("f1","f2"),      c("f1","f2"),      d = 10L) # near 1
+pearson_similarity(character(0),      c("f1","f2"),      d = 10L) # 0
+}

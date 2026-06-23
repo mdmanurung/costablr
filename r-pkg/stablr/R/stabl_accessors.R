@@ -32,6 +32,19 @@
 #'
 #' @seealso [get_feature_names_out()] to get names directly,
 #'   [get_importances()] to inspect raw stability scores.
+#'
+#' @examples
+#' set.seed(1L)
+#' x <- matrix(rnorm(30 * 5), 30, 5,
+#'             dimnames = list(paste0("s", 1:30), paste0("f", 1:5)))
+#' y <- setNames(rnorm(30), rownames(x))
+#' fit <- stabl_fit(x, y,
+#'                  lambda_grid    = data.frame(lambda = c(0.2, 0.1, 0.05)),
+#'                  n_bootstraps   = 4L,
+#'                  hard_threshold = 0.3,
+#'                  random_state   = 1L)
+#' get_support(fit)                        # named logical vector
+#' get_support(fit, new_hard_threshold = 0.5)  # stricter threshold
 #' @export
 get_support <- function(object, new_hard_threshold = NULL) {
   UseMethod("get_support")
@@ -80,6 +93,19 @@ get_support.stabl_fit <- function(object, new_hard_threshold = NULL) {
 #'
 #' @seealso [get_importances()] for the per-feature maximum score (scalar
 #'   summary), [get_support()] for the binary selection mask.
+#'
+#' @examples
+#' set.seed(1L)
+#' x <- matrix(rnorm(30 * 5), 30, 5,
+#'             dimnames = list(paste0("s", 1:30), paste0("f", 1:5)))
+#' y <- setNames(rnorm(30), rownames(x))
+#' fit <- stabl_fit(x, y,
+#'                  lambda_grid    = data.frame(lambda = c(0.2, 0.1, 0.05)),
+#'                  n_bootstraps   = 4L,
+#'                  hard_threshold = 0.3,
+#'                  random_state   = 1L)
+#' scores <- get_stabl_scores(fit)  # features x lambdas matrix
+#' dim(scores)
 #' @export
 get_stabl_scores <- function(object) {
   UseMethod("get_stabl_scores")
@@ -109,6 +135,19 @@ get_stabl_scores.stabl_fit <- function(object) {
 #'
 #' @seealso [get_support()] for the binary mask, [get_importances()] for
 #'   ranked scores.
+#'
+#' @examples
+#' set.seed(1L)
+#' x <- matrix(rnorm(30 * 5), 30, 5,
+#'             dimnames = list(paste0("s", 1:30), paste0("f", 1:5)))
+#' y <- setNames(rnorm(30), rownames(x))
+#' fit <- stabl_fit(x, y,
+#'                  lambda_grid    = data.frame(lambda = c(0.2, 0.1, 0.05)),
+#'                  n_bootstraps   = 4L,
+#'                  hard_threshold = 0.3,
+#'                  random_state   = 1L)
+#' sel <- get_feature_names_out(fit)   # character vector
+#' x_sel <- x[, sel, drop = FALSE]    # subset to selected columns
 #' @export
 get_feature_names_out <- function(object, new_hard_threshold = NULL) {
   UseMethod("get_feature_names_out")
@@ -141,6 +180,29 @@ get_feature_names_out.stabl_fit <- function(object, new_hard_threshold = NULL) {
 #'
 #' @seealso [get_cooperative_diagnostics()],
 #'   [stabl_multiomic_train_validate()], [stabl_multiomic_cv()]
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1L)
+#' n <- 40L
+#' x_list <- list(
+#'   omic1 = matrix(rnorm(n * 5), n, 5,
+#'                  dimnames = list(paste0("s", 1:n), paste0("g", 1:5))),
+#'   omic2 = matrix(rnorm(n * 4), n, 4,
+#'                  dimnames = list(paste0("s", 1:n), paste0("p", 1:4)))
+#' )
+#' y <- setNames(rnorm(n), paste0("s", 1:n))
+#' lam <- data.frame(lambda = c(0.3, 0.1))
+#' fit <- stabl_multiomic_train_validate(
+#'   x_list, y, family = "gaussian",
+#'   train_idx = 1:30, valid_idx = 31:40,
+#'   lambda_grid = lam, n_bootstraps = 4L,
+#'   hard_threshold = 0.2, cooperative_fusion = TRUE,
+#'   random_state = 1L
+#' )
+#' get_cooperative_features(fit)           # named list of feature vectors
+#' get_cooperative_features(fit, "omic1") # one view only
+#' }
 #' @export
 get_cooperative_features <- function(object, view = NULL) {
   UseMethod("get_cooperative_features")
@@ -186,6 +248,28 @@ get_cooperative_features.stabl_multiomic_cv <- function(object, view = NULL) {
 #'
 #' @seealso [get_cooperative_features()],
 #'   [stabl_multiomic_train_validate()], [stabl_multiomic_cv()]
+#'
+#' @examples
+#' \donttest{
+#' set.seed(1L)
+#' n <- 40L
+#' x_list <- list(
+#'   omic1 = matrix(rnorm(n * 5), n, 5,
+#'                  dimnames = list(paste0("s", 1:n), paste0("g", 1:5))),
+#'   omic2 = matrix(rnorm(n * 4), n, 4,
+#'                  dimnames = list(paste0("s", 1:n), paste0("p", 1:4)))
+#' )
+#' y <- setNames(rnorm(n), paste0("s", 1:n))
+#' lam <- data.frame(lambda = c(0.3, 0.1))
+#' fit <- stabl_multiomic_train_validate(
+#'   x_list, y, family = "gaussian",
+#'   train_idx = 1:30, valid_idx = 31:40,
+#'   lambda_grid = lam, n_bootstraps = 4L,
+#'   hard_threshold = 0.2, cooperative_fusion = TRUE,
+#'   random_state = 1L
+#' )
+#' get_cooperative_diagnostics(fit)   # data.frame of tuning results
+#' }
 #' @export
 get_cooperative_diagnostics <- function(object) {
   UseMethod("get_cooperative_diagnostics")
@@ -233,6 +317,19 @@ get_cooperative_diagnostics.stabl_multiomic_cv <- function(object) {
 #'
 #' @seealso [get_support()] to convert importances to a binary selection mask,
 #'   [get_stabl_scores()] for the full path matrix.
+#'
+#' @examples
+#' set.seed(1L)
+#' x <- matrix(rnorm(30 * 5), 30, 5,
+#'             dimnames = list(paste0("s", 1:30), paste0("f", 1:5)))
+#' y <- setNames(rnorm(30), rownames(x))
+#' fit <- stabl_fit(x, y,
+#'                  lambda_grid    = data.frame(lambda = c(0.2, 0.1, 0.05)),
+#'                  n_bootstraps   = 4L,
+#'                  hard_threshold = 0.3,
+#'                  random_state   = 1L)
+#' imp <- get_importances(fit)  # named numeric, max stability per feature
+#' sort(imp, decreasing = TRUE)
 #' @export
 get_importances <- function(object) {
   UseMethod("get_importances")

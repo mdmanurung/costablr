@@ -21,3 +21,10 @@ predicted selection and \code{list2} is the known ground-truth.  Use together
 with \code{\link[=fdr_similarity]{fdr_similarity()}} and \code{\link[=fscore_similarity]{fscore_similarity()}} to characterise the
 precision-recall trade-off in simulation benchmarks.
 }
+\examples{
+true_signal <- c("f1", "f2", "f3")
+predicted   <- c("f1", "f2", "f4")  # misses f3
+tpr_similarity(predicted, true_signal)       # 2/3
+tpr_similarity(character(0), true_signal)    # 0
+tpr_similarity(c("f1","f2","f3"), true_signal)  # 1
+}

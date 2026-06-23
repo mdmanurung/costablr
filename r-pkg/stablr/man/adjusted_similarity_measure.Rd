@@ -30,3 +30,8 @@ location statistic with an associated spread measure.  Useful for
 reporting a single reproducibility number per STABL configuration in
 benchmarking tables.
 }
+\examples{
+sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
+adjusted_similarity_measure(sets, nb_total_elements = 10L)
+adjusted_similarity_measure(sets, nb_total_elements = 10L, stat = "mean")
+}

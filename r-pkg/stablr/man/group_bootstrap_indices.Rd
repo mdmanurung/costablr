@@ -73,6 +73,13 @@ group may be drawn multiple times (useful when there are very few groups).
 the final subsample contains only one unique class the function retries
 until a class-diverse sample is obtained.
 }
+\examples{
+# 3 groups with 4 samples each; binary outcome
+y      <- c(0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1)
+groups <- rep(c("G1", "G2", "G3"), each = 4L)
+idx    <- group_bootstrap_indices(y, groups, n_subsamples = 8L, seed = 1L)
+table(groups[idx])  # whole groups only; count >= 8
+}
 \seealso{
 \code{\link[=classic_bootstrap_indices]{classic_bootstrap_indices()}} for independent-sample data,
 \code{\link[=stabl_fit]{stabl_fit()}} which calls this sampler automatically when \code{groups} is

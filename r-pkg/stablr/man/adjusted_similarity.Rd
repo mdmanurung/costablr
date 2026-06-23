@@ -35,3 +35,9 @@ and \eqn{\mathbb{E}[r] = k_1 k_2 / d}.
 Returns 0 when either set is empty or equals the full universe (edge cases
 where the correction denominator is zero).
 }
+\examples{
+# 10-feature universe; sets A and B share 2 out of 3 features each
+adjusted_similarity(c("f1","f2","f3"), c("f2","f3","f4"), nb_total_elements = 10L)
+adjusted_similarity(c("f1","f2"),      c("f1","f2"),      nb_total_elements = 10L) # 1
+adjusted_similarity(character(0),      c("f1"),           nb_total_elements = 10L) # 0
+}

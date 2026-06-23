@@ -36,6 +36,16 @@
 #'
 #' @seealso [make_adaptive_lasso_adapter()], [make_sgl_adapter()],
 #'   [stabl_fit()]
+#'
+#' @examples
+#' if (requireNamespace("glmnet", quietly = TRUE)) {
+#'   set.seed(1L)
+#'   x <- matrix(rnorm(200L), 20L, 10L)
+#'   y <- rnorm(20L)
+#'   adapter <- make_glmnet_adapter(family = "gaussian", bootstrap_threshold = 1e-5)
+#'   mask <- adapter(x, y, data.frame(lambda = 0.1))
+#'   cat("selected:", sum(mask), "of", ncol(x), "features\n")
+#' }
 #' @export
 make_glmnet_adapter <- function(
     family              = "gaussian",
@@ -64,9 +74,10 @@ make_glmnet_adapter <- function(
     fit <- glmnet::glmnet(
       x = x,
       y = y,
-      family = family,
-      alpha = alpha_use,
-      lambda = lambda_use
+      family    = family,
+      alpha     = alpha_use,
+      lambda    = lambda_use,
+      cox.ties  = "efron"
     )
     .feature_abs_coefs(fit = fit, s = lambda_use, family = family) > bootstrap_threshold
   }
@@ -112,6 +123,16 @@ make_glmnet_adapter <- function(
 #'   `function(x, y, lambda_val) -> logical vector of length ncol(x)`.
 #'
 #' @seealso [make_glmnet_adapter()], [make_sgl_adapter()], [stabl_fit()]
+#'
+#' @examples
+#' if (requireNamespace("glmnet", quietly = TRUE)) {
+#'   set.seed(2L)
+#'   x <- matrix(rnorm(200L), 20L, 10L)
+#'   y <- rnorm(20L)
+#'   adapter <- make_adaptive_lasso_adapter(family = "gaussian", gamma = 1, epsilon = 1e-6)
+#'   mask <- adapter(x, y, data.frame(lambda = 0.1))
+#'   cat("selected:", sum(mask), "of", ncol(x), "features\n")
+#' }
 #' @export
 make_adaptive_lasso_adapter <- function(
     family              = "gaussian",
@@ -140,9 +161,10 @@ make_adaptive_lasso_adapter <- function(
     init_fit <- glmnet::glmnet(
       x = x,
       y = y,
-      family = family,
-      alpha = 0,
-      nlambda = 30L
+      family   = family,
+      alpha    = 0,
+      nlambda  = 30L,
+      cox.ties = "efron"
     )
     init_lambda <- tail(init_fit$lambda, n = 1L)
     init_scores <- .feature_abs_coefs(fit = init_fit, s = init_lambda,
@@ -152,10 +174,11 @@ make_adaptive_lasso_adapter <- function(
     fit <- glmnet::glmnet(
       x = x,
       y = y,
-      family = family,
-      alpha = 1,
-      lambda = lambda_use,
-      penalty.factor = penalty_factor
+      family         = family,
+      alpha          = 1,
+      lambda         = lambda_use,
+      penalty.factor = penalty_factor,
+      cox.ties       = "efron"
     )
     .feature_abs_coefs(fit = fit, s = lambda_use, family = family) > bootstrap_threshold
   }
@@ -202,6 +225,17 @@ make_adaptive_lasso_adapter <- function(
 #'
 #' @seealso [make_glmnet_adapter()], [make_adaptive_lasso_adapter()],
 #'   [stabl_fit()]
+#'
+#' @examples
+#' if (requireNamespace("sparsegl", quietly = TRUE)) {
+#'   set.seed(3L)
+#'   x <- matrix(rnorm(200L), 20L, 10L)
+#'   y <- rnorm(20L)
+#'   groups  <- rep(1:5, each = 2L)
+#'   adapter <- make_sgl_adapter(family = "gaussian", feature_groups = groups)
+#'   mask <- adapter(x, y, data.frame(lambda = 0.1))
+#'   cat("selected:", sum(mask), "of", ncol(x), "features\n")
+#' }
 #' @export
 make_sgl_adapter <- function(
     family              = "gaussian",
@@ -343,6 +377,14 @@ make_sgl_adapter <- function(
 #'
 #' @seealso [stabl_fit()] which calls this automatically when
 #'   `lambda_grid = "auto"`.
+#'
+#' @examples
+#' set.seed(1L)
+#' x <- matrix(rnorm(40 * 6), 40, 6,
+#'              dimnames = list(paste0("s", 1:40), paste0("f", 1:6)))
+#' y <- setNames(rnorm(40), rownames(x))
+#' grid <- auto_lambda_grid(x, y, family = "gaussian", n_lambda = 10L)
+#' head(grid)
 #' @export
 auto_lambda_grid <- function(
     x,
@@ -367,9 +409,10 @@ auto_lambda_grid <- function(
     fit_tmp <- glmnet::glmnet(
       x = x,
       y = y,
-      family = family,
-      alpha = alphas[[i]],
-      nlambda = n_lambda
+      family   = family,
+      alpha    = alphas[[i]],
+      nlambda  = n_lambda,
+      cox.ties = "efron"
     )
     lam_seq <- fit_tmp$lambda
     grids[[i]] <- if (add_alpha) {
@@ -419,12 +462,36 @@ auto_lambda_grid <- function(
 # (p × n_lambda) numeric matrix of absolute coefficient values.
 
 .feature_abs_coefs_batch <- function(fit, lambda_seq, family = "gaussian") {
-  # Extract coefficients per lambda and column-bind.  Per-lambda calls to the
-  # existing extractor avoid multi-s return-type variance across glmnet
-  # versions while still benefiting from the single warm-start path fit.
-  col_list <- lapply(lambda_seq, function(s) .feature_abs_coefs(fit = fit, s = s,
-                                                                  family = family))
-  do.call(cbind, col_list)  # p x n_lambda numeric matrix
+  # Fast path: when every requested lambda is on fit$lambda, read fit$beta
+  # directly instead of making ~n_lambda coef.glmnet() calls.  For on-grid
+  # lambdas this is bit-identical to the per-lambda path (verified by
+  # test-coef-batch-ongrid.R) but avoids repeated sparse-to-dense coercions.
+  # Falls back to per-lambda coef() for off-grid values (e.g. adaptive lasso
+  # init lambda).
+  col_idx <- match(lambda_seq, fit$lambda)
+  if (!anyNA(col_idx)) {
+    if (is.list(fit$beta)) {
+      # Multinomial: fit$beta is a list of p × n_lambda matrices (one per class,
+      # no intercept row).  Return per-feature max absolute coef across classes.
+      # Strip dimnames to match the unnamed matrix returned by the slow path.
+      m <- Reduce(pmax, lapply(fit$beta, function(b) {
+        abs(as.matrix(b[, col_idx, drop = FALSE]))
+      }))
+      dimnames(m) <- NULL
+      m
+    } else {
+      # Gaussian / binomial / Cox: fit$beta is p × n_lambda (no intercept row).
+      # Strip dimnames to match the slow path (do.call(cbind, unnamed vectors)).
+      m <- abs(as.matrix(fit$beta[, col_idx, drop = FALSE]))
+      dimnames(m) <- NULL
+      m
+    }
+  } else {
+    col_list <- lapply(lambda_seq, function(s) {
+      .feature_abs_coefs(fit = fit, s = s, family = family)
+    })
+    do.call(cbind, col_list)
+  }
 }
 
 .feature_abs_coefs_sparsegl_batch <- function(fit, lambda_seq) {
@@ -452,7 +519,8 @@ auto_lambda_grid <- function(
       # Lasso or fixed-alpha enet: single path call
       lambda_seq    <- lambda_grid[["lambda"]]
       fit           <- glmnet::glmnet(x, y, family = family, alpha = alpha_fixed,
-                                      lambda = sort(lambda_seq, decreasing = TRUE))
+                                      lambda = sort(lambda_seq, decreasing = TRUE),
+                                      cox.ties = "efron")
       coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
       result        <- coef_mat > bootstrap_threshold
 
@@ -463,7 +531,8 @@ auto_lambda_grid <- function(
         row_idx       <- which(lambda_grid[["alpha"]] == a)
         lambda_seq    <- lambda_grid[["lambda"]][row_idx]
         fit           <- glmnet::glmnet(x, y, family = family, alpha = a,
-                                        lambda = sort(lambda_seq, decreasing = TRUE))
+                                        lambda = sort(lambda_seq, decreasing = TRUE),
+                                        cox.ties = "efron")
         coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
         result[, row_idx] <- coef_mat > bootstrap_threshold
       }
@@ -472,7 +541,8 @@ auto_lambda_grid <- function(
       # No alpha column: default to lasso (alpha = 1)
       lambda_seq    <- lambda_grid[["lambda"]]
       fit           <- glmnet::glmnet(x, y, family = family, alpha = 1.0,
-                                      lambda = sort(lambda_seq, decreasing = TRUE))
+                                      lambda = sort(lambda_seq, decreasing = TRUE),
+                                      cox.ties = "efron")
       coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
       result        <- coef_mat > bootstrap_threshold
     }
@@ -488,7 +558,7 @@ auto_lambda_grid <- function(
 
     # Ridge initialization to compute adaptive penalty weights
     init_fit       <- glmnet::glmnet(x, y, family = family, alpha = 0,
-                                     nlambda = 30L)
+                                     nlambda = 30L, cox.ties = "efron")
     init_lambda    <- tail(init_fit$lambda, n = 1L)
     init_scores    <- .feature_abs_coefs(fit = init_fit, s = init_lambda,
                        family = family)
@@ -497,7 +567,8 @@ auto_lambda_grid <- function(
     # Fit adaptive lasso across the full lambda path (one call)
     fit      <- glmnet::glmnet(x, y, family = family, alpha = 1,
                                lambda         = sort(lambda_seq, decreasing = TRUE),
-                               penalty.factor = penalty_factor)
+                               penalty.factor = penalty_factor,
+                               cox.ties       = "efron")
     coef_mat <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
     coef_mat > bootstrap_threshold
   }
@@ -512,7 +583,14 @@ auto_lambda_grid <- function(
       call. = FALSE
     )
   }
-  groups <- as.integer(as.factor(feature_groups))
+  groups   <- as.integer(as.factor(feature_groups))
+  # sparsegl requires features sorted by group (non-decreasing group index).
+  # sort_ord/inv_ord/grp_s depend only on feature_groups, so hoist them here
+  # and reuse across every bootstrap call.  Only x_s stays inside the closure
+  # because x is the per-bootstrap sample.
+  sort_ord <- order(groups)
+  inv_ord  <- order(sort_ord)
+  grp_s    <- groups[sort_ord]
 
   function(x, y, lambda_grid) {
     n_lambdas  <- nrow(lambda_grid)
@@ -537,11 +615,7 @@ auto_lambda_grid <- function(
       lambda_seq <- lambda_grid[["lambda"]][row_idx]
       asparse    <- ab$alpha
 
-      # sparsegl requires features sorted by group (non-decreasing group index).
-      sort_ord <- order(groups)
-      inv_ord  <- order(sort_ord)
-      x_s      <- x[, sort_ord, drop = FALSE]
-      grp_s    <- groups[sort_ord]
+      x_s <- x[, sort_ord, drop = FALSE]
 
       if (family == "multinomial") {
         if (!is.factor(y)) y <- factor(y)

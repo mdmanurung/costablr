@@ -35,6 +35,23 @@ regularisation grid may need adjustment or that the signal is very weak.
 
 Requires that \code{object} was fitted with \code{artificial_type} set (not \code{NULL}).
 }
+\examples{
+\donttest{
+if (requireNamespace("ggplot2", quietly = TRUE)) {
+  set.seed(1L)
+  x <- matrix(rnorm(60 * 8), 60, 8,
+               dimnames = list(paste0("s", 1:60), paste0("f", 1:8)))
+  y <- setNames(rnorm(60), rownames(x))
+  fit <- stabl_fit(x, y,
+                   lambda_grid        = data.frame(lambda = c(0.3, 0.1, 0.05)),
+                   n_bootstraps       = 6L,
+                   hard_threshold     = NULL,
+                   artificial_type    = "random_permutation",
+                   random_state       = 1L)
+  plot_fdr_graph(fit)
+}
+}
+}
 \seealso{
 \code{\link[=stabl_fit]{stabl_fit()}}, \code{\link[=plot_stabl_path]{plot_stabl_path()}}
 }

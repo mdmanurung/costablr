@@ -50,3 +50,13 @@ where \eqn{\pi} is \code{artificial_proportion}, \eqn{\hat{q}_j} are the
 maximum-over-lambda stability scores for real feature \eqn{j}, and
 \eqn{\hat{q}_j^{\text{art}}} are the scores for artificial feature \eqn{j}.
 }
+\examples{
+# Small synthetic stability-score matrices (3 real + 3 artificial features,
+# 2 lambda values)
+scores_real <- matrix(c(0.8, 0.6, 0.1, 0.9, 0.5, 0.05), nrow = 3)
+scores_art  <- matrix(c(0.1, 0.2, 0.3, 0.15, 0.25, 0.1), nrow = 3)
+result <- compute_fdp_plus(scores_real, scores_art,
+                           artificial_proportion = 1.0)
+result$min_fdr           # minimum FDP+ estimate
+result$fdr_min_threshold # threshold that achieves it
+}

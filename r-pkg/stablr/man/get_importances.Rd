@@ -27,6 +27,19 @@ lenient: a feature qualifies even if it is stable only at one particular
 penalty strength.  For a more conservative view, use \code{\link[=get_stabl_scores]{get_stabl_scores()}}
 and inspect the full path.
 }
+\examples{
+set.seed(1L)
+x <- matrix(rnorm(30 * 5), 30, 5,
+            dimnames = list(paste0("s", 1:30), paste0("f", 1:5)))
+y <- setNames(rnorm(30), rownames(x))
+fit <- stabl_fit(x, y,
+                 lambda_grid    = data.frame(lambda = c(0.2, 0.1, 0.05)),
+                 n_bootstraps   = 4L,
+                 hard_threshold = 0.3,
+                 random_state   = 1L)
+imp <- get_importances(fit)  # named numeric, max stability per feature
+sort(imp, decreasing = TRUE)
+}
 \seealso{
 \code{\link[=get_support]{get_support()}} to convert importances to a binary selection mask,
 \code{\link[=get_stabl_scores]{get_stabl_scores()}} for the full path matrix.

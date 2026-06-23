@@ -47,6 +47,14 @@ and add an \code{alpha} column so that \code{\link[=make_glmnet_adapter]{make_gl
 correctly.  This mirrors \code{auto_mode_lambda_grid()} in the Python reference
 implementation.
 }
+\examples{
+set.seed(1L)
+x <- matrix(rnorm(40 * 6), 40, 6,
+             dimnames = list(paste0("s", 1:40), paste0("f", 1:6)))
+y <- setNames(rnorm(40), rownames(x))
+grid <- auto_lambda_grid(x, y, family = "gaussian", n_lambda = 10L)
+head(grid)
+}
 \seealso{
 \code{\link[=stabl_fit]{stabl_fit()}} which calls this automatically when
 \code{lambda_grid = "auto"}.
