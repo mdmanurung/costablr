@@ -1,6 +1,13 @@
 # visualization.R — ggplot2 diagnostic and result plots for stablr
 # R port of the plot functions in stabl/stabl.py and stabl/visualization.py
 
+.require_ggplot2 <- function() {
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required for plotting. ",
+         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
+  }
+}
+
 # Color palette matching the Python STABL implementation
 .stablr_colors <- list(
   selected   = "#C41E3A",  # cardinal red for stable/selected features
@@ -47,10 +54,7 @@
 plot_stabl_path <- function(object, new_hard_threshold = NULL,
                             title = "STABL Stability Path") {
   .check_fitted_stabl(object)
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting. ",
-         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
-  }
+  .require_ggplot2()
 
   scores     <- object$stabl_scores_
   feat_names <- object$feature_names
@@ -237,10 +241,7 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 #' @export
 plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
   .check_fitted_stabl(object)
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting. ",
-         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
-  }
+  .require_ggplot2()
   if (!is.null(fdr_target) &&
       !(is.numeric(fdr_target) && length(fdr_target) == 1L &&
         is.finite(fdr_target) && fdr_target >= 0)) {
@@ -342,10 +343,7 @@ plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
 #' }
 #' @export
 plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting. ",
-         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
-  }
+  .require_ggplot2()
   y_true  <- as.integer(y_true)
   y_preds <- as.numeric(y_preds)
   if (length(y_true) != length(y_preds)) {
@@ -412,10 +410,7 @@ plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
 #' }
 #' @export
 plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall Curve") {
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting. ",
-         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
-  }
+  .require_ggplot2()
   y_true  <- as.integer(y_true)
   y_preds <- as.numeric(y_preds)
   if (length(y_true) != length(y_preds)) {
@@ -500,10 +495,7 @@ plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall
 #' }
 #' @export
 boxplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting. ",
-         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
-  }
+  .require_ggplot2()
   features <- intersect(features, colnames(x))
   if (length(features) == 0L) {
     stop("None of the requested `features` are columns of `x`.", call. = FALSE)
@@ -560,10 +552,7 @@ boxplot_features <- function(features, x, y, title = "Selected Features", ncol =
 #' }
 #' @export
 scatterplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting. ",
-         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
-  }
+  .require_ggplot2()
   features <- intersect(features, colnames(x))
   if (length(features) == 0L) {
     stop("None of the requested `features` are columns of `x`.", call. = FALSE)

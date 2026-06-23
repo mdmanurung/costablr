@@ -879,22 +879,13 @@ stabl_multiomic_cv <- function(
 }
 
 .cooperative_selected_features <- function(coef_table, omic_names) {
-  out <- setNames(vector("list", length(omic_names)), omic_names)
-
-  for (omic in omic_names) {
-    out[[omic]] <- character(0)
-  }
-
   if (is.null(coef_table) || nrow(coef_table) == 0L) {
-    return(out)
+    return(setNames(lapply(omic_names, function(o) character(0)), omic_names))
   }
-
-  for (omic in omic_names) {
-    keep <- coef_table$view == omic & coef_table$coef != 0
-    out[[omic]] <- unique(as.character(coef_table$view_col[keep]))
-  }
-
-  out
+  setNames(lapply(omic_names, function(o) {
+    keep <- coef_table$view == o & coef_table$coef != 0
+    unique(as.character(coef_table$view_col[keep]))
+  }), omic_names)
 }
 
 .augment_multiomic_fold_diagnostics <- function(diagnostics, fold_fit) {
@@ -1367,7 +1358,7 @@ stacked_multi_omic <- function(
 
 .multiclass_log_loss <- function(y, probs, eps = 1e-15) {
   y <- factor(y, levels = colnames(probs))
-  idx <- !is.na(y) & apply(probs, 1L, function(x) all(is.finite(x)))
+  idx <- !is.na(y) & rowSums(!is.finite(probs)) == 0L
   if (sum(idx) == 0L) return(Inf)
   probs <- pmin(pmax(probs[idx, , drop = FALSE], eps), 1 - eps)
   probs <- probs / rowSums(probs)
