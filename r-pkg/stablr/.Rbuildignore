@@ -9,3 +9,5 @@
 ^inst/analysis/cache$
 # stray graphics-device byproducts produced on headless hosts during tests
 Rplots\.pdf$
+# CI configuration — not part of the package source tarball
+^\.github$

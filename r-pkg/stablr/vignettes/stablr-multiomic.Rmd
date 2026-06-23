@@ -9,10 +9,13 @@ vignette: >
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment  = "#>",
+  collapse   = TRUE,
+  comment    = "#>",
   fig.width  = 6,
-  fig.height = 4
+  fig.height = 4,
+  # eval=FALSE: vignette requires large TCGA/OOL data and multi-core fits;
+  # gate from R CMD check and CI. Run interactively or via pkgdown::build_site().
+  eval       = FALSE
 )
 set.seed(42)
 ```
@@ -346,3 +349,9 @@ list.files(out_dir, recursive = TRUE)
 - Pass `groups` to respect subject-level grouping in bootstrap resampling and
   CV fold construction.
 - See `vignette("stablr-intro")` for single-omic usage and alternative learners.
+- See `vignette("stablr-cooperative")` for cross-view cooperative fusion
+  (`rho` tuning) when blocks should agree without full concatenation.
+- For integrative **classification** benchmarks against mixOmics DIABLO on TCGA,
+  see `vignette("stablr-tcga-nestedcv")` and `inst/analysis/BENCHMARK_PLAN.md`.
+- For **selection parity** with the original Python STABL implementation, see
+  `vignette("stablr-python-parity")`.

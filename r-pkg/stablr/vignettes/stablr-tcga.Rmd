@@ -9,12 +9,15 @@ vignette: >
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
-  collapse  = TRUE,
-  comment   = "#>",
+  collapse   = TRUE,
+  comment    = "#>",
   fig.width  = 6,
   fig.height = 4,
   cache      = FALSE,
-  cache.path = "stablr-tcga-cache/"
+  cache.path = "stablr-tcga-cache/",
+  # eval=FALSE: vignette requires large TCGA data and long-running fits;
+  # gate from R CMD check and CI. Run interactively or via pkgdown::build_site().
+  eval       = FALSE
 )
 ```
 
@@ -250,23 +253,63 @@ export_stabl_to_csv(multi_fit$fits$mirna, path = file.path(tcga_out_dir, "mirna"
 list.files(tcga_out_dir, recursive = TRUE)
 ```
 
-## 6. Comparison with mixOmics
+## 6. Comparison with mixOmics (sgccaDA and DIABLO)
 
-The two toolchains ask related but not identical questions.  mixOmics builds
-latent components for discrimination.  `stablr` centers the feature list and
-calibrates selection stability against decoys.
+The mixOmics ecosystem and `stablr` both address multi-omic classification, but
+they optimise **different objectives**.  Treating them as interchangeable
+classifiers misses the point: one searches for sparse latent factors that
+separate classes; the other searches for **named features whose selection
+frequency survives resampling and passes an FDP-aware threshold**.
 
-| Aspect | mixOmics (sgccaDA) | stablr |
-|---|---|---|
-| Method | Sparse CCA + LDA | Bootstrap-stability lasso |
-| Feature selection | L1 penalty tuned by CV | FDP-controlled stability threshold |
-| Integration | Joint latent-space optimisation | Early or late fusion |
-| Primary metric | BER on test set | FDP+ stability score |
-| Output | Components + loadings | Feature names + stability scores |
+### Scientific question
 
-Both approaches target compact mRNA and miRNA biomarker sets for the Basal
-subtype.  STABL's advantage is explicit FDP control with no assumption that the
-omics must share a latent space.
+| Question | mixOmics (sgccaDA / DIABLO) | stablr |
+|----------|----------------------------|--------|
+| What is optimised? | Sparse loadings on latent components that maximise block-wise covariance with the outcome | Resampling stability of individual feature coefficients |
+| What is the deliverable? | Components, block loadings, `selectVar()` lists tied to components | Explicit feature names, stability scores, FDP+ threshold |
+| Integration mechanism | Joint multiblock PLS / sGCCA with a design matrix coupling blocks | Per-omic STABL, early/late fusion, or cooperative fusion (`rho`) |
+| FDR / stability calibration | Sparsity via `keepX` tuning; no bootstrap stability or knockoff FDP+ | Knockoffs or random artificial features; FDP+ threshold sweep |
+| Prediction | Native (`predict`, `centroids.dist`) | Requires a downstream refit on selected features (e.g. multinomial glmnet) |
+
+### Objective strengths and limitations
+
+**Choose mixOmics DIABLO when:**
+
+- The goal is **integrative discrimination** with interpretable latent structure
+  across correlated blocks.
+- You want a mature tuning workflow (`tune.block.splsda`, design-matrix priors)
+  and rich visualisation (`plotIndiv`, `plotVar`, circos plots).
+- Classification (or block-supervised reduction) is the primary endpoint and
+  component loadings are an acceptable feature representation.
+
+**Choose stablr when:**
+
+- The goal is a **reproducible sparse biomarker list** with explicit control of
+  false discovery in the stability-selection layer.
+- You need gaussian, binomial, multinomial, or Cox STABL on the same API, with
+  grouped bootstrap for repeated measures.
+- You want to compare integration strategies (per-omic, early, late, cooperative)
+  under one stability-selection framework.
+- You prefer staying in the glmnet / resampling idiom rather than PLS components.
+
+**Neither replaces the other.**  On TCGA, DIABLO may win on outer-fold BER when
+blocks share strong latent structure; stablr may surface features with higher
+cross-fold recurrence that are not top DIABLO loadings.  Quantitative
+head-to-head results live in `vignette("stablr-tcga-nestedcv")`; the full
+benchmark protocol is documented in
+`inst/analysis/BENCHMARK_PLAN.md`.
+
+| Aspect | sgccaDA (Ch. 6) | DIABLO | stablr |
+|--------|-----------------|--------|--------|
+| Method | Sparse CCA + LDA | `block.splsda` + design matrix | Bootstrap-stability glmnet |
+| Feature selection | L1 on components | `keepX` per block | FDP+ stability threshold |
+| Integration | Joint latent space | Correlated latent components | Early, late, or cooperative fusion |
+| Primary readout | BER + loadings | BER + `selectVar` | Recurrence + stability scores |
+| Survival / Cox | Other mixOmics modules | Classification focus | Native `family = "cox"` |
+
+Both sgccaDA and DIABLO target compact mRNA and miRNA signatures for subtype
+classification.  STABL's distinctive contribution is FDP-aware stability
+selection without assuming that omics must share a single latent space.
 
 ```{r session-info}
 sessionInfo()

@@ -1,0 +1,110 @@
+# R CMD check + test-coverage CI
+#
+# Runs on every push and pull-request to stabl_lw and
+# feature-cooperativelearning.  Heavy vignettes (stablr-multiomic,
+# stablr-tcga, stablr-tcga-nestedcv) are gated to eval=FALSE in their
+# setup chunks so they do not execute during the check build.
+#
+# Coverage is reported to Codecov when CODECOV_TOKEN is set in the repo
+# secrets.  The multiview/cooperative backend is not installed from CRAN
+# (it lives under src/); the check therefore skips the cooperative tests
+# that depend on a compiled multiview (those have skip_on_cran() guards).
+
+on:
+  push:
+    branches: [stabl_lw, feature-cooperativelearning]
+    paths:
+      - "r-pkg/stablr/**"
+      - ".github/workflows/R-CMD-check.yaml"
+  pull_request:
+    branches: [stabl_lw, feature-cooperativelearning]
+    paths:
+      - "r-pkg/stablr/**"
+      - ".github/workflows/R-CMD-check.yaml"
+
+name: R-CMD-check
+
+defaults:
+  run:
+    working-directory: r-pkg/stablr
+
+jobs:
+  R-CMD-check:
+    runs-on: ${{ matrix.config.os }}
+
+    name: ${{ matrix.config.os }} (R ${{ matrix.config.r }})
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - { os: ubuntu-latest, r: "release" }
+          - { os: ubuntu-latest, r: "devel"   }
+          - { os: macos-latest,  r: "release" }
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.config.r }}
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck
+          needs: check
+          working-directory: r-pkg/stablr
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          working-directory: r-pkg/stablr
+
+  coverage:
+    runs-on: ubuntu-latest
+    needs: R-CMD-check
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::covr, any::xml2
+          needs: coverage
+          working-directory: r-pkg/stablr
+
+      - name: Test coverage
+        run: |
+          covr::codecov(
+            quiet          = FALSE,
+            clean          = FALSE,
+            install_path   = file.path(normalizePath(Sys.getenv("RUNNER_TEMP"),
+                                                     winslash = "/"),
+                                       "package")
+          )
+        shell: Rscript {0}
+
+      - name: Show testthat output
+        if: always()
+        run: |
+          find ${{ runner.temp }}/package -name 'testthat.Rout*' -exec cat '{}' \; || true
+        shell: bash
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}

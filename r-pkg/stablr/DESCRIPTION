@@ -29,6 +29,7 @@ LinkingTo:
     Rcpp,
     RcppEigen
 Suggests:
+    covr,
     furrr,
     future,
     ggplot2,

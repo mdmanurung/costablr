@@ -9,11 +9,14 @@ vignette: >
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
-  collapse = TRUE,
-  comment = "#>",
-  fig.width = 7,
+  collapse   = TRUE,
+  comment    = "#>",
+  fig.width  = 7,
   fig.height = 4,
-  cache = FALSE
+  cache      = FALSE,
+  # eval=FALSE: vignette requires large TCGA data and nested-CV fits;
+  # gate from R CMD check and CI. Run interactively or via pkgdown::build_site().
+  eval       = FALSE
 )
 ```
 
@@ -189,6 +192,48 @@ list.files(dirname(cache_path), pattern = "tcga_nestedcv", full.names = TRUE)
 
 The CSV files are intended for manuscript tables and supplement material:
 performance, feature recurrence, and feature overlap by omic block.
+
+## Interpreting stablr vs DIABLO results
+
+Read predictive and feature-level outputs together.  A method that wins on
+balanced error rate (BER) is not automatically preferable for biomarker
+discovery, and vice versa.
+
+### Predictive layer
+
+| Observation | Interpretation |
+|-------------|----------------|
+| Lower outer-fold BER for DIABLO | Latent multiblock structure may explain class separation better than sparse per-feature STABL + refit on this cohort. |
+| Lower outer-fold BER for stablr | Inner-CV candidate choice (mRNA / miRNA / early fusion) plus multinomial refit may capture signal DIABLO's fixed component budget misses. |
+| Similar BER, different confusion patterns | Methods trade errors across classes; inspect per-class recall before declaring a winner. |
+| Large fold-to-fold BER variance | Dataset is small (220 samples); treat point estimates as exploratory. |
+
+Negative `delta_BER` (stablr − DIABLO) favours DIABLO; positive favours stablr.
+Report paired fold deltas with bootstrap confidence intervals (see
+`inst/analysis/BENCHMARK_PLAN.md`, Phase 2).
+
+### Feature / biomarker layer
+
+| Observation | Interpretation |
+|-------------|----------------|
+| High recurrence, modest overlap with DIABLO | Stability selection and component sparsity surface partially complementary feature sets. |
+| stablr features recurrent, absent from DIABLO loadings | May reflect block-specific marginal signal stabilised by resampling, not captured in shared latent factors. |
+| DIABLO `selectVar` features absent from stablr support | May load strongly on components without surviving FDP+ thresholding across bootstraps. |
+| stablr selects more features per fold | FDP threshold and lambda grid control sparsity; DIABLO sparsity is governed by `keepX`. |
+
+### When each method is the better tool
+
+| Criterion | Prefer stablr | Prefer DIABLO |
+|-----------|---------------|---------------|
+| Primary deliverable | Named biomarker list with stability evidence | Integrative classification + component visualisation |
+| False-discovery control | Knockoff / FDP+ built in | Not part of the default workflow |
+| Outcome types | gaussian, binomial, multinomial, Cox | Classification-centric multiblock sPLS-DA |
+| Block coupling | Cooperative `rho` or fusion modes | Design matrix + shared latent space |
+| Ecosystem | glmnet, native R, Python STABL parity | mixOmics tutorials, circos, network plots |
+| Compute profile | Many bootstraps × lambda grid | Component + `keepX` tuning (typically faster per fold) |
+
+For Python STABL parity (selection semantics, not prediction contests), see
+`vignette("stablr-python-parity")`.
 
 ## Session Info
 
