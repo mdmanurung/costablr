@@ -246,6 +246,8 @@ get_importances.stabl_fit <- function(object) {
   scores
 }
 
+#' @describeIn stabl_fit Print a concise summary of a fitted `stabl_fit` object;
+#'   invisibly returns `x`.
 #' @export
 print.stabl_fit <- function(x, ...) {
   cat("<stabl_fit>\n")
@@ -271,6 +273,8 @@ print.stabl_fit <- function(x, ...) {
   invisible(x)
 }
 
+#' @describeIn stabl_multiomic_train_validate Print a concise summary of a
+#'   `stabl_multiomic_fit` object; invisibly returns `x`.
 #' @export
 print.stabl_multiomic_fit <- function(x, ...) {
   omic_names <- names(x$fits)
@@ -303,6 +307,8 @@ print.stabl_multiomic_fit <- function(x, ...) {
   invisible(x)
 }
 
+#' @describeIn stabl_multiomic_cv Print a concise summary of a
+#'   `stabl_multiomic_cv` object; invisibly returns `x`.
 #' @export
 print.stabl_multiomic_cv <- function(x, ...) {
   cat("<stabl_multiomic_cv>\n")

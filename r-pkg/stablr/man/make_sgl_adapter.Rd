@@ -54,6 +54,17 @@ For end-to-end feature selection workflows, prefer
 \code{base_learner = "sparse_group_lasso"} in \code{\link[=stabl_fit]{stabl_fit()}} and provide
 \code{feature_groups} (or \code{corr_group_threshold}) there.
 }
+\examples{
+if (requireNamespace("sparsegl", quietly = TRUE)) {
+  set.seed(3L)
+  x <- matrix(rnorm(200L), 20L, 10L)
+  y <- rnorm(20L)
+  groups  <- rep(1:5, each = 2L)
+  adapter <- make_sgl_adapter(family = "gaussian", feature_groups = groups)
+  mask <- adapter(x, y, data.frame(lambda = 0.1))
+  cat("selected:", sum(mask), "of", ncol(x), "features\n")
+}
+}
 \seealso{
 \code{\link[=make_glmnet_adapter]{make_glmnet_adapter()}}, \code{\link[=make_adaptive_lasso_adapter]{make_adaptive_lasso_adapter()}},
 \code{\link[=stabl_fit]{stabl_fit()}}

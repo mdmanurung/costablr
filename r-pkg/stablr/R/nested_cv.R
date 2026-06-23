@@ -633,6 +633,8 @@ stabl_multiomic_nested_cv <- function(
   do.call(rbind, rows)
 }
 
+#' @describeIn stabl_multiomic_nested_cv Print a concise summary of a
+#'   `stabl_multiomic_nested_cv` object; invisibly returns `x`.
 #' @export
 print.stabl_multiomic_nested_cv <- function(x, ...) {
   cat("<stabl_multiomic_nested_cv>\n")

@@ -21,9 +21,18 @@ stored in \code{object$fdr_min_threshold_}; a horizontal dashed line marks
 \code{fdr_target} when supplied.
 }
 \description{
-Plots the estimated FDR at each stability threshold, with a vertical dashed
-line marking the optimal threshold (the one minimising the FDR estimate) and
-a horizontal dashed line marking the FDP target.
+Displays how the estimated False Discovery Proportion (FDP+) changes across
+the full range of candidate stability thresholds, and marks the threshold
+that achieves the minimum FDR estimate.
+}
+\details{
+This diagnostic is essential for understanding why a particular stability
+threshold was chosen during fitting.  A well-calibrated run will show a
+clear "valley" — a region where the FDP+ is minimised — confirming that
+the artificial-feature injection produced a meaningful separation between
+real signal and noise.  Flat or monotone curves indicate that the
+regularisation grid may need adjustment or that the signal is very weak.
+
 Requires that \code{object} was fitted with \code{artificial_type} set (not \code{NULL}).
 }
 \seealso{

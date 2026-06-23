@@ -49,6 +49,16 @@ This adapter factory is primarily an internal backend used by \code{\link[=stabl
 Most users should configure \code{base_learner}, \code{family}, and \code{lambda_grid}
 directly in \code{\link[=stabl_fit]{stabl_fit()}} rather than calling this factory manually.
 }
+\examples{
+if (requireNamespace("glmnet", quietly = TRUE)) {
+  set.seed(1L)
+  x <- matrix(rnorm(200L), 20L, 10L)
+  y <- rnorm(20L)
+  adapter <- make_glmnet_adapter(family = "gaussian", bootstrap_threshold = 1e-5)
+  mask <- adapter(x, y, data.frame(lambda = 0.1))
+  cat("selected:", sum(mask), "of", ncol(x), "features\n")
+}
+}
 \seealso{
 \code{\link[=make_adaptive_lasso_adapter]{make_adaptive_lasso_adapter()}}, \code{\link[=make_sgl_adapter]{make_sgl_adapter()}},
 \code{\link[=stabl_fit]{stabl_fit()}}

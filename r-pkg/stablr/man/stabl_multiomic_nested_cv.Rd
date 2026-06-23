@@ -2,6 +2,7 @@
 % Please edit documentation in R/nested_cv.R
 \name{stabl_multiomic_nested_cv}
 \alias{stabl_multiomic_nested_cv}
+\alias{print.stabl_multiomic_nested_cv}
 \title{Multi-Omic STABL Nested Cross-Validation}
 \usage{
 stabl_multiomic_nested_cv(
@@ -27,15 +28,23 @@ stabl_multiomic_nested_cv(
   cv_workers = 1L,
   ...
 )
+
+\method{print}{stabl_multiomic_nested_cv}(x, ...)
 }
 \arguments{
-\item{x_list}{Named list of omic matrices or data frames with identical sample row names.}
+\item{x_list}{Named list of omic matrices or data frames with identical
+sample row names.}
 
 \item{y}{Named factor or character vector aligned to \code{x_list} rows.}
 
-\item{candidates}{Optional list of candidate definitions. Each candidate is a list with \code{name} and \code{blocks}; \code{blocks} names one or more omics from \code{x_list}. When \code{NULL}, one candidate is created for each omic plus one early-fusion candidate using all omics.}
+\item{candidates}{Optional list of candidate definitions. Each candidate is
+a list with \code{name} and \code{blocks}; \code{blocks} names one or more omics from
+\code{x_list}. When \code{NULL}, one candidate is created for each omic plus one
+early-fusion candidate using all omics.}
 
-\item{lambda_grid}{Either \code{"auto"}, a single lambda-grid data frame, or a named list of lambda grids. Named entries can match omic names or candidate names.}
+\item{lambda_grid}{Either \code{"auto"}, a single lambda-grid data frame, or a
+named list of lambda grids. Named entries can match omic names or candidate
+names.}
 
 \item{outer_v}{Number of outer folds per repeat.}
 
@@ -43,9 +52,12 @@ stabl_multiomic_nested_cv(
 
 \item{inner_v}{Number of inner folds used for candidate selection.}
 
-\item{stratified}{Logical. When \code{TRUE} (default), outer and inner folds preserve class proportions as closely as possible.}
+\item{stratified}{Logical. When \code{TRUE} (default), outer and inner folds
+preserve class proportions as closely as possible.}
 
-\item{strata}{Optional named vector used to stratify folds instead of \code{y}. Categorical values are used directly. Numeric values are binned into quantile groups before fold assignment.}
+\item{strata}{Optional named vector used to stratify folds instead of \code{y}.
+Categorical values are used directly. Numeric values are binned into
+quantile groups before fold assignment.}
 
 \item{strata_bins}{Number of quantile bins for numeric \code{strata}.}
 
@@ -63,25 +75,38 @@ stabl_multiomic_nested_cv(
 
 \item{n_lambda}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} when \code{lambda_grid = "auto"}.}
 
-\item{l1_ratio}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} when \code{lambda_grid = "auto"}. Use this with \code{base_learner = "elastic_net"} to generate alpha-aware auto grids.}
+\item{l1_ratio}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} when \code{lambda_grid = "auto"}.
+Use this with \code{base_learner = "elastic_net"} to generate alpha-aware
+train-fold grids.}
 
 \item{workers}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} for bootstrap-level parallelism.}
 
-\item{cv_workers}{Number of outer folds to evaluate in parallel. Uses \code{parallel::mclapply()} on Unix-like systems and falls back to sequential execution on Windows.}
+\item{cv_workers}{Number of outer folds to evaluate in parallel. Uses
+\code{parallel::mclapply()} on Unix-like systems and falls back to sequential
+execution on Windows.}
 
 \item{...}{Additional arguments passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 }
-\note{
-Cooperative fusion (\code{cooperative_fusion = TRUE}) is not supported in nested CV.
-Use \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} or
-\code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} for cooperative workflows.
-}
 \value{
-An object of class \code{"stabl_multiomic_nested_cv"} containing fold definitions, inner candidate diagnostics, outer held-out predictions, selected features, and aggregate performance.
+An object of class \code{"stabl_multiomic_nested_cv"} containing fold
+definitions, inner candidate diagnostics, outer held-out predictions,
+selected features, and aggregate performance.
 }
 \description{
-Runs a repeated outer cross-validation loop for generalisation assessment. Within each outer training split, candidate STABL workflows are compared using an inner cross-validation loop. The selected candidate is then refit on the full outer-training split and evaluated once on the held-out outer fold.
+Runs a repeated outer cross-validation loop for generalisation assessment.
+Within each outer training split, candidate STABL workflows are compared
+using an inner cross-validation loop. The selected candidate is then refit
+on the full outer-training split and evaluated once on the held-out outer
+fold.
 }
-\seealso{
-\code{\link[=stabl_fit]{stabl_fit()}}, \code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}}
+\section{Methods (by generic)}{
+\itemize{
+\item \code{print(stabl_multiomic_nested_cv)}: Print a concise summary of a
+\code{stabl_multiomic_nested_cv} object; invisibly returns \code{x}.
+
+}}
+\note{
+Cooperative fusion (\code{cooperative_fusion = TRUE}) is not supported in
+nested CV. Use \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} or
+\code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} for cooperative workflows.
 }
