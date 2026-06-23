@@ -32,8 +32,8 @@
 #' @param n_bootstraps Passed to [stabl_fit()].
 #' @param artificial_type Passed to [stabl_fit()].
 #' @param hard_threshold Passed to [stabl_fit()].
-#' @param random_state Optional integer seed.
 #' @param n_lambda Passed to [stabl_fit()] when `lambda_grid = "auto"`.
+#' @inheritParams stabl_fit
 #' @param l1_ratio Passed to [stabl_fit()] when `lambda_grid = "auto"`.
 #'   Use this with `base_learner = "elastic_net"` to generate alpha-aware
 #'   train-fold grids.

@@ -18,7 +18,6 @@
 #' @param groups_train Optional named grouping vector for training samples.
 #'   When supplied, grouped bootstrap sampling is used in each per-omic fit.
 #' @param base_learner Passed to [stabl_fit()].
-#' @param family Passed to [stabl_fit()].
 #' @param n_bootstraps Passed to [stabl_fit()].
 #' @param artificial_type Passed to [stabl_fit()].
 #' @param hard_threshold Passed to [stabl_fit()].
@@ -29,8 +28,8 @@
 #' @param l1_ratio Passed to [stabl_fit()] when `lambda_grid = "auto"`.
 #'   Use this with `base_learner = "elastic_net"` to generate alpha-aware auto
 #'   grids.
-#' @param random_state Passed to [stabl_fit()].
 #' @param ... Additional arguments forwarded to [stabl_fit()].
+#' @inheritParams stabl_fit
 #'
 #' @param early_fusion Logical.  When `TRUE`, a single [stabl_fit()] is run on
 #'   the column-bound concatenation of all omic matrices in addition to the
@@ -401,7 +400,6 @@ stabl_multiomic_train_validate <- function(
 #' @param groups Optional named grouping vector. When supplied, all samples in
 #'   the same group are assigned to the same assessment fold.
 #' @param base_learner Passed to [stabl_fit()].
-#' @param family Passed to [stabl_fit()].
 #' @param n_bootstraps Passed to [stabl_fit()].
 #' @param artificial_type Passed to [stabl_fit()].
 #' @param hard_threshold Passed to [stabl_fit()].
@@ -411,6 +409,7 @@ stabl_multiomic_train_validate <- function(
 #' @param l1_ratio Passed to [stabl_fit()] when `lambda_grid = "auto"`.
 #' @param random_state Optional integer seed used for deterministic fold
 #'   assignment and forwarded to each per-fold [stabl_fit()] call.
+#' @inheritParams stabl_fit
 #' @param early_fusion Logical.  Forwarded to each per-fold
 #'   [stabl_multiomic_train_validate()] call.
 #' @param late_fusion Logical.  Forwarded to each per-fold
@@ -1192,6 +1191,12 @@ stacked_multi_omic <- function(
     stop("`predictions` must have at least one column.", call. = FALSE)
   }
 
+  # Loop-invariant: NA structure of predictions and y never change across iterations.
+  # Hoisting avoids recomputing these inside the n_iter loop.
+  is_obs_preds <- !is.na(predictions)
+  y_na_mask    <- !is.na(y)
+  score_fn     <- if (task_type == "binary") .r_auc else .r_squared
+
   .with_local_seed(
     if (!is.null(random_state)) as.integer(random_state),
     {
@@ -1200,18 +1205,14 @@ stacked_multi_omic <- function(
       best_probs   <- rep(NA_real_, n_samples)
 
       for (i in seq_len(as.integer(n_iter))) {
-        weights <- stats::runif(n_omics, 0, 10)
-        weighted_probs <- .weighted_masked_mean(predictions, weights)
+        weights        <- stats::runif(n_omics, 0, 10)
+        weighted_probs <- .weighted_masked_mean(predictions, weights, is_obs = is_obs_preds)
 
-        complete_idx <- !is.na(weighted_probs) & !is.na(y)
+        complete_idx <- !is.na(weighted_probs) & y_na_mask
         if (sum(complete_idx) < 2L) next
 
         score <- tryCatch(
-          if (task_type == "binary") {
-            .r_auc(y[complete_idx], weighted_probs[complete_idx])
-          } else {
-            .r_squared(y[complete_idx], weighted_probs[complete_idx])
-          },
+          score_fn(y[complete_idx], weighted_probs[complete_idx]),
           error = function(e) NA_real_
         )
 
@@ -1332,9 +1333,8 @@ stacked_multi_omic <- function(
 # of observed-column weights.  Rows where every column is NA return NA_real_.
 # Used for binary/regression late-fusion; see .weighted_multiclass_probabilities
 # for the analogous multiclass helper.
-.weighted_masked_mean <- function(P, weights) {
+.weighted_masked_mean <- function(P, weights, is_obs = !is.na(P)) {
   w_mat  <- matrix(weights, nrow = nrow(P), ncol = length(weights), byrow = TRUE)
-  is_obs <- !is.na(P)
   denom  <- rowSums(is_obs * w_mat)
   num    <- rowSums(ifelse(is_obs, P * w_mat, 0))
   ifelse(denom > 0, num / denom, NA_real_)

@@ -56,7 +56,8 @@ When supplied, grouped bootstrap sampling is used in each per-omic fit.}
 
 \item{base_learner}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
-\item{family}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
+\item{family}{Character; \code{glmnet} response family (\code{"gaussian"},
+\code{"binomial"}, \code{"multinomial"}, or \code{"cox"}). Default: \code{"gaussian"}.}
 
 \item{n_bootstraps}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
@@ -74,7 +75,7 @@ design for training samples, forwarded to \code{\link[=stabl_fit]{stabl_fit()}}.
 Use this with \code{base_learner = "elastic_net"} to generate alpha-aware auto
 grids.}
 
-\item{random_state}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
+\item{random_state}{Integer or \code{NULL}; top-level seed.  Default: \code{NULL}.}
 
 \item{early_fusion}{Logical.  When \code{TRUE}, a single \code{\link[=stabl_fit]{stabl_fit()}} is run on
 the column-bound concatenation of all omic matrices in addition to the
@@ -117,6 +118,9 @@ multiview CV API.}
 \code{cooperation_selection = "cv"}.}
 
 \item{...}{Additional arguments forwarded to \code{\link[=stabl_fit]{stabl_fit()}}.}
+
+\item{x}{A numeric matrix or \code{data.frame} (samples \eqn{\times} features)
+with row names used as sample IDs.}
 }
 \value{
 A named list with class \code{"stabl_multiomic_fit"} containing:

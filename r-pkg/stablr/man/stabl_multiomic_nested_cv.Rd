@@ -71,7 +71,7 @@ quantile groups before fold assignment.}
 
 \item{hard_threshold}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
-\item{random_state}{Optional integer seed.}
+\item{random_state}{Integer or \code{NULL}; top-level seed.  Default: \code{NULL}.}
 
 \item{n_lambda}{Passed to \code{\link[=stabl_fit]{stabl_fit()}} when \code{lambda_grid = "auto"}.}
 
@@ -86,6 +86,9 @@ train-fold grids.}
 execution on Windows.}
 
 \item{...}{Additional arguments passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
+
+\item{x}{A numeric matrix or \code{data.frame} (samples \eqn{\times} features)
+with row names used as sample IDs.}
 }
 \value{
 An object of class \code{"stabl_multiomic_nested_cv"} containing fold

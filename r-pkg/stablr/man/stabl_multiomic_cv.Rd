@@ -51,7 +51,8 @@ the same group are assigned to the same assessment fold.}
 
 \item{base_learner}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
-\item{family}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
+\item{family}{Character; \code{glmnet} response family (\code{"gaussian"},
+\code{"binomial"}, \code{"multinomial"}, or \code{"cox"}). Default: \code{"gaussian"}.}
 
 \item{n_bootstraps}{Passed to \code{\link[=stabl_fit]{stabl_fit()}}.}
 
@@ -95,6 +96,9 @@ assignment and forwarded to each per-fold \code{\link[=stabl_fit]{stabl_fit()}} 
 \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
 
 \item{...}{Additional arguments forwarded to \code{\link[=stabl_fit]{stabl_fit()}}.}
+
+\item{x}{A numeric matrix or \code{data.frame} (samples \eqn{\times} features)
+with row names used as sample IDs.}
 }
 \value{
 A list with class \code{"stabl_multiomic_cv"} containing:
