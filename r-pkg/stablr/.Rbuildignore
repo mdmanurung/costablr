@@ -1,8 +1,11 @@
 ^doc$
 ^Meta$
 ^docs$
+^R/RcppExports\.R$
 ^scripts$
 ^vignettes/.*\.html$
 ^vignettes/.*-cache$
 ^vignettes/tcga_results$
 ^inst/analysis/cache$
+# stray graphics-device byproducts produced on headless hosts during tests
+Rplots\.pdf$

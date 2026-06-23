@@ -79,6 +79,20 @@ test_that(".mv_multiview rejects non-scalar rho", {
   )
 })
 
+test_that("plot.multiview runs on a native cooperative fit", {
+  d <- .cf_parity_data(n = 30L)
+  fit <- stablr:::.cooperative_backend_fit(
+    d$x_list,
+    d$y,
+    family = "gaussian",
+    rho = 0.3
+  )
+  expect_s3_class(fit, "multiview")
+  # Redirect base-graphics output to a temp file so no Rplots.pdf is created.
+  withr::local_pdf(tempfile(fileext = ".pdf"))
+  expect_no_error(suppressMessages(plot(fit)))
+})
+
 test_that("native cooperative backend is always available", {
   expect_true(stablr:::.has_cooperative_backend())
 })
