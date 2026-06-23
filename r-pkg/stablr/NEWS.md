@@ -18,7 +18,14 @@
 - **Performance:** centralised `rowMaxs` helper with edge-case fast paths for
   0-row and 1-column matrices; eliminated quadratic `c(accumulator, chunk)`
   vector growth in three bootstrap helpers; extracted
-  `.BOOTSTRAP_COEF_THRESHOLD` named constant.
+  `.BOOTSTRAP_COEF_THRESHOLD` named constant; halved pairwise-similarity call
+  count in `jaccard_matrix`, `adjusted_similarity_values`, and
+  `pearson_similarity_values` via upper-triangle loops.
+- **Internal quality:** extracted `.require_ggplot2()` to replace six identical
+  inline guards; collapsed `.cooperative_selected_features` two-pass loop to a
+  single `lapply`; vectorised the finite-check in `.multiclass_log_loss`;
+  extracted `.scores_to_long_df` to deduplicate the real- and
+  artificial-feature long-data-frame loops in `plot_stabl_path`.
 - **Tests:** added tests for `get_stabl_scores` and `load_ool_data`; modernised
   `skip()` to `skip_if()` idiom; test baseline 1553 pass / 0 fail.
 - **CI:** added `.github/workflows/R-CMD-check.yaml` (ubuntu release+devel,
