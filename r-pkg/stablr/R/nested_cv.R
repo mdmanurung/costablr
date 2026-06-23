@@ -331,26 +331,19 @@ stabl_multiomic_nested_cv <- function(
 
 .make_repeated_cv_folds <- function(y, v, repeats = 1L, stratified = TRUE,
                                     random_state = NULL) {
-  folds <- list()
-  k <- 1L
-  for (rep_i in seq_len(as.integer(repeats))) {
-    rep_seed <- .derive_nested_seed(random_state, rep_i, 10L)
-    rep_folds <- .make_cv_folds(
-      y = y,
-      v = v,
-      stratified = stratified,
-      random_state = rep_seed
-    )
-    for (fold_i in seq_along(rep_folds)) {
-      fold <- rep_folds[[fold_i]]
+  rep_list <- lapply(seq_len(as.integer(repeats)), function(rep_i) {
+    rep_seed  <- .derive_nested_seed(random_state, rep_i, 10L)
+    rep_folds <- .make_cv_folds(y = y, v = v, stratified = stratified,
+                                random_state = rep_seed)
+    lapply(seq_along(rep_folds), function(fold_i) {
+      fold             <- rep_folds[[fold_i]]
       fold[["repeat"]] <- rep_i
-      fold$fold <- paste0("Fold", fold_i)
-      fold$fold_id <- paste0("Repeat", rep_i, "_Fold", fold_i)
-      folds[[k]] <- fold
-      k <- k + 1L
-    }
-  }
-  folds
+      fold$fold        <- paste0("Fold", fold_i)
+      fold$fold_id     <- paste0("Repeat", rep_i, "_Fold", fold_i)
+      fold
+    })
+  })
+  unlist(rep_list, recursive = FALSE)
 }
 
 .make_cv_folds <- function(y, v, stratified = TRUE, random_state = NULL) {
@@ -608,31 +601,24 @@ stabl_multiomic_nested_cv <- function(
 
 .stabl_nested_feature_table <- function(selected_features, importances, repeat_id,
                                         fold, fold_id, method, candidate) {
-  rows <- list()
-  k <- 1L
-  for (block in names(selected_features)) {
-    feats <- selected_features[[block]]
-    prefixed <- paste(block, feats, sep = "::")
-    rows[[k]] <- data.frame(
-      method = method,
-      candidate = candidate,
-      repeat_id = repeat_id,
-      fold = fold,
-      fold_id = fold_id,
-      block = block,
-      feature = feats,
-      score = unname(importances[prefixed]),
-      stringsAsFactors = FALSE
-    )
-    k <- k + 1L
-  }
-  if (length(rows) == 0L) {
+  block_names <- names(selected_features)
+  if (length(block_names) == 0L) {
     return(data.frame(
       method = character(), candidate = character(), repeat_id = integer(),
       fold = character(), fold_id = character(), block = character(),
       feature = character(), score = numeric(), stringsAsFactors = FALSE
     ))
   }
+  rows <- lapply(block_names, function(block) {
+    feats    <- selected_features[[block]]
+    prefixed <- paste(block, feats, sep = "::")
+    data.frame(
+      method = method, candidate = candidate, repeat_id = repeat_id,
+      fold = fold, fold_id = fold_id, block = block,
+      feature = feats, score = unname(importances[prefixed]),
+      stringsAsFactors = FALSE
+    )
+  })
   do.call(rbind, rows)
 }
 
