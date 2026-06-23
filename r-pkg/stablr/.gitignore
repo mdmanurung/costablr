@@ -4,3 +4,5 @@
 /vignettes/*-cache/
 /vignettes/tcga_results/
 /inst/analysis/cache/
+# testthat edition-3 failure-debug snapshots (transient, regenerated on failures)
+/tests/testthat/_problems/
