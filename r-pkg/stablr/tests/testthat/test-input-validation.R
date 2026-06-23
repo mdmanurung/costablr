@@ -49,3 +49,26 @@ test_that("stabl_fit errors early when sample_fraction > 1 and replace = FALSE",
     ignore.case = TRUE
   )
 })
+
+# C3 characterization: .resolve_cooperation_type_measure default mapping
+# and .supported_cooperation_type_measures behaviour for unknown families.
+test_that(".resolve_cooperation_type_measure maps 'default' to the correct measure per family", {
+  # Pin the four supported family defaults at tolerance = 0.
+  expect_identical(stablr:::.resolve_cooperation_type_measure("gaussian", "default"), "mse")
+  expect_identical(stablr:::.resolve_cooperation_type_measure("binomial", "default"), "deviance")
+  expect_identical(stablr:::.resolve_cooperation_type_measure("poisson",  "default"), "deviance")
+  expect_identical(stablr:::.resolve_cooperation_type_measure("cox",      "default"), "deviance")
+})
+
+test_that(".resolve_cooperation_type_measure errors on an unsupported family", {
+  # An unknown family must fail loudly (via .supported_cooperation_type_measures
+  # returning character(0), making "default" %in% character(0) FALSE).
+  expect_error(
+    stablr:::.resolve_cooperation_type_measure("multinomial", "default"),
+    "cooperation_type_measure"
+  )
+})
+
+test_that(".supported_cooperation_type_measures returns character(0) for unknown family", {
+  expect_identical(stablr:::.supported_cooperation_type_measures("unknown_family"), character(0))
+})

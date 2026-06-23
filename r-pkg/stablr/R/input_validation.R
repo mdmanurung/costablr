@@ -196,7 +196,9 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
     gaussian = "mse",
     binomial = "deviance",
     poisson = "deviance",
-    cox = "deviance"
+    cox = "deviance",
+    stop(sprintf("No default type_measure for unsupported family '%s'.", family),
+         call. = FALSE)
   )
 }
 
