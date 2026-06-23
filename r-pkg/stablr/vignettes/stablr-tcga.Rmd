@@ -21,6 +21,12 @@ knitr::opts_chunk$set(
 )
 ```
 
+> **Note:** This vignette is illustrative — code chunks are set to `eval = FALSE`
+> because the TCGA dataset is large and the fits take significant time. To run it
+> interactively, set `eval = TRUE` in the setup chunk above and supply the TCGA
+> data (available via the `mixOmics` package), or rebuild via
+> `pkgdown::build_site()` with the data in place.
+
 ## Overview
 
 Breast cancer subtype is a molecular label, but it is also a test of

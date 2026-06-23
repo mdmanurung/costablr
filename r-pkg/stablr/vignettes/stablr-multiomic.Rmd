@@ -20,6 +20,12 @@ knitr::opts_chunk$set(
 set.seed(42)
 ```
 
+> **Note:** This vignette is illustrative — code chunks are set to `eval = FALSE`
+> because the underlying datasets (OOL, TCGA) are large and the fits are
+> multi-hour. To run it interactively, set `eval = TRUE` in the setup chunk above
+> and supply the data paths, or rebuild via `pkgdown::build_site()` with the data
+> in place.
+
 ## Overview
 
 A multi-omic dataset is a set of partial views.  One assay sees immune-cell

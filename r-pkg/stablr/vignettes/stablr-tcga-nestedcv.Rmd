@@ -20,6 +20,12 @@ knitr::opts_chunk$set(
 )
 ```
 
+> **Note:** This vignette is illustrative — code chunks are set to `eval = FALSE`
+> because the nested-CV comparison against DIABLO requires the TCGA dataset and
+> runs for several hours. To run it interactively, set `eval = TRUE` in the setup
+> chunk above and supply the TCGA data (available via the `mixOmics` package), or
+> rebuild via `pkgdown::build_site()` with the data in place.
+
 ## Overview
 
 The compact TCGA vignette shows the workflow.  This vignette asks for evidence.
