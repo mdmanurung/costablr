@@ -943,6 +943,182 @@ stabl_multiomic_cv <- function(
   diagnostics
 }
 
+# Cross-validation selection branch for cooperative fusion.
+# Sweeps rho using cv.multiview, picks the best rho/lambda, and returns
+# the convergence contract consumed by .cooperative_multiomic_fit.
+.cooperative_select_cv <- function(x_train_mv, x_valid_mv, y_train, groups_train,
+                                    cooperative_args, family, direction,
+                                    random_state) {
+  foldid <- .make_multiomic_foldid(
+    sample_ids   = rownames(x_train_mv[[1L]]),
+    groups       = groups_train,
+    v            = cooperative_args$cooperation_nfolds,
+    random_state = random_state
+  )
+
+  cv_fits <- lapply(cooperative_args$rho, function(rho_value) {
+    .cooperative_backend_cv(
+      x_list       = x_train_mv,
+      y            = y_train,
+      family       = family,
+      rho          = rho_value,
+      type.measure = cooperative_args$cooperation_type_measure,
+      foldid       = foldid
+    )
+  })
+
+  diagnostics <- do.call(rbind, lapply(seq_along(cv_fits), function(i) {
+    fit          <- cv_fits[[i]]
+    selector     <- cooperative_args$cooperation_selector
+    lambda_value <- unname(fit[[selector]])
+    # Prefer exact match (glmnet's lambda.min/lambda.1se are elements of
+    # fit$lambda); fall back to nearest-value if floating-point diverges.
+    lambda_index <- match(lambda_value, fit$lambda)
+    if (is.na(lambda_index)) lambda_index <- which.min(abs(fit$lambda - lambda_value))
+    data.frame(
+      rho          = cooperative_args$rho[[i]],
+      lambda       = lambda_value,
+      metric_value = fit$cvm[[lambda_index]],
+      selected     = FALSE,
+      stringsAsFactors = FALSE
+    )
+  }))
+
+  best_index                    <- .select_cooperative_metric_index(diagnostics$metric_value, direction)
+  diagnostics$selected[[best_index]] <- TRUE
+
+  best_fit    <- cv_fits[[best_index]]
+  best_rho    <- diagnostics$rho[[best_index]]
+  best_lambda <- diagnostics$lambda[[best_index]]
+  best_score  <- diagnostics$metric_value[[best_index]]
+  selector    <- cooperative_args$cooperation_selector
+
+  train_pred <- .cooperative_predict(
+    fit          = best_fit,
+    newx         = x_train_mv,
+    s            = selector,
+    family       = family,
+    type_measure = cooperative_args$cooperation_type_measure
+  )
+  valid_pred <- if (is.null(x_valid_mv)) {
+    NULL
+  } else {
+    .cooperative_predict(
+      fit          = best_fit,
+      newx         = x_valid_mv,
+      s            = selector,
+      family       = family,
+      type_measure = cooperative_args$cooperation_type_measure
+    )
+  }
+  coef_table <- .cooperative_coefficient_table(best_fit, s = selector)
+
+  list(
+    best_fit    = best_fit,
+    best_rho    = best_rho,
+    best_lambda = best_lambda,
+    best_score  = best_score,
+    selector    = selector,
+    diagnostics = diagnostics,
+    train_pred  = train_pred,
+    valid_pred  = valid_pred,
+    coef_table  = coef_table,
+    foldid      = foldid
+  )
+}
+
+# Validation-set selection branch for cooperative fusion.
+# Sweeps rho and lambda via held-out metric, picks the best combination,
+# and returns the convergence contract consumed by .cooperative_multiomic_fit.
+.cooperative_select_validation <- function(x_train_mv, x_valid_mv, y_train,
+                                            y_valid, cooperative_args, family,
+                                            direction) {
+  mv_fits <- lapply(cooperative_args$rho, function(rho_value) {
+    .cooperative_backend_fit(
+      x_list = x_train_mv,
+      y      = y_train,
+      family = family,
+      rho    = rho_value
+    )
+  })
+
+  diagnostics_list <- vector("list", length(mv_fits))
+  candidate_metric <- numeric(length(mv_fits))
+  candidate_lambda <- numeric(length(mv_fits))
+
+  for (i in seq_along(mv_fits)) {
+    fit       <- mv_fits[[i]]
+    pred_path <- .cooperative_predict(
+      fit          = fit,
+      newx         = x_valid_mv,
+      s            = fit$lambda,
+      family       = family,
+      type_measure = cooperative_args$cooperation_type_measure
+    )
+    pred_path <- .cooperative_prediction_matrix(pred_path, length(y_valid))
+
+    metric_path <- vapply(seq_along(fit$lambda), function(lambda_index) {
+      .cooperative_validation_metric(
+        true_y       = y_valid,
+        pred_y       = pred_path[, lambda_index],
+        family       = family,
+        type_measure = cooperative_args$cooperation_type_measure
+      )
+    }, numeric(1L))
+
+    selected_index          <- .select_cooperative_metric_index(metric_path, direction)
+    candidate_metric[[i]]   <- metric_path[[selected_index]]
+    candidate_lambda[[i]]   <- fit$lambda[[selected_index]]
+    diagnostics_list[[i]]   <- data.frame(
+      rho          = cooperative_args$rho[[i]],
+      lambda       = fit$lambda,
+      metric_value = metric_path,
+      selected     = FALSE,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  best_index  <- .select_cooperative_metric_index(candidate_metric, direction)
+  best_fit    <- mv_fits[[best_index]]
+  best_rho    <- cooperative_args$rho[[best_index]]
+  best_lambda <- candidate_lambda[[best_index]]
+  best_score  <- candidate_metric[[best_index]]
+  selector    <- "lambda.min"
+
+  diagnostics  <- do.call(rbind, diagnostics_list)
+  selected_row <- which(diagnostics$rho == best_rho & diagnostics$lambda == best_lambda)[1L]
+  diagnostics$selected[[selected_row]] <- TRUE
+
+  train_pred <- .cooperative_predict(
+    fit          = best_fit,
+    newx         = x_train_mv,
+    s            = best_lambda,
+    family       = family,
+    type_measure = cooperative_args$cooperation_type_measure
+  )
+  valid_pred <- .cooperative_predict(
+    fit          = best_fit,
+    newx         = x_valid_mv,
+    s            = best_lambda,
+    family       = family,
+    type_measure = cooperative_args$cooperation_type_measure
+  )
+  coef_table <- .cooperative_coefficient_table(best_fit, s = best_lambda)
+
+  list(
+    best_fit    = best_fit,
+    best_rho    = best_rho,
+    best_lambda = best_lambda,
+    best_score  = best_score,
+    selector    = selector,
+    diagnostics = diagnostics,
+    train_pred  = train_pred,
+    valid_pred  = valid_pred,
+    coef_table  = coef_table,
+    foldid      = NULL
+  )
+}
+
 .cooperative_multiomic_fit <- function(x_train_list,
                                        y_train,
                                        x_valid_list = NULL,
@@ -954,152 +1130,35 @@ stabl_multiomic_cv <- function(
   omic_names <- names(x_train_list)
   x_train_mv <- .coerce_multiomic_matrix_list(x_train_list)
   x_valid_mv <- if (is.null(x_valid_list)) NULL else .coerce_multiomic_matrix_list(x_valid_list)
-  mv_family <- .cooperative_family_to_backend(family)
-  direction <- .cooperative_metric_direction(cooperative_args$cooperation_type_measure)
+  mv_family  <- .cooperative_family_to_backend(family)
+  direction  <- .cooperative_metric_direction(cooperative_args$cooperation_type_measure)
 
-  if (identical(cooperative_args$cooperative_selection, "cv")) {
-    foldid <- .make_multiomic_foldid(
-      sample_ids = rownames(x_train_mv[[1L]]),
-      groups = groups_train,
-      v = cooperative_args$cooperation_nfolds,
-      random_state = random_state
+  sel <- if (identical(cooperative_args$cooperative_selection, "cv")) {
+    .cooperative_select_cv(
+      x_train_mv      = x_train_mv,
+      x_valid_mv      = x_valid_mv,
+      y_train         = y_train,
+      groups_train    = groups_train,
+      cooperative_args = cooperative_args,
+      family          = family,
+      direction       = direction,
+      random_state    = random_state
     )
-
-    cv_fits <- lapply(cooperative_args$rho, function(rho_value) {
-      .cooperative_backend_cv(
-        x_list = x_train_mv,
-        y = y_train,
-        family = family,
-        rho = rho_value,
-        type.measure = cooperative_args$cooperation_type_measure,
-        foldid = foldid
-      )
-    })
-
-    diagnostics <- do.call(rbind, lapply(seq_along(cv_fits), function(i) {
-      fit <- cv_fits[[i]]
-      selector <- cooperative_args$cooperation_selector
-      lambda_value <- unname(fit[[selector]])
-      # Prefer exact match (glmnet's lambda.min/lambda.1se are elements of
-      # fit$lambda); fall back to nearest-value if floating-point diverges.
-      lambda_index <- match(lambda_value, fit$lambda)
-      if (is.na(lambda_index)) lambda_index <- which.min(abs(fit$lambda - lambda_value))
-      data.frame(
-        rho = cooperative_args$rho[[i]],
-        lambda = lambda_value,
-        metric_value = fit$cvm[[lambda_index]],
-        selected = FALSE,
-        stringsAsFactors = FALSE
-      )
-    }))
-
-    best_index <- .select_cooperative_metric_index(diagnostics$metric_value,
-                                                   direction)
-    diagnostics$selected[[best_index]] <- TRUE
-
-    best_fit <- cv_fits[[best_index]]
-    best_rho <- diagnostics$rho[[best_index]]
-    best_lambda <- diagnostics$lambda[[best_index]]
-    best_score <- diagnostics$metric_value[[best_index]]
-    selector <- cooperative_args$cooperation_selector
-
-    train_pred <- .cooperative_predict(
-      fit = best_fit,
-      newx = x_train_mv,
-      s = selector,
-      family = family,
-      type_measure = cooperative_args$cooperation_type_measure
-    )
-    valid_pred <- if (is.null(x_valid_mv)) {
-      NULL
-    } else {
-      .cooperative_predict(
-        fit = best_fit,
-        newx = x_valid_mv,
-        s = selector,
-        family = family,
-        type_measure = cooperative_args$cooperation_type_measure
-      )
-    }
-    coef_table <- .cooperative_coefficient_table(best_fit, s = selector)
   } else {
-    foldid <- NULL
-    mv_fits <- lapply(cooperative_args$rho, function(rho_value) {
-      .cooperative_backend_fit(
-        x_list = x_train_mv,
-        y = y_train,
-        family = family,
-        rho = rho_value
-      )
-    })
-
-    diagnostics_list <- vector("list", length(mv_fits))
-    candidate_metric <- numeric(length(mv_fits))
-    candidate_lambda <- numeric(length(mv_fits))
-
-    for (i in seq_along(mv_fits)) {
-      fit <- mv_fits[[i]]
-      pred_path <- .cooperative_predict(
-        fit = fit,
-        newx = x_valid_mv,
-        s = fit$lambda,
-        family = family,
-        type_measure = cooperative_args$cooperation_type_measure
-      )
-      pred_path <- .cooperative_prediction_matrix(pred_path, length(y_valid))
-
-      metric_path <- vapply(seq_along(fit$lambda), function(lambda_index) {
-        .cooperative_validation_metric(
-          true_y = y_valid,
-          pred_y = pred_path[, lambda_index],
-          family = family,
-          type_measure = cooperative_args$cooperation_type_measure
-        )
-      }, numeric(1L))
-
-      selected_index <- .select_cooperative_metric_index(metric_path, direction)
-      candidate_metric[[i]] <- metric_path[[selected_index]]
-      candidate_lambda[[i]] <- fit$lambda[[selected_index]]
-      diagnostics_list[[i]] <- data.frame(
-        rho = cooperative_args$rho[[i]],
-        lambda = fit$lambda,
-        metric_value = metric_path,
-        selected = FALSE,
-        stringsAsFactors = FALSE
-      )
-    }
-
-    best_index <- .select_cooperative_metric_index(candidate_metric, direction)
-    best_fit <- mv_fits[[best_index]]
-    best_rho <- cooperative_args$rho[[best_index]]
-    best_lambda <- candidate_lambda[[best_index]]
-    best_score <- candidate_metric[[best_index]]
-    selector <- "lambda.min"
-
-    diagnostics <- do.call(rbind, diagnostics_list)
-    selected_row <- which(diagnostics$rho == best_rho & diagnostics$lambda == best_lambda)[1L]
-    diagnostics$selected[[selected_row]] <- TRUE
-
-    train_pred <- .cooperative_predict(
-      fit = best_fit,
-      newx = x_train_mv,
-      s = best_lambda,
-      family = family,
-      type_measure = cooperative_args$cooperation_type_measure
+    .cooperative_select_validation(
+      x_train_mv      = x_train_mv,
+      x_valid_mv      = x_valid_mv,
+      y_train         = y_train,
+      y_valid         = y_valid,
+      cooperative_args = cooperative_args,
+      family          = family,
+      direction       = direction
     )
-    valid_pred <- .cooperative_predict(
-      fit = best_fit,
-      newx = x_valid_mv,
-      s = best_lambda,
-      family = family,
-      type_measure = cooperative_args$cooperation_type_measure
-    )
-    coef_table <- .cooperative_coefficient_table(best_fit, s = best_lambda)
   }
 
-  selected_features <- .cooperative_selected_features(coef_table, omic_names)
-  selected_train <- .named_omic_list(omic_names)
-  selected_valid <- if (is.null(x_valid_list)) NULL else .named_omic_list(omic_names)
+  selected_features <- .cooperative_selected_features(sel$coef_table, omic_names)
+  selected_train    <- .named_omic_list(omic_names)
+  selected_valid    <- if (is.null(x_valid_list)) NULL else .named_omic_list(omic_names)
 
   for (omic in omic_names) {
     selected_train[[omic]] <- .subset_selected_matrix(x_train_list[[omic]], selected_features[[omic]])
@@ -1109,30 +1168,30 @@ stabl_multiomic_cv <- function(
   }
 
   list(
-    fit = best_fit,
-    rho = best_rho,
-    rho_grid = cooperative_args$rho,
-    selection = cooperative_args$cooperative_selection,
-    selector = selector,
-    type_measure = cooperative_args$cooperation_type_measure,
+    fit             = sel$best_fit,
+    rho             = sel$best_rho,
+    rho_grid        = cooperative_args$rho,
+    selection       = cooperative_args$cooperative_selection,
+    selector        = sel$selector,
+    type_measure    = cooperative_args$cooperation_type_measure,
     prediction_type = .cooperative_prediction_type(
-      family = family,
+      family       = family,
       type_measure = cooperative_args$cooperation_type_measure
     ),
-    score = best_score,
-    selected_lambda = best_lambda,
+    score             = sel$best_score,
+    selected_lambda   = sel$best_lambda,
     selected_features = selected_features,
-    selected_train = selected_train,
-    selected_valid = selected_valid,
+    selected_train    = selected_train,
+    selected_valid    = selected_valid,
     train_predictions = .cooperative_prediction_vector(
-      train_pred,
+      sel$train_pred,
       rownames(x_train_mv[[1L]])
     ),
-    valid_predictions = if (is.null(valid_pred)) NULL else {
-      .cooperative_prediction_vector(valid_pred, rownames(x_valid_mv[[1L]]))
+    valid_predictions = if (is.null(sel$valid_pred)) NULL else {
+      .cooperative_prediction_vector(sel$valid_pred, rownames(x_valid_mv[[1L]]))
     },
-    diagnostics = diagnostics,
-    foldid = foldid
+    diagnostics = sel$diagnostics,
+    foldid      = sel$foldid
   )
 }
 
