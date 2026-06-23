@@ -85,7 +85,7 @@ compute_fdp_plus <- function(
   fdr_min_threshold <- if (min_fdr > 1.0) {
     1.0
   } else {
-    min(fdr_threshold_range[which.min(FDRs)], 1.0)
+    min(fdr_threshold_range[which.min(FDRs)], 1.0)  # ties: first-index wins (matches Python argmin)
   }
 
   list(

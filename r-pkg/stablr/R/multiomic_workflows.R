@@ -720,9 +720,9 @@ stabl_multiomic_cv <- function(
   }
 
   if (identical(direction, "max")) {
-    which.max(replace(metric_values, is.na(metric_values), -Inf))
+    which.max(replace(metric_values, is.na(metric_values), -Inf))  # ties: first-index wins
   } else {
-    which.min(replace(metric_values, is.na(metric_values), Inf))
+    which.min(replace(metric_values, is.na(metric_values), Inf))   # ties: first-index wins
   }
 }
 

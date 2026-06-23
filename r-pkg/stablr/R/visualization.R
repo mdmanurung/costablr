@@ -264,7 +264,7 @@ plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
     optimal_thresh <- 1.0
     opt_label      <- "No optimal threshold (min FDR > 1)"
   } else {
-    optimal_thresh <- thresh_grid[which.min(fdrs)]
+    optimal_thresh <- thresh_grid[which.min(fdrs)]  # ties: first-index wins (matches Python argmin)
     opt_label      <- sprintf("Optimal threshold = %.2f", optimal_thresh)
   }
 

@@ -479,9 +479,9 @@ stabl_multiomic_nested_cv <- function(
 
 .select_nested_candidate <- function(summary, metric) {
   if (metric == "accuracy") {
-    return(summary$candidate[which.max(summary$accuracy)])
+    return(summary$candidate[which.max(summary$accuracy)])  # ties: first-index wins
   }
-  summary$candidate[which.min(summary$balanced_error_rate)]
+  summary$candidate[which.min(summary$balanced_error_rate)]  # ties: first-index wins
 }
 
 .fit_stabl_nested_candidate <- function(x_list, y, train_ids, valid_ids,
@@ -574,7 +574,7 @@ stabl_multiomic_nested_cv <- function(
 .predict_selected_multinomial <- function(x_train, y_train, x_valid, levels) {
   y_train <- factor(y_train, levels = levels)
   if (ncol(x_train) == 0L || length(unique(y_train)) < 2L) {
-    majority <- names(which.max(table(y_train)))
+    majority <- names(which.max(table(y_train)))  # ties: first alphabetically (table sort order)
     return(rep(majority, nrow(x_valid)))
   }
 
@@ -587,7 +587,7 @@ stabl_multiomic_nested_cv <- function(
     )
     as.character(stats::predict(fit, newx = x_valid, s = "lambda.min", type = "class")[, 1L])
   }, error = function(e) {
-    majority <- names(which.max(table(y_train)))
+    majority <- names(which.max(table(y_train)))  # ties: first alphabetically (table sort order)
     rep(majority, nrow(x_valid))
   })
 
