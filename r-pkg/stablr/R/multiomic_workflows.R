@@ -140,22 +140,10 @@ stabl_multiomic_train_validate <- function(
     )
   }
 
-  fits <- vector("list", length(omic_names))
-  names(fits) <- omic_names
-
-  selected_features <- vector("list", length(omic_names))
-  names(selected_features) <- omic_names
-
-  selected_train <- vector("list", length(omic_names))
-  names(selected_train) <- omic_names
-
-  selected_valid <- if (!is.null(x_valid_list)) {
-    out <- vector("list", length(omic_names))
-    names(out) <- omic_names
-    out
-  } else {
-    NULL
-  }
+  fits              <- .named_omic_list(omic_names)
+  selected_features <- .named_omic_list(omic_names)
+  selected_train    <- .named_omic_list(omic_names)
+  selected_valid    <- if (!is.null(x_valid_list)) .named_omic_list(omic_names) else NULL
 
   for (omic in omic_names) {
     x_train <- x_train_list[[omic]]
@@ -192,10 +180,7 @@ stabl_multiomic_train_validate <- function(
   # ---- Early fusion --------------------------------------------------------
   ef_result <- NULL
   if (isTRUE(early_fusion)) {
-    x_all_train <- do.call(cbind, lapply(omic_names, function(omic) {
-      x <- x_train_list[[omic]]
-      if (is.data.frame(x)) as.matrix(x) else x
-    }))
+    x_all_train <- .concat_omic_matrices(x_train_list, omic_names)
 
     # Use the shared/first lambda grid for the concatenated model.
     ef_lambda <- lambda_by_omic[[omic_names[1L]]]
@@ -221,10 +206,7 @@ stabl_multiomic_train_validate <- function(
     ef_train_mat  <- .subset_selected_matrix(as.data.frame(x_all_train), ef_sel)
 
     ef_valid_mat <- if (!is.null(x_valid_list)) {
-      x_all_valid <- do.call(cbind, lapply(omic_names, function(omic) {
-        x <- x_valid_list[[omic]]
-        if (is.data.frame(x)) as.matrix(x) else x
-      }))
+      x_all_valid <- .concat_omic_matrices(x_valid_list, omic_names)
       .subset_selected_matrix(as.data.frame(x_all_valid), ef_sel)
     } else {
       NULL
@@ -249,15 +231,8 @@ stabl_multiomic_train_validate <- function(
     }
 
     if (identical(task_type, "multiclass")) {
-      train_preds <- vector("list", length(omic_names))
-      names(train_preds) <- omic_names
-      valid_preds <- if (!is.null(x_valid_list)) {
-        out <- vector("list", length(omic_names))
-        names(out) <- omic_names
-        out
-      } else {
-        NULL
-      }
+      train_preds <- .named_omic_list(omic_names)
+      valid_preds <- if (!is.null(x_valid_list)) .named_omic_list(omic_names) else NULL
     } else {
       train_preds <- matrix(
         NA_real_,
@@ -537,6 +512,15 @@ stabl_multiomic_cv <- function(
     ),
     class = "stabl_multiomic_cv"
   )
+}
+
+.named_omic_list <- function(omic_names) setNames(vector("list", length(omic_names)), omic_names)
+
+.concat_omic_matrices <- function(x_list, omic_names) {
+  do.call(cbind, lapply(omic_names, function(omic) {
+    x <- x_list[[omic]]
+    if (is.data.frame(x)) as.matrix(x) else x
+  }))
 }
 
 .resolve_multiomic_lambda_grid <- function(lambda_grid, omic_names) {
@@ -1065,8 +1049,8 @@ stabl_multiomic_cv <- function(
   }
 
   selected_features <- .cooperative_selected_features(coef_table, omic_names)
-  selected_train <- setNames(vector("list", length(omic_names)), omic_names)
-  selected_valid <- if (is.null(x_valid_list)) NULL else setNames(vector("list", length(omic_names)), omic_names)
+  selected_train <- .named_omic_list(omic_names)
+  selected_valid <- if (is.null(x_valid_list)) NULL else .named_omic_list(omic_names)
 
   for (omic in omic_names) {
     selected_train[[omic]] <- .subset_selected_matrix(x_train_list[[omic]], selected_features[[omic]])
@@ -1382,13 +1366,7 @@ stacked_multi_omic <- function(
 
 # Infer task_type from glm family string.
 .family_to_task_type <- function(family) {
-  if (identical(family, "binomial")) {
-    "binary"
-  } else if (identical(family, "multinomial")) {
-    "multiclass"
-  } else {
-    "regression"
-  }
+  switch(family, binomial = "binary", multinomial = "multiclass", "regression")
 }
 
 # Fit a downstream predictor on selected features for one omic.
