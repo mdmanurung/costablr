@@ -78,11 +78,14 @@ jaccard_similarity <- function(list1, list2) {
 #' jaccard_matrix(sets, remove_diag = FALSE)  # 3 x 3
 #' @export
 jaccard_matrix <- function(list_of_lists, remove_diag = TRUE) {
-  n <- length(list_of_lists)
+  n   <- length(list_of_lists)
   mat <- matrix(0, nrow = n, ncol = n)
-  for (i in seq_len(n)) {
-    for (j in seq_len(n)) {
-      mat[i, j] <- jaccard_similarity(list_of_lists[[i]], list_of_lists[[j]])
+  diag(mat) <- 1
+  for (i in seq_len(n - 1L)) {
+    for (j in seq.int(i + 1L, n)) {
+      v         <- jaccard_similarity(list_of_lists[[i]], list_of_lists[[j]])
+      mat[i, j] <- v
+      mat[j, i] <- v
     }
   }
   if (remove_diag) {
@@ -178,23 +181,16 @@ adjusted_similarity <- function(list1, list2, nb_total_elements) {
 #' adjusted_similarity_values(sets, nb_total_elements = 10L)
 #' @export
 adjusted_similarity_values <- function(list_of_lists, nb_total_elements) {
-  n <- length(list_of_lists)
-  mat <- matrix(0, nrow = n, ncol = n)
-  for (i in seq_len(n)) {
-    for (j in seq_len(n)) {
-      mat[i, j] <- adjusted_similarity(
+  n    <- length(list_of_lists)
+  vals <- numeric(n * (n - 1L) / 2L)
+  if (n < 2L) return(vals)
+  k <- 1L
+  for (i in seq_len(n - 1L)) {
+    for (j in seq.int(i + 1L, n)) {
+      vals[k] <- adjusted_similarity(
         list_of_lists[[i]], list_of_lists[[j]], nb_total_elements
       )
-    }
-  }
-  vals <- numeric(n * (n - 1L) / 2L)
-  k <- 1L
-  if (n >= 2L) {
-    for (i in seq_len(n - 1L)) {
-      for (j in seq.int(i + 1L, n)) {
-        vals[k] <- mat[i, j]
-        k <- k + 1L
-      }
+      k <- k + 1L
     }
   }
   vals
@@ -313,21 +309,14 @@ pearson_similarity <- function(list_i, list_j, d) {
 #' pearson_similarity_values(sets, d = 10L)
 #' @export
 pearson_similarity_values <- function(list_of_lists, d) {
-  n <- length(list_of_lists)
-  mat <- matrix(0, nrow = n, ncol = n)
-  for (i in seq_len(n)) {
-    for (j in seq_len(n)) {
-      mat[i, j] <- pearson_similarity(list_of_lists[[i]], list_of_lists[[j]], d)
-    }
-  }
+  n    <- length(list_of_lists)
   vals <- numeric(n * (n - 1L) / 2L)
+  if (n < 2L) return(vals)
   k <- 1L
-  if (n >= 2L) {
-    for (i in seq_len(n - 1L)) {
-      for (j in seq.int(i + 1L, n)) {
-        vals[k] <- mat[i, j]
-        k <- k + 1L
-      }
+  for (i in seq_len(n - 1L)) {
+    for (j in seq.int(i + 1L, n)) {
+      vals[k] <- pearson_similarity(list_of_lists[[i]], list_of_lists[[j]], d)
+      k <- k + 1L
     }
   }
   vals
