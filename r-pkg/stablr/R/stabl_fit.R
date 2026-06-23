@@ -400,6 +400,13 @@ stabl_fit <- function(
   )
 }
 
+# ---- Package-level constants -------------------------------------------------
+
+# Minimum absolute coefficient to count a feature as "selected" in one
+# bootstrap replicate. Matches the Python STABL default (1e-5) and is applied
+# consistently across all base-learner adapters.
+.BOOTSTRAP_COEF_THRESHOLD <- 1e-5
+
 # ---- Internal param validator ------------------------------------------------
 .validate_stabl_params <- function(n_bootstraps, sample_fraction, replace,
                                    hard_threshold, artificial_type,
@@ -561,24 +568,24 @@ stabl_fit <- function(
     lasso = .make_glmnet_batch_adapter(
       family              = family,
       alpha_fixed         = 1.0,
-      bootstrap_threshold = 1e-5
+      bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
     ),
     elastic_net = .make_glmnet_batch_adapter(
       family              = family,
       alpha_fixed         = NULL,
-      bootstrap_threshold = 1e-5
+      bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
     ),
     adaptive_lasso = .make_adaptive_lasso_batch_adapter(
       family              = family,
       gamma               = adaptive_gamma,
       epsilon             = adaptive_epsilon,
-      bootstrap_threshold = 1e-5
+      bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
     ),
     sparse_group_lasso = .make_sgl_batch_adapter(
       family              = family,
       feature_groups      = sgl_feature_groups,
       alpha_fixed         = NULL,
-      bootstrap_threshold = 1e-5
+      bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
     ),
     stop(
       "`base_learner` must be one of: \"lasso\", \"elastic_net\", \"adaptive_lasso\", \"sparse_group_lasso\".",
