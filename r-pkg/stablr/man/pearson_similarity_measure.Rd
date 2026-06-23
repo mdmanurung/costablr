@@ -28,3 +28,6 @@ sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
 pearson_similarity_measure(sets, d = 10L)
 pearson_similarity_measure(sets, d = 10L, stat = "mean")
 }
+\seealso{
+\code{\link[=pearson_similarity_values]{pearson_similarity_values()}}, \code{\link[=adjusted_similarity_measure]{adjusted_similarity_measure()}}
+}

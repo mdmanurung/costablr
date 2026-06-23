@@ -35,3 +35,7 @@ jaccard_similarity(c("A", "B", "C"), c("B", "C", "D"))  # 0.5
 jaccard_similarity(c("A", "B"),      c("A", "B"))        # 1
 jaccard_similarity(character(0),     character(0))       # 0 (both empty)
 }
+\seealso{
+\code{\link[=jaccard_matrix]{jaccard_matrix()}} for computing all pairwise Jaccard similarities
+at once.
+}

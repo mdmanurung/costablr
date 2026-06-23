@@ -36,3 +36,6 @@ fscore_similarity(predicted, true_signal)           # F1
 fscore_similarity(predicted, true_signal, beta = 2) # recall-weighted
 fscore_similarity(character(0), character(0))       # 0
 }
+\seealso{
+\code{\link[=fdr_similarity]{fdr_similarity()}}, \code{\link[=tpr_similarity]{tpr_similarity()}}
+}

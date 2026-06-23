@@ -27,3 +27,8 @@ comparing reproducibility across methods.
 sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
 adjusted_similarity_values(sets, nb_total_elements = 10L)
 }
+\seealso{
+\code{\link[=adjusted_similarity]{adjusted_similarity()}} for the pairwise function,
+\code{\link[=adjusted_similarity_measure]{adjusted_similarity_measure()}} for a one-number summary,
+\code{\link[=pearson_similarity_values]{pearson_similarity_values()}} for an alternative chance-correction.
+}

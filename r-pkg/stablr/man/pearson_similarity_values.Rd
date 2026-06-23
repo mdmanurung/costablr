@@ -24,3 +24,8 @@ two metrics on the same data).
 sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
 pearson_similarity_values(sets, d = 10L)
 }
+\seealso{
+\code{\link[=pearson_similarity]{pearson_similarity()}} for the pairwise function,
+\code{\link[=pearson_similarity_measure]{pearson_similarity_measure()}} for a one-number summary,
+\code{\link[=adjusted_similarity_values]{adjusted_similarity_values()}} for an alternative chance-correction.
+}

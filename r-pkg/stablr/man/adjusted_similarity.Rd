@@ -41,3 +41,8 @@ adjusted_similarity(c("f1","f2","f3"), c("f2","f3","f4"), nb_total_elements = 10
 adjusted_similarity(c("f1","f2"),      c("f1","f2"),      nb_total_elements = 10L) # 1
 adjusted_similarity(character(0),      c("f1"),           nb_total_elements = 10L) # 0
 }
+\seealso{
+\code{\link[=adjusted_similarity_values]{adjusted_similarity_values()}} for computing all pairwise values at
+once, \code{\link[=adjusted_similarity_measure]{adjusted_similarity_measure()}} for a summary statistic,
+\code{\link[=jaccard_similarity]{jaccard_similarity()}} for the non-chance-corrected alternative.
+}

@@ -33,3 +33,7 @@ sets <- list(c("A","B","C"), c("B","C","D"), c("A","C","E"))
 jaccard_matrix(sets)           # 3 x 2 (diagonal removed)
 jaccard_matrix(sets, remove_diag = FALSE)  # 3 x 3
 }
+\seealso{
+\code{\link[=jaccard_similarity]{jaccard_similarity()}}, \code{\link[=adjusted_similarity_values]{adjusted_similarity_values()}},
+\code{\link[=pearson_similarity_values]{pearson_similarity_values()}}
+}

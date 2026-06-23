@@ -33,6 +33,9 @@
 #' @return Numeric scalar in \eqn{[0, 1]}.  A value of 1 means the two sets
 #'   are identical; 0 means they share no features.
 #'
+#' @seealso [jaccard_matrix()] for computing all pairwise Jaccard similarities
+#'   at once.
+#'
 #' @examples
 #' jaccard_similarity(c("A", "B", "C"), c("B", "C", "D"))  # 0.5
 #' jaccard_similarity(c("A", "B"),      c("A", "B"))        # 1
@@ -65,6 +68,9 @@ jaccard_similarity <- function(list1, list2) {
 #'
 #' @return Numeric matrix of dimension N\eqn{\times}N (or N\eqn{\times}(N-1)
 #'   when `remove_diag = TRUE`).  Row/column order matches `list_of_lists`.
+#'
+#' @seealso [jaccard_similarity()], [adjusted_similarity_values()],
+#'   [pearson_similarity_values()]
 #'
 #' @examples
 #' sets <- list(c("A","B","C"), c("B","C","D"), c("A","C","E"))
@@ -116,6 +122,10 @@ jaccard_matrix <- function(list_of_lists, remove_diag = TRUE) {
 #'   overlap than expected by chance; 1 means perfect agreement; negative
 #'   values indicate less overlap than chance.
 #'
+#' @seealso [adjusted_similarity_values()] for computing all pairwise values at
+#'   once, [adjusted_similarity_measure()] for a summary statistic,
+#'   [jaccard_similarity()] for the non-chance-corrected alternative.
+#'
 #' @examples
 #' # 10-feature universe; sets A and B share 2 out of 3 features each
 #' adjusted_similarity(c("f1","f2","f3"), c("f2","f3","f4"), nb_total_elements = 10L)
@@ -158,6 +168,10 @@ adjusted_similarity <- function(list1, list2, nb_total_elements) {
 #' @return Numeric vector of length N*(N-1)/2 containing the pairwise
 #'   adjusted-similarity values for all unique pairs (row-major upper-triangle
 #'   order, matching the Python convention).
+#'
+#' @seealso [adjusted_similarity()] for the pairwise function,
+#'   [adjusted_similarity_measure()] for a one-number summary,
+#'   [pearson_similarity_values()] for an alternative chance-correction.
 #'
 #' @examples
 #' sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
@@ -207,6 +221,8 @@ adjusted_similarity_values <- function(list_of_lists, nb_total_elements) {
 #'       (RMSD / population SD).}
 #'   }
 #'
+#' @seealso [adjusted_similarity_values()], [pearson_similarity_measure()]
+#'
 #' @examples
 #' sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
 #' adjusted_similarity_measure(sets, nb_total_elements = 10L)
@@ -243,6 +259,10 @@ adjusted_similarity_measure <- function(list_of_lists, nb_total_elements,
 #'
 #' @return Numeric scalar.  Positive values indicate more overlap than chance;
 #'   the maximum is typically close to 1 for perfectly matching sets.
+#'
+#' @seealso [pearson_similarity_values()] for computing all pairwise values at
+#'   once, [pearson_similarity_measure()] for a summary statistic,
+#'   [adjusted_similarity()] for an alternative chance-correction.
 #'
 #' @examples
 #' pearson_similarity(c("f1","f2","f3"), c("f2","f3","f4"), d = 10L)
@@ -284,6 +304,10 @@ pearson_similarity <- function(list_i, list_j, d) {
 #'
 #' @return Numeric vector of length N*(N-1)/2.
 #'
+#' @seealso [pearson_similarity()] for the pairwise function,
+#'   [pearson_similarity_measure()] for a one-number summary,
+#'   [adjusted_similarity_values()] for an alternative chance-correction.
+#'
 #' @examples
 #' sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
 #' pearson_similarity_values(sets, d = 10L)
@@ -323,6 +347,8 @@ pearson_similarity_values <- function(list_of_lists, d) {
 #' @return A named list with `statistic` and `err` (see
 #'   [adjusted_similarity_measure()] for the exact definitions).
 #'
+#' @seealso [pearson_similarity_values()], [adjusted_similarity_measure()]
+#'
 #' @examples
 #' sets <- list(c("f1","f2","f3"), c("f2","f3","f4"), c("f1","f3","f5"))
 #' pearson_similarity_measure(sets, d = 10L)
@@ -347,6 +373,8 @@ pearson_similarity_measure <- function(list_of_lists, d, stat = "median") {
 #'
 #' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when the predicted set
 #'   is empty (no false discoveries possible).
+#'
+#' @seealso [tpr_similarity()], [fscore_similarity()]
 #'
 #' @examples
 #' true_signal <- c("f1", "f2", "f3")
@@ -373,6 +401,8 @@ fdr_similarity <- function(list1, list2) {
 #'
 #' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when the true set is
 #'   empty.
+#'
+#' @seealso [fdr_similarity()], [fscore_similarity()]
 #'
 #' @examples
 #' true_signal <- c("f1", "f2", "f3")
@@ -406,6 +436,8 @@ tpr_similarity <- function(list1, list2) {
 #'
 #' @return Numeric scalar in \eqn{[0, 1]}.  Returns 0 when both the predicted
 #'   and true sets are empty.
+#'
+#' @seealso [fdr_similarity()], [tpr_similarity()]
 #'
 #' @examples
 #' true_signal <- c("f1", "f2", "f3")

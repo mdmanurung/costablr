@@ -59,4 +59,9 @@ result <- compute_fdp_plus(scores_real, scores_art,
                            artificial_proportion = 1.0)
 result$min_fdr           # minimum FDP+ estimate
 result$fdr_min_threshold # threshold that achieves it
+
+}
+\seealso{
+\code{\link[=stabl_fit]{stabl_fit()}} which calls this internally when artificial features
+are used, \code{\link[=plot_fdr_graph]{plot_fdr_graph()}} to visualise the FDP+ curve.
 }
