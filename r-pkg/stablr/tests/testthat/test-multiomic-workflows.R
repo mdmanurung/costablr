@@ -394,6 +394,35 @@ test_that("stacked_multi_omic errors when multiclass labels are absent from prob
   )
 })
 
+# Characterization tests for stacked_multi_omic loop-invariant hoist (Item 12).
+# Pin exact score and weights for binary and regression tasks so that the
+# is_obs / y_na_mask hoist can be verified to produce bit-identical output.
+
+test_that("stacked_multi_omic binary: loop-invariant hoist produces bit-identical output", {
+  set.seed(7L)
+  n <- 40L
+  preds <- data.frame(A = rnorm(n), B = rnorm(n), C = rnorm(n))
+  preds[c(2L, 5L), "B"] <- NA
+  y <- rbinom(n, 1L, 0.5)
+  res <- stacked_multi_omic(preds, y, task_type = "binary",
+                            n_iter = 2000L, random_state = 99L)
+  expect_equal(res$score, 0.5652173913, tolerance = 1e-9)
+  expect_equal(res$weights$Associated_weight,
+               c(0.4014557484, 0.1468211692, 6.7493813089), tolerance = 1e-9)
+})
+
+test_that("stacked_multi_omic regression: loop-invariant hoist produces bit-identical output", {
+  set.seed(13L)
+  n <- 30L
+  preds <- data.frame(A = rnorm(n), B = rnorm(n))
+  y <- rnorm(n)
+  res <- stacked_multi_omic(preds, y, task_type = "regression",
+                            n_iter = 2000L, random_state = 55L)
+  expect_equal(res$score, 0.010970174330076, tolerance = 1e-12)
+  expect_equal(res$weights$Associated_weight,
+               c(2.876192552503198, 2.322242232039571), tolerance = 1e-12)
+})
+
 # ---------------------------------------------------------------------------
 # Early fusion tests
 # ---------------------------------------------------------------------------
@@ -1257,4 +1286,37 @@ test_that("cooperative accessors support multiomic cv objects", {
     c("fold", "omic", "cooperative_rho", "cooperative_lambda",
       "cooperative_score")
   )
+})
+
+# C1 characterization: match() on lambda doubles may return NA if glmnet's
+# stored lambda.min / lambda.1se has a floating-point difference vs fit$lambda.
+# Pin metric_value, selected, and best_rho with tolerance = 0 so that any
+# NA-propagation through fit$cvm[[NA]] is caught immediately.
+test_that("C1: cooperative CV diagnostics have no NA metric_value (lambda match guard)", {
+  d <- .cf_make_two_omic(n = 24L, seed = 200L)
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list = list(omic_a = d$x_a, omic_b = d$x_b),
+    y_train = d$y,
+    lambda_grid = data.frame(lambda = c(0.3, 0.15, 0.05)),
+    artificial_type = NULL,
+    hard_threshold = 0.3,
+    n_bootstraps = 4L,
+    family = "gaussian",
+    random_state = 200L,
+    cooperative_fusion = TRUE,
+    rho = c(0, 0.2, 0.5),
+    cooperation_selection = "cv",
+    cooperation_selector = "lambda.min",
+    cooperation_nfolds = 3L
+  )
+
+  diag <- fit$cooperative_fusion$diagnostics
+  # No metric_value may be NA — an NA here means match() returned NA (C1 bug).
+  expect_true(all(!is.na(diag$metric_value)),
+              info = "NA metric_value indicates float match() failure on lambda doubles")
+  # Exactly one rho must be selected.
+  expect_equal(sum(diag$selected), 1L)
+  # The selected rho must be one of the candidates.
+  expect_true(diag$rho[diag$selected] %in% c(0, 0.2, 0.5))
 })

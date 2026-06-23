@@ -956,7 +956,10 @@ stabl_multiomic_cv <- function(
       fit <- cv_fits[[i]]
       selector <- cooperative_args$cooperation_selector
       lambda_value <- unname(fit[[selector]])
+      # Prefer exact match (glmnet's lambda.min/lambda.1se are elements of
+      # fit$lambda); fall back to nearest-value if floating-point diverges.
       lambda_index <- match(lambda_value, fit$lambda)
+      if (is.na(lambda_index)) lambda_index <- which.min(abs(fit$lambda - lambda_value))
       data.frame(
         rho = cooperative_args$rho[[i]],
         lambda = lambda_value,
