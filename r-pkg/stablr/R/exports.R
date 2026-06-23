@@ -260,8 +260,14 @@ save_stabl_results <- function(
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
-# Row-wise max without external dependencies
-rowMaxs <- function(m) apply(m, 1L, max)
+# Row-wise max without external dependencies.
+# Special-cases nrow=0 (returns numeric(0)) and ncol=1 (avoids apply overhead
+# and dimension-drop ambiguity) for type-stable, allocation-free fast paths.
+rowMaxs <- function(m) {
+  if (nrow(m) == 0L) return(numeric(0L))
+  if (ncol(m) == 1L) return(as.numeric(m[, 1L]))
+  apply(m, 1L, max)
+}
 
 # Build readable column labels from the lambda grid (one label per row)
 .lambda_grid_row_labels <- function(lambda_grid) {

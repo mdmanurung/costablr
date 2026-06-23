@@ -47,6 +47,30 @@ test_that("compute_fdp_plus denominator floor is 1 when no real features exceed 
   expect_equal(unname(res$FDRs), 5)
 })
 
+test_that("compute_fdp_plus fdrs_table is bit-identical after vectorization (characterization)", {
+  # Pins the exact per-lambda FDP+ table for a known random input.
+  # Captures current behaviour so any future refactor of the lambda loop must
+  # produce the same floating-point values.
+  set.seed(11L)
+  p <- 4L; L <- 3L
+  sc  <- matrix(runif(p * L), p, L)
+  sca <- matrix(runif(p * L), p, L)
+  thr <- seq(0.1, 0.9, length.out = 5L)
+
+  res <- compute_fdp_plus(sc, sca, 0.5, thr)
+
+  expected_table <- matrix(
+    c(4.5, 9.0, 9.0, 7.0, 3.0,
+      4.5, 7.0, 1.0, 1.0, 1.0,
+      2.25, 3.5, 3.0, 1.0, 1.0),
+    nrow = 3L, ncol = 5L, byrow = TRUE
+  )
+  expect_equal(res$fdrs_table, expected_table, tolerance = 0)
+  expect_equal(res$FDRs, c(2.25, 2.25, 3.0, 3.5, 3.0), tolerance = 0)
+  expect_equal(res$min_fdr, 2.25, tolerance = 0)
+  expect_equal(res$fdr_min_threshold, 1.0, tolerance = 0)
+})
+
 test_that("compute_fdp_plus caps fdr_min_threshold at 1 when min FDP+ > 1", {
   # Construct a case where min FDP+ exceeds 1 → final cutoff must be 1.
   art  <- matrix(0.99, nrow = 20L, ncol = 2L)
@@ -61,4 +85,26 @@ test_that("compute_fdp_plus caps fdr_min_threshold at 1 when min FDP+ > 1", {
 
   expect_gt(res$min_fdr, 1)
   expect_equal(res$fdr_min_threshold, 1)
+})
+
+# D1 characterization: rowMaxs / .row_maxs outputs on normal and degenerate
+# inputs (pin at tolerance = 0 before refactoring to an improved helper).
+test_that("rowMaxs returns correct row-wise maxima on normal inputs", {
+  m <- matrix(c(1, 3, 2, 4, 0, 5), nrow = 3L, ncol = 2L)
+  # Row maxima: max(1,4)=4, max(3,0)=3, max(2,5)=5
+  expect_equal(stablr:::rowMaxs(m), c(4, 3, 5), tolerance = 0)
+})
+
+test_that("rowMaxs handles 0-row matrix gracefully", {
+  m <- matrix(numeric(0), nrow = 0L, ncol = 3L)
+  result <- stablr:::rowMaxs(m)
+  expect_length(result, 0L)
+  expect_true(is.numeric(result))
+})
+
+test_that("rowMaxs handles 1-column matrix (no silent apply dimension-drop)", {
+  m <- matrix(c(7, 2, 9), nrow = 3L, ncol = 1L)
+  # All three values are the row maxima; must return numeric vector, not NULL.
+  expect_equal(stablr:::rowMaxs(m), c(7, 2, 9), tolerance = 0)
+  expect_true(is.numeric(stablr:::rowMaxs(m)))
 })

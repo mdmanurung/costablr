@@ -52,8 +52,8 @@ compute_fdp_plus <- function(
     fdr_threshold_range = seq(0, 0.99, by = 0.01)
 ) {
   inv_prop    <- 1.0 / artificial_proportion
-  max_scores  <- apply(stabl_scores,            1L, max)
-  max_art     <- apply(stabl_scores_artificial, 1L, max)
+  max_scores  <- rowMaxs(stabl_scores)
+  max_art     <- rowMaxs(stabl_scores_artificial)
   n_thresh    <- length(fdr_threshold_range)
 
   # Vectorized FDP+ across all lambda (uses row-max scores).

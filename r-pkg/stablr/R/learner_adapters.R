@@ -325,7 +325,7 @@ make_sgl_adapter <- function(
         )
         coef_mat[, k] <- .feature_abs_coefs_sparsegl(fit_k, s = lambda_use)[inv_ord]
       }
-      return(apply(coef_mat, 1L, max) > bootstrap_threshold)
+      return(rowMaxs(coef_mat) > bootstrap_threshold)
     }
 
     fit <- sparsegl::sparsegl(
@@ -438,7 +438,7 @@ auto_lambda_grid <- function(
   if (is.list(coef_obj)) {
     mats <- lapply(coef_obj, function(m) as.numeric(m[row_sel, 1L]))
     coef_mat <- do.call(cbind, mats)
-    return(apply(abs(coef_mat), 1L, max))
+    return(rowMaxs(abs(coef_mat)))
   }
 
   stop("Unsupported coefficient structure returned by glmnet.", call. = FALSE)
