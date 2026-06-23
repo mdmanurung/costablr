@@ -237,3 +237,63 @@ test_that("group_bootstrap_indices errors after max retries on impossible class 
     "could not draw a class-diverse subsample"
   )
 })
+
+# D2 characterization: pin exact element order for internal helpers before
+# refactoring c()-in-loop growth to list-collect + unlist.
+
+test_that("D2: .append_noise_groups NULL passthrough is identity (characterization)", {
+  g <- c(1L, 1L, 2L, 3L, 3L)
+  expect_identical(stablr:::.append_noise_groups(g, NULL, length(g)), g)
+})
+
+test_that("D2: .append_noise_groups valid src indices borrow group ids (characterization)", {
+  g         <- c(1L, 1L, 2L, 3L, 3L)
+  noise_src <- c(2L, 1L, 3L)
+  result    <- stablr:::.append_noise_groups(g, noise_src, length(g) + length(noise_src))
+  expect_identical(result, c(1L, 1L, 2L, 3L, 3L, 1L, 1L, 2L))
+})
+
+test_that("D2: .append_noise_groups invalid indices assign fresh group ids (characterization)", {
+  g         <- c(1L, 1L, 2L, 3L, 3L)
+  noise_inv <- c(99L, 0L, NA_integer_)
+  result    <- stablr:::.append_noise_groups(g, noise_inv, length(g) + length(noise_inv))
+  expect_identical(result, c(1L, 1L, 2L, 3L, 3L, 4L, 5L, 6L))
+})
+
+test_that("D2: .append_noise_groups mixed src+invalid preserves element order (characterization)", {
+  g         <- c(1L, 1L, 2L, 3L, 3L)
+  noise_mix <- c(2L, 99L)
+  result    <- stablr:::.append_noise_groups(g, noise_mix, length(g) + length(noise_mix))
+  expect_identical(result, c(1L, 1L, 2L, 3L, 3L, 1L, 4L))
+})
+
+test_that("D2: .unstratified_group_bootstrap_indices replace=FALSE exact order (characterization)", {
+  groups <- c("a", "a", "a", "b", "b", "c", "c", "c", "c", "d")
+  gl     <- unique(groups)
+  set.seed(7L)
+  idx <- stablr:::.unstratified_group_bootstrap_indices(groups, gl,
+                                                        n_subsamples = 5L,
+                                                        replace = FALSE)
+  expect_identical(idx, c(4L, 5L, 10L, 1L, 2L, 3L))
+})
+
+test_that("D2: .unstratified_group_bootstrap_indices replace=TRUE exact order (characterization)", {
+  groups <- c("a", "a", "a", "b", "b", "c", "c", "c", "c", "d")
+  gl     <- unique(groups)
+  set.seed(13L)
+  idx <- stablr:::.unstratified_group_bootstrap_indices(groups, gl,
+                                                        n_subsamples = 5L,
+                                                        replace = TRUE)
+  expect_identical(idx, c(10L, 6L, 7L, 8L, 9L))
+})
+
+test_that("D2: .stratified_group_bootstrap_indices replace=FALSE exact order (characterization)", {
+  groups <- c("a", "a", "a", "b", "b", "c", "c", "c", "c", "d")
+  gl     <- unique(groups)
+  strata <- c("X", "X", "X", "Y", "Y", "Y", "Y", "Y", "Y", "X")
+  set.seed(22L)
+  idx <- stablr:::.stratified_group_bootstrap_indices(strata, groups, gl,
+                                                      n_subsamples = 5L,
+                                                      replace = FALSE)
+  expect_identical(idx, c(1L, 7L, 3L, 8L, 2L, 10L, 6L, 9L))
+})

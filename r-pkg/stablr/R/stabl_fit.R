@@ -541,15 +541,20 @@ stabl_fit <- function(
     return(groups)
   }
 
-  out <- as.integer(groups)
-  next_gid <- max(out)
-  for (src in noise_col_indices) {
-    src <- as.integer(src)
-    if (!is.na(src) && src >= 1L && src <= length(groups)) {
-      out <- c(out, groups[[src]])
+  # Preallocate the full output vector to avoid quadratic c()-in-loop growth.
+  n_orig   <- length(groups)
+  n_noise  <- length(noise_col_indices)
+  out      <- integer(n_orig + n_noise)
+  out[seq_len(n_orig)] <- as.integer(groups)
+  next_gid <- max(as.integer(groups))
+
+  for (i in seq_len(n_noise)) {
+    src <- as.integer(noise_col_indices[[i]])
+    if (!is.na(src) && src >= 1L && src <= n_orig) {
+      out[n_orig + i] <- groups[[src]]
     } else {
-      next_gid <- next_gid + 1L
-      out <- c(out, next_gid)
+      next_gid        <- next_gid + 1L
+      out[n_orig + i] <- next_gid
     }
   }
 

@@ -456,24 +456,28 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
                                                   n_subsamples, replace) {
   # When replace = FALSE, each group may only be drawn once.
   # Track the remaining available pool so we stop re-drawing exhausted groups.
-  remaining   <- group_levels
-  sampled_idx <- integer(0)
+  # Collect each drawn group's indices into a list to avoid quadratic
+  # c()-in-loop growth; unlist() once after the loop.
+  remaining  <- group_levels
+  idx_chunks <- list()
+  total_len  <- 0L
 
-  while (length(sampled_idx) < n_subsamples && length(remaining) > 0L) {
+  while (total_len < n_subsamples && length(remaining) > 0L) {
     # Use index-then-subset to avoid R's `sample(x, 1)` length-1 pitfall:
     # when length(remaining) == 1 and remaining is numeric, sample(remaining, 1L)
     # silently behaves as sample.int(remaining, 1L) and fabricates a label.
-    pick_pos    <- sample.int(length(remaining), size = 1L)
-    g           <- remaining[[pick_pos]]
+    pick_pos  <- sample.int(length(remaining), size = 1L)
+    g         <- remaining[[pick_pos]]
     remaining <- if (replace) remaining else remaining[-pick_pos]
-    sampled_idx <- if (replace) {
-      c(sampled_idx, which(groups == g))
-    } else {
-      unique(c(sampled_idx, which(groups == g)))
-    }
+    chunk     <- which(groups == g)
+    idx_chunks[[length(idx_chunks) + 1L]] <- chunk
+    total_len <- total_len + length(chunk)
   }
 
-  sampled_idx
+  sampled_idx <- unlist(idx_chunks, use.names = FALSE)
+  # Groups are non-overlapping by definition, so unique() is a no-op in
+  # replace=FALSE mode — kept for consistency with the original contract.
+  if (!replace) unique(sampled_idx) else sampled_idx
 }
 
 .stratified_group_bootstrap_indices <- function(strata_ids, groups, group_levels,
@@ -491,22 +495,27 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
   }, character(1L))
 
   target_counts <- .stratified_counts(strata_ids, n_subsamples, replace)
-  sampled_idx <- integer(0)
+  # List-collect across strata to avoid quadratic c()-in-loop growth;
+  # unlist() once at the end for both the inner (per-stratum) and outer
+  # (cross-stratum) accumulations.
+  outer_chunks <- list()
 
   for (stratum in names(target_counts)) {
-    remaining <- group_levels[group_strata == stratum]
-    stratum_idx <- integer(0)
+    remaining    <- group_levels[group_strata == stratum]
+    inner_chunks <- list()
+    stratum_len  <- 0L
 
-    while (length(stratum_idx) < target_counts[[stratum]] && length(remaining) > 0L) {
-      pick_pos <- sample.int(length(remaining), size = 1L)
-      g <- remaining[[pick_pos]]
+    while (stratum_len < target_counts[[stratum]] && length(remaining) > 0L) {
+      pick_pos  <- sample.int(length(remaining), size = 1L)
+      g         <- remaining[[pick_pos]]
       remaining <- if (replace) remaining else remaining[-pick_pos]
-      stratum_idx <- if (replace) {
-        c(stratum_idx, which(groups == g))
-      } else {
-        unique(c(stratum_idx, which(groups == g)))
-      }
+      chunk     <- which(groups == g)
+      inner_chunks[[length(inner_chunks) + 1L]] <- chunk
+      stratum_len <- stratum_len + length(chunk)
     }
+
+    stratum_idx <- unlist(inner_chunks, use.names = FALSE)
+    if (!replace) stratum_idx <- unique(stratum_idx)
 
     if (length(stratum_idx) < target_counts[[stratum]]) {
       stop(
@@ -515,12 +524,11 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
         call. = FALSE
       )
     }
-    sampled_idx <- if (replace) {
-      c(sampled_idx, stratum_idx)
-    } else {
-      unique(c(sampled_idx, stratum_idx))
-    }
+    outer_chunks[[length(outer_chunks) + 1L]] <- stratum_idx
   }
+
+  sampled_idx <- unlist(outer_chunks, use.names = FALSE)
+  if (!replace) sampled_idx <- unique(sampled_idx)
 
   sample(sampled_idx, length(sampled_idx), replace = FALSE)
 }
