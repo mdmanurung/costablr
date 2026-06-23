@@ -190,6 +190,57 @@ test_that("group bootstrap path runs without error", {
   expect_s3_class(fit, "stabl_fit")
 })
 
+test_that("explore clamps to p when n_explore > n_features", {
+  # Verifies min(n_explore, p) clamping: n_explore=100 with p=6 should select
+  # all 6 features, not error.
+  set.seed(7L)
+  n <- 20L; p <- 6L
+  x <- matrix(rnorm(n * p), n, p,
+               dimnames = list(paste0("s", seq_len(n)),
+                               paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+  lam_grid <- data.frame(lambda = c(10, 20))  # huge lambda → all scores ~0
+
+  fit <- stabl_fit(
+    x               = x,
+    y               = y,
+    lambda_grid     = lam_grid,
+    family          = "gaussian",
+    n_bootstraps    = 10L,
+    artificial_type = NULL,
+    hard_threshold  = 0.99,
+    explore         = TRUE,
+    n_explore       = 100L       # far exceeds p
+  )
+
+  mask <- get_support(fit)
+  expect_equal(sum(mask), p)    # clamped to p, not 100
+  expect_length(mask, p)
+})
+
+test_that("get_support errors with informative message when no threshold is resolvable", {
+  set.seed(8L)
+  n <- 20L; p <- 4L
+  x <- matrix(rnorm(n * p), n, p,
+               dimnames = list(paste0("s", seq_len(n)),
+                               paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  fit <- stabl_fit(
+    x               = x,
+    y               = y,
+    lambda_grid     = data.frame(lambda = c(0.1, 0.2)),
+    family          = "gaussian",
+    n_bootstraps    = 10L,
+    artificial_type = "random_permutation"
+  )
+  # Simulate a fitted object with no threshold resolved (neither hard nor FDP+).
+  fit$hard_threshold      <- NULL
+  fit$fdr_min_threshold_  <- NULL
+
+  expect_error(get_support(fit), "No threshold available")
+})
+
 test_that("stabl_fit exposes bootstrap stratification design option", {
   set.seed(10)
   n <- 38L; p <- 6L
