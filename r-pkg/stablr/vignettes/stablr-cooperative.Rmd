@@ -350,6 +350,25 @@ one penalised model; cooperative fusion fits per-view paths that are encouraged
 to agree.  Features unique to cooperative fusion may carry cross-view signal
 that is diluted in the concatenated early-fusion space.
 
+### Relation to mixOmics DIABLO
+
+Cooperative fusion is the closest `stablr` analogue to multiblock integration,
+but it is **not** equivalent to DIABLO:
+
+| | Cooperative fusion (`rho`) | DIABLO |
+|---|---------------------------|--------|
+| Optimisation | Penalised regression paths per view, coupled by cooperation penalty | Sparse PLS components with block design matrix |
+| Output | Per-view coefficient paths and selected features | Latent components + block loadings |
+| Tuning | `rho`, `lambda`, `cooperation_nfolds` | `ncomp`, `keepX`, design matrix entries |
+| Families (v1) | gaussian, binomial | Classification (sPLS-DA) |
+| Stability / FDP | STABL bootstrap + knockoff layer | Component sparsity only |
+
+Use cooperative fusion when you want **stable sparse features per omic** with
+cross-view agreement.  Use DIABLO when you want **joint latent factors** for
+classification and mixOmics visualisation.  Head-to-head TCGA benchmarks that
+include early fusion (and future cooperative arms) are described in
+`inst/analysis/BENCHMARK_PLAN.md`.
+
 ---
 
 ## 8. Cross-validation with cooperative fusion
@@ -401,7 +420,9 @@ analysis: did the views need to cooperate, and if so, how strongly?
 | **Grid upper bound** | Values > 0.5 can over-penalise disagreement between views; rarely beneficial unless views are near-identical. |
 | **`lambda.min` vs `lambda.1se`** | `lambda.1se` gives a sparser model at the cost of a higher CV error; prefer `lambda.min` when prediction is the goal. |
 | **`cooperation_nfolds`** | 5 (default) is suitable for n >= 50.  Use 3 for smaller datasets.  Must be >= 3. |
-| **`cooperation_selection = "validation"`** | Use when you have a true held-out set and want to tune `rho` and `lambda` together on it.  Not supported for `family = "cox"`. |
+| **`cooperation_selection = "validation"`** | Use when you have a true held-out set and want to tune `rho` and `lambda` together on it. |
+| **Native v1 families** | Cooperative fusion supports `family = "gaussian"` and `"binomial"` only. |
+| **Binomial tuning metrics** | Try `cooperation_type_measure = "auc"` or `"class"` when the outcome is binary. |
 | **rho = 0 wins** | If the chosen `rho` is always 0, the views are not benefiting from cooperation.  Consider whether the omics share any biological pathway. |
 
 ---
@@ -414,6 +435,8 @@ analysis: did the views need to cooperate, and if so, how strongly?
 - Pass `groups` to `stabl_multiomic_train_validate()` to prevent leakage in
   longitudinal designs; grouped bootstrapping and outer-fold construction both
   respect this argument.
-- For binomial and Cox outcomes, set `family = "binomial"` or `family = "cox"`
-  and adjust `cooperation_type_measure`, such as `"auc"` for binomial or
-  `"deviance"` for Cox.
+- For binomial cooperative fusion, set `family = "binomial"` and consider
+  `cooperation_type_measure = "auc"` or `"class"`.
+- See `vignette("stablr-advanced")` for Cox survival STABL, knockoffs,
+  grouped bootstrap, reproducibility metrics, export helpers, and outer CV.
+- For mixOmics DIABLO comparison on TCGA, see `vignette("stablr-tcga-nestedcv")`.
