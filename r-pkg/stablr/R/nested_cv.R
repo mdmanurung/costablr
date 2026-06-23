@@ -414,7 +414,10 @@ stabl_multiomic_nested_cv <- function(
 
 .derive_nested_seed <- function(random_state, index, offset) {
   if (is.null(random_state)) return(NULL)
-  as.integer((as.integer(random_state) + as.integer(offset) + as.integer(index) * 7919L) %% .Machine$integer.max)
+  # Compute in double before the modulo to avoid integer overflow when
+  # `index` exceeds ~271500 (as.integer(index) * 7919L would return NA).
+  as.integer((as.double(random_state) + as.double(offset) + as.double(index) * 7919) %%
+               .Machine$integer.max)
 }
 
 .evaluate_stabl_candidates_inner <- function(x_list, y, train_ids, candidates,

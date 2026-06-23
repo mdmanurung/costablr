@@ -98,3 +98,25 @@ test_that("stabl_fit does not leave the global RNG state predictable across call
 
   expect_equal(fit_a$stabl_scores_, fit_b$stabl_scores_, tolerance = 0)
 })
+
+# C2 characterization: .derive_nested_seed integer-overflow safety.
+# as.integer(index) * 7919L overflows (returns NA) for index > ~271500.
+# The fix computes in double before casting.
+test_that(".derive_nested_seed returns non-NA integers for small indices", {
+  # Pin current (correct) values for realistic index range.
+  # (random_state + offset + index * 7919) %% .Machine$integer.max:
+  # (1 + 0 + 1*7919) = 7920; (42 + 0 + 3*7919) = 42 + 23757 = 23799
+  expect_identical(stablr:::.derive_nested_seed(1L,  1L, 0L), 7920L)
+  expect_identical(stablr:::.derive_nested_seed(42L, 3L, 0L), 23799L)
+  # NULL random_state always returns NULL.
+  expect_null(stablr:::.derive_nested_seed(NULL, 5L, 0L))
+})
+
+test_that(".derive_nested_seed does not return NA for large index", {
+  # index = 300000 overflows as.integer(index) * 7919L in the naive
+  # integer-only formula; the fix must return a valid integer, not NA.
+  seed <- stablr:::.derive_nested_seed(1L, 300000L, 0L)
+  expect_false(is.na(seed))
+  expect_true(is.integer(seed))
+  expect_true(seed >= 0L && seed < .Machine$integer.max)
+})
