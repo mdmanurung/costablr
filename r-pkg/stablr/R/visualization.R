@@ -8,6 +8,30 @@
   }
 }
 
+# Build a long data frame from a scores matrix (one row per feature × lambda).
+# feat_names: character vector of length n.
+# scores:     n × n_lambda numeric matrix.
+# If `selected` is non-NULL it must be a logical vector of length n; a column
+# is appended with the per-feature selection indicator (recycled across lambdas).
+.scores_to_long_df <- function(feat_names, scores, lambda_vals, lam_grid, has_alpha,
+                                selected = NULL) {
+  n     <- length(feat_names)
+  n_lam <- ncol(scores)
+  lst   <- vector("list", n)
+  for (i in seq_len(n)) {
+    lst[[i]] <- data.frame(
+      feature    = feat_names[i],
+      lambda_idx = seq_len(n_lam),
+      lambda     = lambda_vals,
+      score      = unname(scores[i, ]),
+      alpha      = if (has_alpha) unname(lam_grid$alpha) else NA_real_,
+      stringsAsFactors = FALSE
+    )
+    if (!is.null(selected)) lst[[i]]$selected <- unname(selected[i])
+  }
+  do.call(rbind, lst)
+}
+
 # Color palette matching the Python STABL implementation
 .stablr_colors <- list(
   selected   = "#C41E3A",  # cardinal red for stable/selected features
@@ -67,40 +91,17 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
   # Determine whether to facet by alpha
   has_alpha <- "alpha" %in% names(lam_grid)
 
-  # Build long data frame for real features
   lambda_vals <- unname(lam_grid$lambda)
-  df_list <- vector("list", length(feat_names))
-  for (i in seq_along(feat_names)) {
-    df_list[[i]] <- data.frame(
-      feature    = feat_names[i],
-      lambda_idx = seq_len(n_lambda),
-      lambda     = lambda_vals,
-      score      = unname(scores[i, ]),
-      selected   = unname(support[i]),
-      alpha      = if (has_alpha) unname(lam_grid$alpha) else NA_real_,
-      stringsAsFactors = FALSE
-    )
-  }
-  df_real <- do.call(rbind, df_list)
+  df_real <- .scores_to_long_df(feat_names, scores, lambda_vals, lam_grid,
+                                 has_alpha, selected = support)
 
-  # Build long data frame for artificial features (if present)
   df_art <- NULL
   if (!is.null(object$stabl_scores_artificial_) &&
       !is.null(object$artificial_type)) {
     art_scores <- object$stabl_scores_artificial_
-    n_art      <- nrow(art_scores)
-    art_list   <- vector("list", n_art)
-    for (i in seq_len(n_art)) {
-      art_list[[i]] <- data.frame(
-        feature    = paste0("artificial.", i),
-        lambda_idx = seq_len(n_lambda),
-        lambda     = lambda_vals,
-        score      = unname(art_scores[i, ]),
-        alpha      = if (has_alpha) unname(lam_grid$alpha) else NA_real_,
-        stringsAsFactors = FALSE
-      )
-    }
-    df_art <- do.call(rbind, art_list)
+    art_names  <- paste0("artificial.", seq_len(nrow(art_scores)))
+    df_art <- .scores_to_long_df(art_names, art_scores, lambda_vals, lam_grid,
+                                  has_alpha)
   }
 
   p <- ggplot2::ggplot()
