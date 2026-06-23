@@ -20,6 +20,15 @@ knitr::opts_chunk$set(
 
 ## Overview
 
+> **Parity scope:** The frozen parity fixtures test **LASSO** models at
+> bit-equivalent precision (tolerance 1e-13). For **elastic-net** models, the
+> fixtures assert *signal-ranking parity* (top-ranked Python features appear in
+> the R top-*k*) rather than bit-identical coefficients. This is appropriate
+> because R `glmnet` and Python scikit-learn elastic-net use different
+> coordinate-descent schedules and alpha/lambda parameterisations; exact
+> coefficient agreement across languages is not achievable, but rank and support
+> agreement is.
+
 A reimplementation earns trust in the details.  The R package does not need to
 share Python's syntax, but it should answer the same scientific questions under
 the same data preparation, resampling, penalty grid, artificial-feature

@@ -1,3 +1,13 @@
+# Python parity fixture tests
+#
+# LASSO fixtures: assert bit-for-bit identical stability scores (tolerance 1e-13).
+# Elastic-net fixtures: assert *signal ranking* parity (top Python features appear
+#   in the R top-k), NOT bit-identical coefficients.  Rationale: R glmnet and
+#   scikit-learn elastic-net use different coordinate-descent schedules and
+#   alpha/lambda parameterisations; exact coefficient agreement is not achievable
+#   across languages.  Rank / support parity at a moderate Spearman correlation
+#   (min_max_score_cor = 0.3) is the appropriate cross-language criterion for EN.
+
 load_python_parity_case <- function(case_name) {
   # Backwards-compatible wrapper around the new richer loader.
   load_python_parity_fixture(case_name)

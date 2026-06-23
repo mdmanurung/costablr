@@ -1,5 +1,42 @@
 # stablr 0.1.0
 
+## Publication-readiness blocker remediation
+
+- **License:** corrected `License:` field from `MIT + file LICENSE` to `GPL (>= 2)`
+  and removed the MIT `LICENSE` file. The vendored cooperative-learning engine
+  under `src/glmnetpp/` is derived from glmnet/multiview (GPL-2); the compiled
+  combined work must therefore be GPL. `inst/COPYING.cooperative` already
+  documented the GPL-2 component.
+- **Repository URLs:** updated `URL:` and `BugReports:` in DESCRIPTION and the
+  package URL in `inst/CITATION` from the upstream Python repo
+  (`gregbellan/Stabl`) to the canonical R package repo (`mdmanurung/stablr`).
+- **Contributors:** added the original STABL method authors (Hédou, Marić, Bellan,
+  Gfeller — Nat Biotechnol 2024) and the cooperative-learning/multiview authors
+  (Ding, Li, Narasimhan, Tibshirani — PNAS 2022) as `ctb` in `Authors@R`,
+  consistent with the already-correct `inst/CITATION` entries.
+- **Cox in late fusion:** `late_fusion = TRUE` with `family = "cox"` now throws
+  a clear error instead of silently scoring with R-squared and OLS predictors
+  (both invalid for censored data). Early-fusion and per-omic cox remain valid.
+  Mirrors the existing cooperative-fusion cox guard.
+- **README:** documented the C++17 compiler / toolchain requirement (Rtools on
+  Windows, Xcode CLT on macOS, gcc/clang on Linux) and added a canonical
+  `remotes::install_github()` install path.
+- **Vignettes:** added reader-facing `eval = FALSE` callout blocks to the three
+  heavy vignettes (`stablr-multiomic`, `stablr-tcga`, `stablr-tcga-nestedcv`)
+  explaining that code is illustrative and how to run it.
+- **MCC metric:** added Matthews Correlation Coefficient (Gorodkin 2004 multiclass
+  formula) to the list returned by `.classification_metrics()`. MCC is a standard
+  metric for imbalanced classification, complementing the existing accuracy, BER,
+  and macro-F1. Returns 0 for degenerate (all-one-class) predictions.
+- **Elastic-net parity disclosure:** the Python-parity fixtures for elastic-net
+  models assert *signal ranking* (which features are selected), not bit-identical
+  coefficients. R and Python elastic-net implementations use different coordinate
+  descent schedules; ranking parity is the appropriate criterion and is explicitly
+  documented in the test file.
+- **Verification:** `mixOmics` (Suggests) is used only in TCGA vignettes and is
+  already guarded by `requireNamespace()` + global `eval = FALSE`; no change
+  needed.
+
 ## Quality and publication-readiness sweep
 
 - **Infrastructure:** corrected `License:` field; lowered `Depends: R (>=

@@ -1,6 +1,7 @@
 Package: stablr
 Title: Sparse and Reliable Biomarker Discovery in R
 Version: 0.1.0
+Date: 2026-06-23
 Authors@R:
     c(
     person(given = "Mikaël", family = "Manurung", role = c("aut", "cre"),
