@@ -1290,7 +1290,7 @@ test_that("cooperative accessors support multiomic cv objects", {
 
 # C1 characterization: match() on lambda doubles may return NA if glmnet's
 # stored lambda.min / lambda.1se has a floating-point difference vs fit$lambda.
-# Pin metric_value, selected, and best_rho with tolerance = 0 so that any
+# Pin metric_value, selected, and best_rho with tolerance = 1e-13 so that any
 # NA-propagation through fit$cvm[[NA]] is caught immediately.
 test_that("C1: cooperative CV diagnostics have no NA metric_value (lambda match guard)", {
   d <- .cf_make_two_omic(n = 24L, seed = 200L)
@@ -1319,4 +1319,186 @@ test_that("C1: cooperative CV diagnostics have no NA metric_value (lambda match 
   expect_equal(sum(diag$selected), 1L)
   # The selected rho must be one of the candidates.
   expect_true(diag$rho[diag$selected] %in% c(0, 0.2, 0.5))
+})
+
+# ---------------------------------------------------------------------------
+# Characterization tests for Finding 1 (Phase G): per-omic + early + late
+# fusion block extractions.  Pin numeric outputs at tolerance = 1e-13 so that any
+# structural refactoring can be verified to be bit-identical.
+# ---------------------------------------------------------------------------
+
+test_that("[char-F1] per-omic / early-fusion / late-fusion blocks produce bit-identical output", {
+  # Fixture: 36 samples, 2 omics, 24-train / 12-valid split.
+  set.seed(101L)
+  n <- 36L
+  x_a <- matrix(
+    rnorm(n * 8L), nrow = n,
+    dimnames = list(paste0("s", seq_len(n)), paste0("a", seq_len(8L)))
+  )
+  x_b <- matrix(
+    rnorm(n * 6L), nrow = n,
+    dimnames = list(paste0("s", seq_len(n)), paste0("b", seq_len(6L)))
+  )
+  y_all <- setNames(0.7 * x_a[, 1L] - 0.5 * x_b[, 2L] + rnorm(n, sd = 0.8),
+                    rownames(x_a))
+
+  tr <- seq_len(24L); vl <- seq(25L, 36L)
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list    = list(omic_a = x_a[tr, ], omic_b = x_b[tr, ]),
+    y_train         = y_all[tr],
+    lambda_grid     = data.frame(lambda = c(0.2, 0.1, 0.05)),
+    x_valid_list    = list(omic_a = x_a[vl, ], omic_b = x_b[vl, ]),
+    y_valid         = y_all[vl],
+    early_fusion    = TRUE,
+    late_fusion     = TRUE,
+    n_iter_lf       = 200L,
+    artificial_type = NULL,
+    hard_threshold  = 0.3,
+    n_bootstraps    = 8L,
+    family          = "gaussian",
+    random_state    = 17L
+  )
+
+  # ---- per-omic block ----
+  expect_identical(fit$selected_features$omic_a,
+                   c("a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8"))
+  expect_identical(fit$selected_features$omic_b,
+                   c("b1", "b2", "b3", "b4", "b5", "b6"))
+
+  # ---- early-fusion block ----
+  ef <- fit$early_fusion
+  expect_identical(ef$selected_features,
+                   c("a1", "a3", "a4", "a5", "a7", "a8",
+                     "b1", "b2", "b3", "b4", "b5", "b6"))
+  expect_equal(unname(ef$selected_train[1L, ]),
+               c(-0.326036490515386, 1.1531581669848, -0.466631586162683,
+                  0.670126170494308, 0.345545075357528, 0.819599207165928,
+                 -1.28591371800217, -1.0088281735442, -0.43242997230287,
+                 -0.673666787834073, 0.360227511693603, -2.02747974676345),
+               tolerance = 1e-13)
+  expect_equal(unname(ef$selected_valid[1L, ]),
+               c( 0.744435822875318, -0.444904550728676, -0.143887168528834,
+                 -0.00142812822527075, 0.60701223616656, 0.217290096347952,
+                 -1.70387658397506, -0.500043688364124, 2.58674304062644,
+                 -0.950902079388975, 0.325928044349314, -0.996201639682667),
+               tolerance = 1e-13)
+
+  # ---- late-fusion block ----
+  lf <- fit$late_fusion
+  expect_equal(lf$score, 0.642593372115547, tolerance = 1e-13)
+  expect_equal(lf$weights$Associated_weight,
+               c(4.18270750204101, 2.38248517736793), tolerance = 1e-13)
+  expect_equal(
+    unname(lf$train_predictions[1:3, "Stacked Gen. Predictions"]),
+    c(0.0666673507804652, 0.690096500554767, -0.232613888263408),
+    tolerance = 1e-13
+  )
+  expect_equal(
+    unname(lf$valid_predictions[1:3]),
+    c(0.339788042331311, -0.824449233941029, -0.149303145569765),
+    tolerance = 1e-13
+  )
+})
+
+# ---------------------------------------------------------------------------
+# Characterization tests for Finding 2 (Phase G): cooperative selection
+# CV and validation branch extractions.  Pin at tolerance = 1e-13.
+# ---------------------------------------------------------------------------
+
+test_that("[char-F2-cv] cooperative CV selection branch produces bit-identical output", {
+  set.seed(55L)
+  n2 <- 40L
+  ids2 <- paste0("s", seq_len(n2))
+  x2_a <- matrix(rnorm(n2 * 5L), nrow = n2,
+                 dimnames = list(ids2, paste0("a", seq_len(5L))))
+  x2_b <- matrix(rnorm(n2 * 5L), nrow = n2,
+                 dimnames = list(ids2, paste0("b", seq_len(5L))))
+  y2 <- setNames(0.8 * x2_a[, 1L] - 0.6 * x2_b[, 2L] + rnorm(n2, sd = 0.3), ids2)
+
+  tr2 <- seq_len(30L); vl2 <- seq(31L, 40L)
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list       = list(omic_a = x2_a[tr2, ], omic_b = x2_b[tr2, ]),
+    y_train            = y2[tr2],
+    lambda_grid        = data.frame(lambda = c(0.1, 0.05)),
+    x_valid_list       = list(omic_a = x2_a[vl2, ], omic_b = x2_b[vl2, ]),
+    y_valid            = y2[vl2],
+    cooperative_fusion    = TRUE,
+    rho                   = c(0, 0.3),
+    cooperation_selection = "cv",
+    cooperation_nfolds    = 3L,
+    artificial_type    = NULL,
+    hard_threshold     = 0.5,
+    n_bootstraps       = 4L,
+    family             = "gaussian",
+    random_state       = 21L
+  )
+
+  cf <- fit$cooperative_fusion
+  # rho / lambda / score
+  expect_equal(cf$rho,             0,                   tolerance = 1e-13)
+  expect_equal(cf$selected_lambda, 0.0343666218065991,  tolerance = 1e-13)
+  expect_equal(cf$score,           0.151842321504698,   tolerance = 1e-13)
+  # feature selection
+  expect_identical(cf$selected_features$omic_a, c("a1", "a2", "a3", "a5"))
+  expect_identical(cf$selected_features$omic_b, c("b1", "b2", "b3", "b4"))
+  # predictions
+  expect_equal(unname(cf$train_predictions[1:3]),
+               c(-0.24440757143934, -1.30677612322089, 0.456243189909488),
+               tolerance = 1e-13)
+  expect_equal(unname(cf$valid_predictions[1:3]),
+               c(0.945801326908522, -0.255985008309559, -0.349926940243906),
+               tolerance = 1e-13)
+  # CV-path specifics: foldid and diagnostics
+  expect_equal(cf$foldid[1:6], c(1L, 2L, 2L, 1L, 2L, 3L))
+  expect_identical(cf$diagnostics$selected, c(TRUE, FALSE))
+})
+
+test_that("[char-F2-val] cooperative validation selection branch produces bit-identical output", {
+  set.seed(55L)
+  n2 <- 40L
+  ids2 <- paste0("s", seq_len(n2))
+  x2_a <- matrix(rnorm(n2 * 5L), nrow = n2,
+                 dimnames = list(ids2, paste0("a", seq_len(5L))))
+  x2_b <- matrix(rnorm(n2 * 5L), nrow = n2,
+                 dimnames = list(ids2, paste0("b", seq_len(5L))))
+  y2 <- setNames(0.8 * x2_a[, 1L] - 0.6 * x2_b[, 2L] + rnorm(n2, sd = 0.3), ids2)
+
+  tr2 <- seq_len(30L); vl2 <- seq(31L, 40L)
+
+  fit <- stabl_multiomic_train_validate(
+    x_train_list       = list(omic_a = x2_a[tr2, ], omic_b = x2_b[tr2, ]),
+    y_train            = y2[tr2],
+    lambda_grid        = data.frame(lambda = c(0.1, 0.05)),
+    x_valid_list       = list(omic_a = x2_a[vl2, ], omic_b = x2_b[vl2, ]),
+    y_valid            = y2[vl2],
+    cooperative_fusion    = TRUE,
+    rho                   = c(0, 0.3),
+    cooperation_selection = "validation",
+    artificial_type    = NULL,
+    hard_threshold     = 0.5,
+    n_bootstraps       = 4L,
+    family             = "gaussian",
+    random_state       = 21L
+  )
+
+  cfv <- fit$cooperative_fusion
+  # rho / lambda / score
+  expect_equal(cfv$rho,             0,                   tolerance = 1e-13)
+  expect_equal(cfv$selected_lambda, 0.0135549037971991,  tolerance = 1e-13)
+  expect_equal(cfv$score,           0.175895849179635,   tolerance = 1e-13)
+  # feature selection
+  expect_identical(cfv$selected_features$omic_a, c("a1", "a2", "a3", "a4", "a5"))
+  expect_identical(cfv$selected_features$omic_b, c("b1", "b2", "b3", "b4"))
+  # predictions
+  expect_equal(unname(cfv$train_predictions[1:3]),
+               c(-0.237298954098935, -1.43190986743382, 0.393699839715761),
+               tolerance = 1e-13)
+  expect_equal(unname(cfv$valid_predictions[1:3]),
+               c(0.904462094289771, -0.302273166732837, -0.28269367346383),
+               tolerance = 1e-13)
+  # validation-path specifics: no foldid, selected row in diagnostics
+  expect_null(cfv$foldid)
+  expect_equal(which(cfv$diagnostics$selected), 43L)
 })
