@@ -449,6 +449,27 @@ test_that("save_stabl_results errors when directory exists and override = FALSE"
   )
 })
 
+test_that("save_stabl_results gives informative error when ggplot2 is absent", {
+  fit  <- .make_fit()
+  path <- tempfile("stablr_gg_guard")
+  on.exit(unlink(path, recursive = TRUE), add = TRUE)
+
+  set.seed(1L); n <- 40L; p <- 8L
+  x <- matrix(rnorm(n * p), n, p,
+               dimnames = list(paste0("s", seq_len(n)), paste0("f", seq_len(p))))
+  y <- setNames(rnorm(n), rownames(x))
+
+  # Temporarily make the internal .has_pkg() helper report ggplot2 as absent.
+  testthat::local_mocked_bindings(
+    .has_pkg = function(pkg) if (pkg == "ggplot2") FALSE else stablr:::.has_pkg(pkg),
+    .package = "stablr"
+  )
+  expect_error(
+    save_stabl_results(fit, path, x = x, y = y),
+    "ggplot2"
+  )
+})
+
 test_that("real-data Biobank SSI export helpers write stable artifact schema", {
   skip_if_not_installed("ggplot2")
 

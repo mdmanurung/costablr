@@ -36,3 +36,6 @@ utils::globalVariables(c(
   "FDR", "feature", "fpr", "lambda_idx", "outcome", "precision",
   "recall", "score", "threshold", "tpr", "value"
 ))
+
+# Private helper so tests can mock Suggests-package availability.
+.has_pkg <- function(pkg) requireNamespace(pkg, quietly = TRUE)
