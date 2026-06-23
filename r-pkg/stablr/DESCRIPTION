@@ -12,8 +12,8 @@ Description: Pure-R implementation of STABL for sparse and reliable biomarker
     Cite the original STABL method (Hédou et al., Nat Biotechnol 2024) when
     reporting stability-selection results; cite this package for the R software.
 License: GPL (>= 2)
-URL: https://github.com/gregbellan/Stabl/tree/main/r-pkg/stablr
-BugReports: https://github.com/gregbellan/Stabl/issues
+URL: https://github.com/mdmanurung/stablr
+BugReports: https://github.com/mdmanurung/stablr/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 Depends:
