@@ -22,12 +22,32 @@ The package has no Python or tidymodels runtime dependency.
 
 ## Installation
 
+### System requirements
+
+`stablr` compiles a C++17 native cooperative-learning backend at install time.
+You need a C++17-capable compiler toolchain:
+
+- **Windows:** [Rtools](https://cran.r-project.org/bin/windows/Rtools/) (Rtools42 or later)
+- **macOS:** Xcode Command Line Tools (`xcode-select --install`)
+- **Linux:** GCC ≥ 7 or Clang ≥ 5 (usually pre-installed; install via `apt install r-base-dev` or equivalent)
+
+### Install from GitHub
+
+```r
+# install.packages("remotes")
+remotes::install_github("mdmanurung/stablr", subdir = "r-pkg/stablr")
+```
+
+### Install from a local clone
+
 From the repository root:
 
 ```r
 install.packages("devtools")
 devtools::install_local("r-pkg/stablr")
 ```
+
+### Optional packages
 
 Optional functionality uses optional packages:
 
