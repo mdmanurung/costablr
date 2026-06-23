@@ -81,7 +81,7 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
           call. = FALSE
         )
         make_rp_features(x_chunk, ncol(x_chunk))$x_augmented[
-          , seq(ncol(x_chunk) + 1L, 2L * ncol(x_chunk)), drop = FALSE
+          , ncol(x_chunk) + seq_len(ncol(x_chunk)), drop = FALSE
         ]
       }
     )

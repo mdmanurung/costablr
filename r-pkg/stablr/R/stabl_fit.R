@@ -292,34 +292,12 @@ stabl_fit <- function(
   # Each batch adapter accepts the full lambda_grid and returns a logical
   # matrix (n_total_features × n_lambdas), reducing n_bootstraps × n_lambdas
   # glmnet calls to just n_bootstraps calls.
-  batch_adapter <- switch(
-    base_learner,
-    lasso = .make_glmnet_batch_adapter(
-      family              = family,
-      alpha_fixed         = 1.0,
-      bootstrap_threshold = 1e-5
-    ),
-    elastic_net = .make_glmnet_batch_adapter(
-      family              = family,
-      alpha_fixed         = NULL,
-      bootstrap_threshold = 1e-5
-    ),
-    adaptive_lasso = .make_adaptive_lasso_batch_adapter(
-      family              = family,
-      gamma               = adaptive_gamma,
-      epsilon             = adaptive_epsilon,
-      bootstrap_threshold = 1e-5
-    ),
-    sparse_group_lasso = .make_sgl_batch_adapter(
-      family              = family,
-      feature_groups      = sgl_feature_groups,
-      alpha_fixed         = NULL,
-      bootstrap_threshold = 1e-5
-    ),
-    stop(
-      "`base_learner` must be one of: \"lasso\", \"elastic_net\", \"adaptive_lasso\", \"sparse_group_lasso\".",
-      call. = FALSE
-    )
+  batch_adapter <- .select_batch_adapter(
+    base_learner       = base_learner,
+    family             = family,
+    adaptive_gamma     = adaptive_gamma,
+    adaptive_epsilon   = adaptive_epsilon,
+    sgl_feature_groups = sgl_feature_groups
   )
 
   n_total_features <- ncol(x_fit)
@@ -359,69 +337,30 @@ stabl_fit <- function(
     sample.int(.Machine$integer.max, size = n_bootstraps)
   } else NULL
 
-  # ---- Stability accumulation -----------------------------------------------
-  stabl_scores_    <- matrix(0.0, nrow = n_features, ncol = n_lambdas,
-                              dimnames = list(feat_names, NULL))
-  stabl_scores_art <- if (!is.null(artificial_type)) {
-    matrix(0.0, nrow = n_injected, ncol = n_lambdas)
-  } else NULL
-
   art_rows <- if (!is.null(artificial_type)) {
-    seq(n_features + 1L, n_features + n_injected)
+    n_features + seq_len(n_injected)
   } else NULL
-
-  # Choose map function based on worker count and availability
-  use_furrr <- (workers > 1L) &&
-    requireNamespace("furrr",  quietly = TRUE) &&
-    requireNamespace("future", quietly = TRUE)
 
   if (verbose) message("Running STABL bootstrap loop (",
                        n_bootstraps, " bootstraps, ",
                        n_lambdas, " lambdas, 1 path call per bootstrap)...")
 
-  # Bootstrap-outer loop: each iteration fits the full lambda path once.
-  # With n_bootstraps iterations and n_lambdas lambdas, this replaces the
-  # previous n_bootstraps × n_lambdas individual model calls.
-  process_one_bootstrap <- function(i) {
-    idx <- boot_indices[[i]]
-    if (!is.null(iter_seeds)) {
-      .with_local_seed(iter_seeds[[i]],
-                       batch_adapter(x_fit[idx, , drop = FALSE], y[idx], lambda_grid))
-    } else {
-      batch_adapter(x_fit[idx, , drop = FALSE], y[idx], lambda_grid)
-    }
-  }
-
-  if (use_furrr) {
-    # Parallel path: must collect all results before accumulating.
-    # `seed = TRUE` is preserved as a furrr safety guard for any RNG that
-    # leaks outside our explicit `.with_local_seed`; the explicit per-iter
-    # seed inside `process_one_bootstrap` is what actually pins the result.
-    result_list <- furrr::future_map(
-      seq_along(boot_indices), process_one_bootstrap,
-      .options = furrr::furrr_options(seed = TRUE)
-    )
-    for (r in result_list) {
-      stabl_scores_ <- stabl_scores_ + r[seq_len(n_features), , drop = FALSE]
-      if (!is.null(artificial_type)) {
-        stabl_scores_art <- stabl_scores_art + r[art_rows, , drop = FALSE]
-      }
-    }
-  } else {
-    # Sequential path: stream-accumulate one bootstrap at a time so we never
-    # hold more than a single result matrix in memory (Fix 5).
-    for (i in seq_along(boot_indices)) {
-      r <- process_one_bootstrap(i)
-      stabl_scores_ <- stabl_scores_ + r[seq_len(n_features), , drop = FALSE]
-      if (!is.null(artificial_type)) {
-        stabl_scores_art <- stabl_scores_art + r[art_rows, , drop = FALSE]
-      }
-    }
-  }
-  stabl_scores_ <- stabl_scores_ / n_bootstraps
-  if (!is.null(artificial_type)) {
-    stabl_scores_art <- stabl_scores_art / n_bootstraps
-  }
+  # ---- Stability accumulation -----------------------------------------------
+  boot_result  <- .run_bootstrap_accumulation(
+    batch_adapter  = batch_adapter,
+    boot_indices   = boot_indices,
+    iter_seeds     = iter_seeds,
+    x_fit          = x_fit,
+    y              = y,
+    lambda_grid    = lambda_grid,
+    n_features     = n_features,
+    feat_names     = feat_names,
+    art_rows       = art_rows,
+    artificial_type = artificial_type,
+    workers        = workers
+  )
+  stabl_scores_    <- boot_result$stabl_scores_
+  stabl_scores_art <- boot_result$stabl_scores_art
 
   # ---- FDP+ control ---------------------------------------------------------
   fdp <- NULL
@@ -575,16 +514,15 @@ stabl_fit <- function(
     }
     i
   }
-  union_nodes <- function(i, j) {
-    ri <- find_root(i)
-    rj <- find_root(j)
-    if (ri != rj) parent[[rj]] <<- ri
-  }
 
-  for (i in seq_len(p - 1L)) {
-    for (j in (i + 1L):p) {
-      if (corr[[i, j]] > cutoff) union_nodes(i, j)
-    }
+  # Extract only supra-threshold pairs from the upper triangle — O(p²) memory
+  # for the full correlation matrix is unavoidable, but iterating only over the
+  # k << p² edges that exceed the cutoff is much faster for sparse graphs.
+  edges <- which(corr > cutoff & upper.tri(corr), arr.ind = TRUE)
+  for (k in seq_len(nrow(edges))) {
+    ri <- find_root(edges[[k, 1L]])
+    rj <- find_root(edges[[k, 2L]])
+    if (ri != rj) parent[[rj]] <- ri
   }
 
   roots <- vapply(seq_len(p), find_root, integer(1L))
@@ -613,6 +551,96 @@ stabl_fit <- function(
   }
 
   out
+}
+
+.select_batch_adapter <- function(base_learner, family,
+                                  adaptive_gamma, adaptive_epsilon,
+                                  sgl_feature_groups) {
+  switch(
+    base_learner,
+    lasso = .make_glmnet_batch_adapter(
+      family              = family,
+      alpha_fixed         = 1.0,
+      bootstrap_threshold = 1e-5
+    ),
+    elastic_net = .make_glmnet_batch_adapter(
+      family              = family,
+      alpha_fixed         = NULL,
+      bootstrap_threshold = 1e-5
+    ),
+    adaptive_lasso = .make_adaptive_lasso_batch_adapter(
+      family              = family,
+      gamma               = adaptive_gamma,
+      epsilon             = adaptive_epsilon,
+      bootstrap_threshold = 1e-5
+    ),
+    sparse_group_lasso = .make_sgl_batch_adapter(
+      family              = family,
+      feature_groups      = sgl_feature_groups,
+      alpha_fixed         = NULL,
+      bootstrap_threshold = 1e-5
+    ),
+    stop(
+      "`base_learner` must be one of: \"lasso\", \"elastic_net\", \"adaptive_lasso\", \"sparse_group_lasso\".",
+      call. = FALSE
+    )
+  )
+}
+
+.run_bootstrap_accumulation <- function(
+    batch_adapter, boot_indices, iter_seeds,
+    x_fit, y, lambda_grid,
+    n_features, feat_names, art_rows, artificial_type, workers
+) {
+  n_bootstraps <- length(boot_indices)
+  n_lambdas    <- nrow(lambda_grid)
+
+  scores_ <- matrix(0.0, nrow = n_features, ncol = n_lambdas,
+                    dimnames = list(feat_names, NULL))
+  art_    <- if (!is.null(artificial_type)) {
+    matrix(0.0, nrow = length(art_rows), ncol = n_lambdas)
+  } else NULL
+
+  process_one <- function(i) {
+    idx <- boot_indices[[i]]
+    if (!is.null(iter_seeds)) {
+      .with_local_seed(iter_seeds[[i]],
+                       batch_adapter(x_fit[idx, , drop = FALSE], y[idx], lambda_grid))
+    } else {
+      batch_adapter(x_fit[idx, , drop = FALSE], y[idx], lambda_grid)
+    }
+  }
+
+  use_furrr <- (workers > 1L) &&
+    requireNamespace("furrr",  quietly = TRUE) &&
+    requireNamespace("future", quietly = TRUE)
+
+  real_rows <- seq_len(n_features)
+
+  if (use_furrr) {
+    # Parallel path: collect all results then stream-accumulate.
+    # `seed = TRUE` guards against RNG leaks outside `.with_local_seed`.
+    result_list <- furrr::future_map(
+      seq_along(boot_indices), process_one,
+      .options = furrr::furrr_options(seed = TRUE)
+    )
+    for (r in result_list) {
+      scores_ <- scores_ + r[real_rows, , drop = FALSE]
+      if (!is.null(art_)) art_ <- art_ + r[art_rows, , drop = FALSE]
+    }
+  } else {
+    # Sequential path: stream-accumulate one bootstrap at a time (Fix 5).
+    for (i in seq_along(boot_indices)) {
+      r <- process_one(i)
+      scores_ <- scores_ + r[real_rows, , drop = FALSE]
+      if (!is.null(art_)) art_ <- art_ + r[art_rows, , drop = FALSE]
+    }
+  }
+
+  scores_ <- scores_ / n_bootstraps
+  if (!is.null(art_)) art_ <- art_ / n_bootstraps
+
+  list(stabl_scores_ = scores_, stabl_scores_art = art_)
 }
 
 # Internal: scoped seed helper.  Saves & restores `.Random.seed` so that the

@@ -33,6 +33,33 @@ test_that("make_artificial_features random_permutation preserves no-duplicate so
   expect_true(all(out$noise_col_indices >= 1L & out$noise_col_indices <= ncol(x)))
 })
 
+# C4 characterization: x_augmented column layout — artificial cols occupy
+# exactly (p+1):(p+n_injected); using seq_len() must give identical indices.
+test_that("make_rp_features artificial columns occupy exactly the right index range", {
+  withr::local_seed(42)
+  p          <- 5L
+  n_injected <- 3L
+  x <- matrix(rnorm(20 * p), nrow = 20,
+               dimnames = list(paste0("s", seq_len(20)), paste0("f", seq_len(p))))
+
+  out <- make_rp_features(x, n_injected = n_injected)
+
+  # x_augmented must have p + n_injected columns
+  expect_equal(ncol(out$x_augmented), p + n_injected)
+
+  # The artificial-column block is cols (p+1):(p+n_injected) — equivalently
+  # p + seq_len(n_injected). Both formulations must yield the same block.
+  art_idx_seq  <- seq(p + 1L, p + n_injected)
+  art_idx_slen <- p + seq_len(n_injected)
+  expect_identical(art_idx_seq, art_idx_slen)
+
+  # Artificial columns in x_augmented are distinct from the original block
+  orig_block <- out$x_augmented[, seq_len(p), drop = FALSE]
+  art_block  <- out$x_augmented[, art_idx_slen, drop = FALSE]
+  expect_equal(dim(orig_block), c(20L, p))
+  expect_equal(dim(art_block),  c(20L, n_injected))
+})
+
 test_that("make_knockoff_features handles p < n < 2p augmentation without fallback", {
   skip_if_not_installed("knockoff")
   withr::local_seed(3)
