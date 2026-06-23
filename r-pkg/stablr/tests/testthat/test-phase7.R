@@ -38,9 +38,7 @@ library(stablr)
     file.path("..", "..", "Sample Data", "data.zip")
   )
   existing <- zip_candidates[file.exists(zip_candidates)]
-  if (length(existing) == 0L) {
-    skip("Sample Data/data.zip not available in workspace.")
-  }
+  skip_if(length(existing) == 0L, "Sample Data/data.zip not available in workspace.")
   zip_path <- existing[[1L]]
 
   prot <- utils::read.csv(
@@ -53,17 +51,13 @@ library(stablr)
     stringsAsFactors = FALSE
   )
 
-  if (!all(c("sampleID", "model1b") %in% colnames(out))) {
-    skip("Biobank SSI outcome schema does not match expected columns.")
-  }
-  if (!"sampleID" %in% colnames(prot)) {
-    skip("Biobank SSI proteomics schema does not contain sampleID.")
-  }
+  skip_if(!all(c("sampleID", "model1b") %in% colnames(out)),
+          "Biobank SSI outcome schema does not match expected columns.")
+  skip_if(!"sampleID" %in% colnames(prot),
+          "Biobank SSI proteomics schema does not contain sampleID.")
 
   ids <- intersect(prot$sampleID, out$sampleID)
-  if (length(ids) < 20L) {
-    skip("Not enough aligned samples in Biobank SSI fixture.")
-  }
+  skip_if(length(ids) < 20L, "Not enough aligned samples in Biobank SSI fixture.")
 
   prot <- prot[match(ids, prot$sampleID), , drop = FALSE]
   out <- out[match(ids, out$sampleID), , drop = FALSE]
@@ -80,9 +74,8 @@ library(stablr)
   x <- x[keep, , drop = FALSE]
   y <- y[keep]
 
-  if (length(unique(y)) < 2L) {
-    skip("Biobank SSI fixture requires at least two classes for binomial fit.")
-  }
+  skip_if(length(unique(y)) < 2L,
+          "Biobank SSI fixture requires at least two classes for binomial fit.")
 
   list(x = x, y = y)
 }
