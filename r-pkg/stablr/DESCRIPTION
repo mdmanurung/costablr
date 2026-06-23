@@ -2,8 +2,26 @@ Package: stablr
 Title: Sparse and Reliable Biomarker Discovery in R
 Version: 0.1.0
 Authors@R:
+    c(
     person(given = "Mikaël", family = "Manurung", role = c("aut", "cre"),
-           email = "mikhael.manurung@gmail.com")
+           email = "mikhael.manurung@gmail.com"),
+    person(given = "Jean", family = "Hédou", role = "ctb",
+           comment = "Original STABL method (Hédou et al., Nat Biotechnol 2024)"),
+    person(given = "Ivana", family = "Marić", role = "ctb",
+           comment = "Original STABL method (Hédou et al., Nat Biotechnol 2024)"),
+    person(given = "Gregory", family = "Bellan", role = "ctb",
+           comment = "Original STABL method (Hédou et al., Nat Biotechnol 2024)"),
+    person(given = "David", family = "Gfeller", role = "ctb",
+           comment = "Original STABL method (Hédou et al., Nat Biotechnol 2024)"),
+    person(given = "Daisy Yi", family = "Ding", role = "ctb",
+           comment = "Cooperative learning / multiview method (Ding et al., PNAS 2022)"),
+    person(given = "Shuangning", family = "Li", role = "ctb",
+           comment = "Cooperative learning / multiview method (Ding et al., PNAS 2022)"),
+    person(given = "Balasubramanian", family = "Narasimhan", role = "ctb",
+           comment = "Cooperative learning / multiview method (Ding et al., PNAS 2022)"),
+    person(given = "Robert J.", family = "Tibshirani", role = "ctb",
+           comment = "Cooperative learning / multiview method (Ding et al., PNAS 2022)")
+    )
 Description: Pure-R implementation of STABL for sparse and reliable biomarker
     discovery. Provides glmnet-based stability selection, FDP+ thresholding,
     artificial-feature controls, grouped bootstrapping, multi-omic early,

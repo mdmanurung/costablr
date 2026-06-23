@@ -39,10 +39,10 @@ bibentry(
   author = person(given = "Mika{\"e}l", family = "Manurung", role = "aut", email = "mikhael.manurung@gmail.com"),
   year = 2026,
   note = "R package implementing STABL with glmnet backends and multi-omic workflows",
-  url = "https://github.com/gregbellan/Stabl/tree/main/r-pkg/stablr",
+  url = "https://github.com/mdmanurung/stablr",
   textVersion = paste(
     "Manurung M (2026). stablr: Sparse and Reliable Biomarker Discovery in R.",
     "R package version 0.1.0.",
-    "https://github.com/gregbellan/Stabl/tree/main/r-pkg/stablr"
+    "https://github.com/mdmanurung/stablr"
   )
 )
