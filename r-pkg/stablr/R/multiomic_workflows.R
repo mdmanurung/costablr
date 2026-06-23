@@ -140,185 +140,56 @@ stabl_multiomic_train_validate <- function(
     )
   }
 
-  fits              <- .named_omic_list(omic_names)
-  selected_features <- .named_omic_list(omic_names)
-  selected_train    <- .named_omic_list(omic_names)
-  selected_valid    <- if (!is.null(x_valid_list)) .named_omic_list(omic_names) else NULL
+  fit_params <- list(
+    base_learner       = base_learner,
+    family             = family,
+    n_bootstraps       = n_bootstraps,
+    artificial_type    = artificial_type,
+    hard_threshold     = hard_threshold,
+    groups             = groups_train,
+    stratify_bootstrap = stratify_bootstrap,
+    bootstrap_strata   = bootstrap_strata_train,
+    l1_ratio           = l1_ratio,
+    random_state       = random_state
+  )
 
-  for (omic in omic_names) {
-    x_train <- x_train_list[[omic]]
-    if (is.data.frame(x_train)) x_train <- as.matrix(x_train)
+  per_omic <- .fit_multiomic_per_omic(
+    x_train_list   = x_train_list,
+    y_train        = y_train,
+    lambda_by_omic = lambda_by_omic,
+    x_valid_list   = x_valid_list,
+    omic_names     = omic_names,
+    fit_params     = fit_params,
+    ...
+  )
 
-    fit <- stabl_fit(
-      x = x_train,
-      y = y_train,
-      lambda_grid = lambda_by_omic[[omic]],
-      base_learner = base_learner,
-      family = family,
-      n_bootstraps = n_bootstraps,
-      artificial_type = artificial_type,
-      hard_threshold = hard_threshold,
-      groups = groups_train,
-      stratify_bootstrap = stratify_bootstrap,
-      bootstrap_strata = bootstrap_strata_train,
-      l1_ratio = l1_ratio,
-      random_state = random_state,
+  ef_result <- if (isTRUE(early_fusion)) {
+    .early_fusion_multiomic_fit(
+      x_train_list   = x_train_list,
+      x_valid_list   = x_valid_list,
+      y_train        = y_train,
+      omic_names     = omic_names,
+      lambda_by_omic = lambda_by_omic,
+      fit_params     = fit_params,
       ...
     )
-
-    sel <- get_feature_names_out(fit)
-
-    fits[[omic]] <- fit
-    selected_features[[omic]] <- sel
-    selected_train[[omic]] <- .subset_selected_matrix(x_train_list[[omic]], sel)
-
-    if (!is.null(x_valid_list)) {
-      selected_valid[[omic]] <- .subset_selected_matrix(x_valid_list[[omic]], sel)
-    }
+  } else {
+    NULL
   }
 
-  # ---- Early fusion --------------------------------------------------------
-  ef_result <- NULL
-  if (isTRUE(early_fusion)) {
-    x_all_train <- .concat_omic_matrices(x_train_list, omic_names)
-
-    # Use the shared/first lambda grid for the concatenated model.
-    ef_lambda <- lambda_by_omic[[omic_names[1L]]]
-
-    ef_fit <- stabl_fit(
-      x            = x_all_train,
-      y            = y_train,
-      lambda_grid  = ef_lambda,
-      base_learner = base_learner,
-      family       = family,
-      n_bootstraps = n_bootstraps,
-      artificial_type = artificial_type,
-      hard_threshold  = hard_threshold,
-      groups       = groups_train,
-      stratify_bootstrap = stratify_bootstrap,
-      bootstrap_strata = bootstrap_strata_train,
-      l1_ratio     = l1_ratio,
-      random_state = random_state,
-      ...
+  lf_result <- if (isTRUE(late_fusion)) {
+    .late_fusion_multiomic_fit(
+      selected_train = per_omic$selected_train,
+      selected_valid = per_omic$selected_valid,
+      y_train        = y_train,
+      y_valid        = y_valid,
+      omic_names     = omic_names,
+      family         = family,
+      n_iter_lf      = n_iter_lf,
+      random_state   = random_state
     )
-
-    ef_sel        <- get_feature_names_out(ef_fit)
-    ef_train_mat  <- .subset_selected_matrix(as.data.frame(x_all_train), ef_sel)
-
-    ef_valid_mat <- if (!is.null(x_valid_list)) {
-      x_all_valid <- .concat_omic_matrices(x_valid_list, omic_names)
-      .subset_selected_matrix(as.data.frame(x_all_valid), ef_sel)
-    } else {
-      NULL
-    }
-
-    ef_result <- list(
-      fit               = ef_fit,
-      selected_features = ef_sel,
-      selected_train    = ef_train_mat,
-      selected_valid    = ef_valid_mat
-    )
-  }
-
-  # ---- Late fusion ---------------------------------------------------------
-  lf_result <- NULL
-  if (isTRUE(late_fusion)) {
-    task_type    <- .family_to_task_type(family)
-    y_train_mean <- if (identical(task_type, "regression")) {
-      mean(unname(y_train))
-    } else {
-      NA_real_
-    }
-
-    if (identical(task_type, "multiclass")) {
-      train_preds <- .named_omic_list(omic_names)
-      valid_preds <- if (!is.null(x_valid_list)) .named_omic_list(omic_names) else NULL
-    } else {
-      train_preds <- matrix(
-        NA_real_,
-        nrow = length(y_train),
-        ncol = length(omic_names),
-        dimnames = list(names(y_train), omic_names)
-      )
-      valid_preds <- if (!is.null(x_valid_list)) {
-        matrix(
-          NA_real_,
-          nrow = length(y_valid),
-          ncol = length(omic_names),
-          dimnames = list(names(y_valid), omic_names)
-        )
-      } else {
-        NULL
-      }
-    }
-
-    y_levels <- if (identical(task_type, "multiclass")) {
-      levels(factor(y_train))
-    } else {
-      NULL
-    }
-
-    for (omic in omic_names) {
-      omic_result <- .late_fusion_fit_omic(
-        x_train_sel  = selected_train[[omic]],
-        y_train      = y_train,
-        x_valid_sel  = if (!is.null(x_valid_list)) selected_valid[[omic]] else NULL,
-        y_train_mean = y_train_mean,
-        task_type    = task_type,
-        levels       = y_levels
-      )
-      if (identical(task_type, "multiclass")) {
-        train_preds[[omic]] <- omic_result$train_preds
-        if (!is.null(valid_preds)) {
-          valid_preds[[omic]] <- omic_result$valid_preds
-        }
-      } else {
-        train_preds[, omic] <- omic_result$train_preds
-        if (!is.null(valid_preds)) {
-          valid_preds[, omic] <- omic_result$valid_preds
-        }
-      }
-    }
-
-    stacked <- stacked_multi_omic(
-      predictions  = train_preds,
-      y            = unname(y_train),
-      task_type    = task_type,
-      n_iter       = n_iter_lf,
-      random_state = random_state
-    )
-
-    lf_valid_preds <- if (is.null(valid_preds)) {
-      NULL
-    } else if (identical(task_type, "multiclass")) {
-      .apply_multiclass_stack_weights(valid_preds, stacked$weights$Associated_weight)
-    } else {
-      .weighted_masked_mean(valid_preds, stacked$weights$Associated_weight)
-    }
-
-    lf_result <- list(
-      weights           = stacked$weights,
-      train_predictions = stacked$predictions,
-      valid_predictions = lf_valid_preds,
-      score             = stacked$score
-    )
-    if (identical(task_type, "multiclass")) {
-      lf_result$task_type <- task_type
-      lf_result$levels <- stacked$levels
-      lf_result$log_loss <- stacked$log_loss
-      lf_result$train_metrics <- .classification_metrics(
-        truth = factor(y_train, levels = stacked$levels),
-        predicted = factor(stacked$predictions$predicted_class,
-                           levels = stacked$levels)
-      )
-      if (!is.null(y_valid) && !is.null(lf_valid_preds)) {
-        lf_result$valid_metrics <- .classification_metrics(
-          truth = factor(y_valid, levels = stacked$levels),
-          predicted = factor(lf_valid_preds$predicted_class,
-                             levels = stacked$levels)
-        )
-      }
-    }
+  } else {
+    NULL
   }
 
   # ---- Cooperative fusion --------------------------------------------------
@@ -337,10 +208,10 @@ stabl_multiomic_train_validate <- function(
   }
 
   out <- list(
-    fits              = fits,
-    selected_features = selected_features,
-    selected_train    = selected_train,
-    selected_valid    = selected_valid,
+    fits              = per_omic$fits,
+    selected_features = per_omic$selected_features,
+    selected_train    = per_omic$selected_train,
+    selected_valid    = per_omic$selected_valid,
     early_fusion      = ef_result,
     late_fusion       = lf_result
   )
@@ -545,6 +416,184 @@ stabl_multiomic_cv <- function(
   }
 
   lambda_grid[omic_names]
+}
+
+# Run stabl_fit for each omic and build selected_features / selected_train /
+# selected_valid.  fit_params bundles the stabl_fit passthrough args; ...
+# is forwarded to stabl_fit as-is.
+.fit_multiomic_per_omic <- function(x_train_list, y_train, lambda_by_omic,
+                                     x_valid_list, omic_names, fit_params, ...) {
+  fits              <- .named_omic_list(omic_names)
+  selected_features <- .named_omic_list(omic_names)
+  selected_train    <- .named_omic_list(omic_names)
+  selected_valid    <- if (!is.null(x_valid_list)) .named_omic_list(omic_names) else NULL
+
+  for (omic in omic_names) {
+    x_train <- x_train_list[[omic]]
+    if (is.data.frame(x_train)) x_train <- as.matrix(x_train)
+
+    fit <- do.call(stabl_fit, c(
+      list(x = x_train, y = y_train, lambda_grid = lambda_by_omic[[omic]]),
+      fit_params,
+      list(...)
+    ))
+
+    sel <- get_feature_names_out(fit)
+
+    fits[[omic]] <- fit
+    selected_features[[omic]] <- sel
+    selected_train[[omic]] <- .subset_selected_matrix(x_train_list[[omic]], sel)
+
+    if (!is.null(x_valid_list)) {
+      selected_valid[[omic]] <- .subset_selected_matrix(x_valid_list[[omic]], sel)
+    }
+  }
+
+  list(
+    fits              = fits,
+    selected_features = selected_features,
+    selected_train    = selected_train,
+    selected_valid    = selected_valid
+  )
+}
+
+# Concatenate all omics and run stabl_fit on the combined matrix.
+# Uses the first omic's lambda grid for the concatenated model.
+.early_fusion_multiomic_fit <- function(x_train_list, x_valid_list, y_train,
+                                         omic_names, lambda_by_omic,
+                                         fit_params, ...) {
+  x_all_train <- .concat_omic_matrices(x_train_list, omic_names)
+
+  # Use the shared/first lambda grid for the concatenated model.
+  ef_lambda <- lambda_by_omic[[omic_names[1L]]]
+
+  ef_fit <- do.call(stabl_fit, c(
+    list(x = x_all_train, y = y_train, lambda_grid = ef_lambda),
+    fit_params,
+    list(...)
+  ))
+
+  ef_sel       <- get_feature_names_out(ef_fit)
+  ef_train_mat <- .subset_selected_matrix(as.data.frame(x_all_train), ef_sel)
+
+  ef_valid_mat <- if (!is.null(x_valid_list)) {
+    x_all_valid <- .concat_omic_matrices(x_valid_list, omic_names)
+    .subset_selected_matrix(as.data.frame(x_all_valid), ef_sel)
+  } else {
+    NULL
+  }
+
+  list(
+    fit               = ef_fit,
+    selected_features = ef_sel,
+    selected_train    = ef_train_mat,
+    selected_valid    = ef_valid_mat
+  )
+}
+
+# Fit per-omic stacking models and combine them via stacked_multi_omic.
+# selected_valid is NULL when no validation split is provided.
+.late_fusion_multiomic_fit <- function(selected_train, selected_valid, y_train,
+                                        y_valid, omic_names, family, n_iter_lf,
+                                        random_state) {
+  task_type    <- .family_to_task_type(family)
+  y_train_mean <- if (identical(task_type, "regression")) {
+    mean(unname(y_train))
+  } else {
+    NA_real_
+  }
+
+  if (identical(task_type, "multiclass")) {
+    train_preds <- .named_omic_list(omic_names)
+    valid_preds <- if (!is.null(selected_valid)) .named_omic_list(omic_names) else NULL
+  } else {
+    train_preds <- matrix(
+      NA_real_,
+      nrow = length(y_train),
+      ncol = length(omic_names),
+      dimnames = list(names(y_train), omic_names)
+    )
+    valid_preds <- if (!is.null(selected_valid)) {
+      matrix(
+        NA_real_,
+        nrow = length(y_valid),
+        ncol = length(omic_names),
+        dimnames = list(names(y_valid), omic_names)
+      )
+    } else {
+      NULL
+    }
+  }
+
+  y_levels <- if (identical(task_type, "multiclass")) {
+    levels(factor(y_train))
+  } else {
+    NULL
+  }
+
+  for (omic in omic_names) {
+    omic_result <- .late_fusion_fit_omic(
+      x_train_sel  = selected_train[[omic]],
+      y_train      = y_train,
+      x_valid_sel  = if (!is.null(selected_valid)) selected_valid[[omic]] else NULL,
+      y_train_mean = y_train_mean,
+      task_type    = task_type,
+      levels       = y_levels
+    )
+    if (identical(task_type, "multiclass")) {
+      train_preds[[omic]] <- omic_result$train_preds
+      if (!is.null(valid_preds)) {
+        valid_preds[[omic]] <- omic_result$valid_preds
+      }
+    } else {
+      train_preds[, omic] <- omic_result$train_preds
+      if (!is.null(valid_preds)) {
+        valid_preds[, omic] <- omic_result$valid_preds
+      }
+    }
+  }
+
+  stacked <- stacked_multi_omic(
+    predictions  = train_preds,
+    y            = unname(y_train),
+    task_type    = task_type,
+    n_iter       = n_iter_lf,
+    random_state = random_state
+  )
+
+  lf_valid_preds <- if (is.null(valid_preds)) {
+    NULL
+  } else if (identical(task_type, "multiclass")) {
+    .apply_multiclass_stack_weights(valid_preds, stacked$weights$Associated_weight)
+  } else {
+    .weighted_masked_mean(valid_preds, stacked$weights$Associated_weight)
+  }
+
+  lf_result <- list(
+    weights           = stacked$weights,
+    train_predictions = stacked$predictions,
+    valid_predictions = lf_valid_preds,
+    score             = stacked$score
+  )
+  if (identical(task_type, "multiclass")) {
+    lf_result$task_type <- task_type
+    lf_result$levels <- stacked$levels
+    lf_result$log_loss <- stacked$log_loss
+    lf_result$train_metrics <- .classification_metrics(
+      truth = factor(y_train, levels = stacked$levels),
+      predicted = factor(stacked$predictions$predicted_class,
+                         levels = stacked$levels)
+    )
+    if (!is.null(y_valid) && !is.null(lf_valid_preds)) {
+      lf_result$valid_metrics <- .classification_metrics(
+        truth = factor(y_valid, levels = stacked$levels),
+        predicted = factor(lf_valid_preds$predicted_class,
+                           levels = stacked$levels)
+      )
+    }
+  }
+
+  lf_result
 }
 
 .validate_multiomic_validation_inputs <- function(x_valid_list,
