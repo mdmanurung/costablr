@@ -85,7 +85,7 @@ test_that("stabl_multiomic_nested_cv returns deterministic diagnostics and predi
   expect_true(all(fit1$diagnostics$candidate %in% c("mrna", "early_fusion")))
   expect_named(fit1$performance,
                c("accuracy", "balanced_error_rate", "per_class_recall",
-                 "macro_f1", "confusion"))
+                 "macro_f1", "mcc", "confusion"))
 
   expect_equal(fit1$outer_predictions, fit2$outer_predictions)
   expect_equal(fit1$diagnostics, fit2$diagnostics)

@@ -484,11 +484,22 @@ fscore_similarity <- function(list1, list2, beta = 1) {
     0
   )
   accuracy <- sum(diag(tab)) / sum(tab)
+  # Matthews Correlation Coefficient (Gorodkin 2004, multiclass generalisation):
+  #   MCC = (n * sum_k(C[k,k]) - sum_k(row_k * col_k)) /
+  #         sqrt((n^2 - sum(col_k^2)) * (n^2 - sum(row_k^2)))
+  # Returns 0 when the denominator is 0 (degenerate predictions).
+  n         <- sum(tab)
+  row_k     <- rowSums(tab)
+  col_k     <- colSums(tab)
+  mcc_num   <- n * sum(diag(tab)) - sum(row_k * col_k)
+  mcc_denom <- sqrt((n^2 - sum(col_k^2)) * (n^2 - sum(row_k^2)))
+  mcc       <- if (mcc_denom == 0) 0 else mcc_num / mcc_denom
   list(
     accuracy           = unname(accuracy),
     balanced_error_rate = unname(1 - mean(recalls)),
     per_class_recall   = recalls,
     macro_f1           = unname(mean(f1)),
+    mcc                = unname(mcc),
     confusion          = tab
   )
 }

@@ -619,7 +619,7 @@ test_that("late_fusion = TRUE supports multinomial probability stacking", {
   expect_true("predicted_class" %in% names(lf$train_predictions))
   expect_named(lf$train_metrics,
                c("accuracy", "balanced_error_rate", "per_class_recall",
-                 "macro_f1", "confusion"))
+                 "macro_f1", "mcc", "confusion"))
   expect_true(is.finite(lf$log_loss))
 })
 
@@ -1529,4 +1529,32 @@ test_that("[B3] late_fusion = TRUE rejects family = 'cox' with clear error", {
     ),
     regexp = "cox"
   )
+})
+
+# [C7] MCC (Matthews Correlation Coefficient) -----------------------------------
+
+test_that("[C7] .classification_metrics includes mcc with correct value", {
+  # 2-class fixture: truth vs predicted, known MCC = 1/3
+  # C = [[2,1],[1,2]], n=6, diag=4, rowSums=colSums=[3,3]
+  # MCC = (6*4 - (9+9)) / sqrt((36-9-9)*(36-9-9)) = 6/18 = 1/3
+  truth     <- factor(c("A", "A", "A", "B", "B", "B"))
+  predicted <- factor(c("A", "A", "B", "B", "B", "A"), levels = c("A", "B"))
+  m <- stablr:::.classification_metrics(truth, predicted)
+  expect_true("mcc" %in% names(m))
+  expect_equal(m$mcc, 1/3, tolerance = 1e-12)
+})
+
+test_that("[C7] .classification_metrics mcc = 1 for perfect predictions", {
+  truth     <- factor(c("A", "A", "B", "B", "C", "C"))
+  predicted <- factor(c("A", "A", "B", "B", "C", "C"), levels = c("A", "B", "C"))
+  m <- stablr:::.classification_metrics(truth, predicted)
+  expect_equal(m$mcc, 1, tolerance = 1e-12)
+})
+
+test_that("[C7] .classification_metrics mcc = 0 for degenerate (all-one-class) predictions", {
+  # All predictions = A → col sums: A=6, B=0 → denominator term = n^2 - 36 - 0 = 0 → mcc = 0
+  truth     <- factor(c("A", "A", "A", "B", "B", "B"))
+  predicted <- factor(c("A", "A", "A", "A", "A", "A"), levels = c("A", "B"))
+  m <- stablr:::.classification_metrics(truth, predicted)
+  expect_equal(m$mcc, 0, tolerance = 1e-12)
 })
