@@ -56,14 +56,8 @@ export_stabl_to_csv <- function(object, path) {
   utils::write.csv(scores_df, file = file.path(path, "STABL scores.csv"))
 
   # Max stability scores per feature (sorted descending)
-  max_scores <- rowMaxs(object$stabl_scores_)
-  max_df <- data.frame(
-    "Max Proba" = max_scores,
-    row.names   = feat_names,
-    check.names = FALSE
-  )
-  max_df <- max_df[order(max_df[["Max Proba"]], decreasing = TRUE), , drop = FALSE]
-  utils::write.csv(max_df, file = file.path(path, "Max STABL scores.csv"))
+  .write_max_scores_csv(rowMaxs(object$stabl_scores_), feat_names, path,
+                        "Max STABL scores.csv")
 
   # Artificial feature scores (only when present)
   if (!is.null(object$stabl_scores_artificial_)) {
@@ -77,17 +71,8 @@ export_stabl_to_csv <- function(object, path) {
     utils::write.csv(art_df,
                      file = file.path(path, "STABL artificial scores.csv"))
 
-    max_art <- rowMaxs(art_scores)
-    max_art_df <- data.frame(
-      "Max Proba" = max_art,
-      row.names   = art_names,
-      check.names = FALSE
-    )
-    max_art_df <- max_art_df[
-      order(max_art_df[["Max Proba"]], decreasing = TRUE), , drop = FALSE
-    ]
-    utils::write.csv(max_art_df,
-                     file = file.path(path, "Max STABL artificial scores.csv"))
+    .write_max_scores_csv(rowMaxs(art_scores), art_names, path,
+                          "Max STABL artificial scores.csv")
   }
 
   invisible(normalizePath(path))
@@ -239,6 +224,14 @@ save_stabl_results <- function(
 }
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+# Build, sort-descending, and write a max-scores CSV.
+.write_max_scores_csv <- function(scores, feat_names, path, filename) {
+  max_df <- data.frame("Max Proba" = scores, row.names = feat_names,
+                       check.names = FALSE)
+  max_df <- max_df[order(max_df[["Max Proba"]], decreasing = TRUE), , drop = FALSE]
+  utils::write.csv(max_df, file = file.path(path, filename))
+}
 
 # Row-wise max without external dependencies.
 # Special-cases nrow=0 (returns numeric(0)) and ncol=1 (avoids apply overhead
