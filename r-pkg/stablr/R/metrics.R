@@ -181,19 +181,10 @@ adjusted_similarity <- function(list1, list2, nb_total_elements) {
 #' adjusted_similarity_values(sets, nb_total_elements = 10L)
 #' @export
 adjusted_similarity_values <- function(list_of_lists, nb_total_elements) {
-  n    <- length(list_of_lists)
-  vals <- numeric(n * (n - 1L) / 2L)
-  if (n < 2L) return(vals)
-  k <- 1L
-  for (i in seq_len(n - 1L)) {
-    for (j in seq.int(i + 1L, n)) {
-      vals[k] <- adjusted_similarity(
-        list_of_lists[[i]], list_of_lists[[j]], nb_total_elements
-      )
-      k <- k + 1L
-    }
-  }
-  vals
+  .pairwise_upper_triangle(
+    list_of_lists,
+    function(a, b) adjusted_similarity(a, b, nb_total_elements)
+  )
 }
 
 #' Summary Statistic of Adjusted Similarity Values
@@ -309,17 +300,10 @@ pearson_similarity <- function(list_i, list_j, d) {
 #' pearson_similarity_values(sets, d = 10L)
 #' @export
 pearson_similarity_values <- function(list_of_lists, d) {
-  n    <- length(list_of_lists)
-  vals <- numeric(n * (n - 1L) / 2L)
-  if (n < 2L) return(vals)
-  k <- 1L
-  for (i in seq_len(n - 1L)) {
-    for (j in seq.int(i + 1L, n)) {
-      vals[k] <- pearson_similarity(list_of_lists[[i]], list_of_lists[[j]], d)
-      k <- k + 1L
-    }
-  }
-  vals
+  .pairwise_upper_triangle(
+    list_of_lists,
+    function(a, b) pearson_similarity(a, b, d)
+  )
 }
 
 #' Summary Statistic of Pearson Similarity Values
@@ -446,6 +430,20 @@ fscore_similarity <- function(list1, list2, beta = 1) {
 }
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
+
+.pairwise_upper_triangle <- function(list_of_lists, fn) {
+  n    <- length(list_of_lists)
+  vals <- numeric(n * (n - 1L) / 2L)
+  if (n < 2L) return(vals)
+  k <- 1L
+  for (i in seq_len(n - 1L)) {
+    for (j in seq.int(i + 1L, n)) {
+      vals[k] <- fn(list_of_lists[[i]], list_of_lists[[j]])
+      k <- k + 1L
+    }
+  }
+  vals
+}
 
 .similarity_summary <- function(vals, stat) {
   if (stat == "median") {

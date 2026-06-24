@@ -226,25 +226,12 @@ save_stabl_results <- function(
 
   # 5. Per-feature distribution plots
   if (length(sel_features) > 0L) {
-    if (task_type %in% c("binary", "multiclass")) {
-      p_feats <- boxplot_features(
-        features = sel_features,
-        x        = x,
-        y        = y
-      )
-      ggplot2::ggsave(
-        filename = file.path(sel_dir,
-                             paste0("Feature distributions.", figure_fmt)),
-        plot   = p_feats,
-        width  = max(4, 3 * min(length(sel_features), 4)),
-        height = ceiling(length(sel_features) / 4) * 3
-      )
+    p_feats <- if (task_type %in% c("binary", "multiclass")) {
+      boxplot_features(features = sel_features, x = x, y = y)
     } else if (task_type == "regression") {
-      p_feats <- scatterplot_features(
-        features = sel_features,
-        x        = x,
-        y        = y
-      )
+      scatterplot_features(features = sel_features, x = x, y = y)
+    }
+    if (!is.null(p_feats)) {
       ggplot2::ggsave(
         filename = file.path(sel_dir,
                              paste0("Feature distributions.", figure_fmt)),

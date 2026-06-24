@@ -407,6 +407,10 @@ stabl_fit <- function(
 # consistently across all base-learner adapters.
 .BOOTSTRAP_COEF_THRESHOLD <- 1e-5
 
+# Default sparse group lasso mixing parameter (asparse in sparsegl).
+# Controls L1 vs group-lasso balance; 0.05 = mostly group-lasso.
+.SGL_DEFAULT_ALPHA <- 0.05
+
 # ---- Internal param validator ------------------------------------------------
 .validate_stabl_params <- function(n_bootstraps, sample_fraction, replace,
                                    hard_threshold, artificial_type,

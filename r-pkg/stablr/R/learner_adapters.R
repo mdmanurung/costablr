@@ -286,7 +286,7 @@ make_sgl_adapter <- function(
       }
       return(alpha_val)
     }
-    0.05
+    .SGL_DEFAULT_ALPHA
   }
 
   function(x, y, lambda_val) {
@@ -515,36 +515,24 @@ auto_lambda_grid <- function(
 
     has_alpha_col <- "alpha" %in% names(lambda_grid)
 
-    if (!is.null(alpha_fixed)) {
-      # Lasso or fixed-alpha enet: single path call
-      lambda_seq    <- lambda_grid[["lambda"]]
-      fit           <- glmnet::glmnet(x, y, family = family, alpha = alpha_fixed,
-                                      lambda = sort(lambda_seq, decreasing = TRUE),
-                                      cox.ties = "efron")
-      coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
-      result        <- coef_mat > bootstrap_threshold
-
-    } else if (has_alpha_col) {
+    if (has_alpha_col && is.null(alpha_fixed)) {
       # Elastic net with varying alpha: one path call per unique alpha
-      unique_alphas <- unique(lambda_grid[["alpha"]])
-      for (a in unique_alphas) {
-        row_idx       <- which(lambda_grid[["alpha"]] == a)
-        lambda_seq    <- lambda_grid[["lambda"]][row_idx]
-        fit           <- glmnet::glmnet(x, y, family = family, alpha = a,
-                                        lambda = sort(lambda_seq, decreasing = TRUE),
-                                        cox.ties = "efron")
-        coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
-        result[, row_idx] <- coef_mat > bootstrap_threshold
+      for (a in unique(lambda_grid[["alpha"]])) {
+        row_idx           <- which(lambda_grid[["alpha"]] == a)
+        lambda_seq        <- lambda_grid[["lambda"]][row_idx]
+        fit               <- glmnet::glmnet(x, y, family = family, alpha = a,
+                                            lambda = sort(lambda_seq, decreasing = TRUE),
+                                            cox.ties = "efron")
+        result[, row_idx] <- .feature_abs_coefs_batch(fit, lambda_seq, family = family) > bootstrap_threshold
       }
-
     } else {
-      # No alpha column: default to lasso (alpha = 1)
-      lambda_seq    <- lambda_grid[["lambda"]]
-      fit           <- glmnet::glmnet(x, y, family = family, alpha = 1.0,
-                                      lambda = sort(lambda_seq, decreasing = TRUE),
-                                      cox.ties = "efron")
-      coef_mat      <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
-      result        <- coef_mat > bootstrap_threshold
+      # Single alpha: use alpha_fixed if given, lasso (1.0) as default
+      alpha      <- if (!is.null(alpha_fixed)) alpha_fixed else 1.0
+      lambda_seq <- lambda_grid[["lambda"]]
+      fit        <- glmnet::glmnet(x, y, family = family, alpha = alpha,
+                                   lambda = sort(lambda_seq, decreasing = TRUE),
+                                   cox.ties = "efron")
+      result     <- .feature_abs_coefs_batch(fit, lambda_seq, family = family) > bootstrap_threshold
     }
 
     result
@@ -607,7 +595,7 @@ auto_lambda_grid <- function(
         list(alpha = a, row_idx = which(lambda_grid[["alpha"]] == a))
       })
     } else {
-      list(list(alpha = 0.05, row_idx = seq_len(n_lambdas)))
+      list(list(alpha = .SGL_DEFAULT_ALPHA, row_idx = seq_len(n_lambdas)))
     }
 
     for (ab in alpha_batches) {
