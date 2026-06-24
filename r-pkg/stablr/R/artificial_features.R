@@ -43,13 +43,7 @@ make_rp_features <- function(x, n_injected) {
 #'   see [make_rp_features()] for details.
 #' @keywords internal
 make_knockoff_features <- function(x, n_injected, random_state = NULL) {
-  if (!requireNamespace("knockoff", quietly = TRUE)) {
-    stop(
-      "Package 'knockoff' is required for artificial_type = \"knockoff\". ",
-      "Install it with: install.packages(\"knockoff\")",
-      call. = FALSE
-    )
-  }
+  .require_pkg("knockoff", "for artificial_type = \"knockoff\"")
 
   # NOTE: Seeding is the dispatcher's responsibility (see
   # `make_artificial_features`).  Re-seeding here would mask any RNG

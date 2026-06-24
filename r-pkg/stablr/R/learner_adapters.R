@@ -52,13 +52,7 @@ make_glmnet_adapter <- function(
     alpha_fixed         = NULL,
     bootstrap_threshold = 1e-5
 ) {
-  if (!requireNamespace("glmnet", quietly = TRUE)) {
-    stop(
-      "Package 'glmnet' is required. ",
-      "Install it with: install.packages(\"glmnet\")",
-      call. = FALSE
-    )
-  }
+  .require_pkg("glmnet")
 
   function(x, y, lambda_val) {
     alpha_use <- if (!is.null(alpha_fixed)) {
@@ -140,13 +134,7 @@ make_adaptive_lasso_adapter <- function(
     epsilon             = 1e-6,
     bootstrap_threshold = 1e-5
 ) {
-  if (!requireNamespace("glmnet", quietly = TRUE)) {
-    stop(
-      "Package 'glmnet' is required. ",
-      "Install it with: install.packages(\"glmnet\")",
-      call. = FALSE
-    )
-  }
+  .require_pkg("glmnet")
   if (!is.numeric(gamma) || length(gamma) != 1L || gamma <= 0) {
     stop("`gamma` must be a positive numeric scalar.", call. = FALSE)
   }
@@ -243,13 +231,7 @@ make_sgl_adapter <- function(
     alpha_fixed         = NULL,
     bootstrap_threshold = 1e-5
 ) {
-  if (!requireNamespace("sparsegl", quietly = TRUE)) {
-    stop(
-      "Package 'sparsegl' is required for base_learner = \"sparse_group_lasso\". ",
-      "Install it with: install.packages(\"sparsegl\")",
-      call. = FALSE
-    )
-  }
+  .require_pkg("sparsegl", "for base_learner = \"sparse_group_lasso\"")
   if (identical(family, "cox")) {
     stop(
       "Cox family is not supported by sparse_group_lasso. ",
@@ -393,13 +375,7 @@ auto_lambda_grid <- function(
     n_lambda = 30L,
     l1_ratio = NULL
 ) {
-  if (!requireNamespace("glmnet", quietly = TRUE)) {
-    stop(
-      "Package 'glmnet' is required. ",
-      "Install it with: install.packages(\"glmnet\")",
-      call. = FALSE
-    )
-  }
+  .require_pkg("glmnet")
 
   alphas <- if (is.null(l1_ratio)) 1.0 else as.numeric(l1_ratio)
   add_alpha <- !is.null(l1_ratio)

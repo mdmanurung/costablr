@@ -39,3 +39,12 @@ utils::globalVariables(c(
 
 # Private helper so tests can mock Suggests-package availability.
 .has_pkg <- function(pkg) requireNamespace(pkg, quietly = TRUE)
+
+# Unified package-guard helper: stop with an actionable install message if
+# `pkg` is not installed. `context` is appended after "is required" when given.
+.require_pkg <- function(pkg, context = NULL) {
+  if (.has_pkg(pkg)) return(invisible(NULL))
+  what <- paste0("Package '", pkg, "' is required",
+                 if (!is.null(context)) paste0(" ", context) else "", ".")
+  stop(what, "\nInstall with: install.packages(\"", pkg, "\")", call. = FALSE)
+}

@@ -177,14 +177,7 @@ save_stabl_results <- function(
   }
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
 
-  # Guard: ggplot2 is Suggests, so give an actionable error early.
-  if (!.has_pkg("ggplot2")) {
-    stop(
-      "`save_stabl_results()` requires the ggplot2 package.\n",
-      "Install it with: install.packages(\"ggplot2\")",
-      call. = FALSE
-    )
-  }
+  .require_ggplot2()
 
   # 1. CSV exports
   export_stabl_to_csv(object, path)

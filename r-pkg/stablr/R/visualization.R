@@ -1,12 +1,7 @@
 # visualization.R — ggplot2 diagnostic and result plots for stablr
 # R port of the plot functions in stabl/stabl.py and stabl/visualization.py
 
-.require_ggplot2 <- function() {
-  if (!requireNamespace("ggplot2", quietly = TRUE)) {
-    stop("Package 'ggplot2' is required for plotting. ",
-         "Install with: install.packages(\"ggplot2\")", call. = FALSE)
-  }
-}
+.require_ggplot2 <- function() .require_pkg("ggplot2", "for plotting")
 
 # Build a long data frame from a scores matrix (one row per feature × lambda).
 # feat_names: character vector of length n.
