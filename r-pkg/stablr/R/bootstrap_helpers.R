@@ -115,25 +115,11 @@ classic_bootstrap_indices <- function(
 
   idx <- draw_once()
 
-  # Avoid degenerate binary resamples with a single class.
-  # Use an iterative loop (not tail recursion) so severe class imbalance cannot
-  # exhaust the call stack (Fix 6).
-  if (length(unique(y)) >= 2L) {
-    max_retries <- 1000L
-    attempt     <- 0L
-    while (length(unique(y[idx])) < 2L) {
-      attempt <- attempt + 1L
-      if (attempt > max_retries) {
-        stop(
-          "classic_bootstrap_indices: could not draw a class-diverse subsample ",
-          "after ", max_retries, " attempts. ",
-          "Check class balance or increase `sample_fraction`.",
-          call. = FALSE
-        )
-      }
-      idx <- draw_once()
-    }
-  }
+  idx <- .guard_diverse_bootstrap(
+    y, idx, draw_once,
+    caller = "classic_bootstrap_indices",
+    hint   = "Check class balance or increase `sample_fraction`."
+  )
 
   idx
 }
@@ -247,26 +233,31 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
   # Whole-group invariant (D3): never trim partial groups, even if the
   # final tally exceeds n_subsamples.
 
-  # Avoid degenerate resamples.  Use an iterative loop (not tail recursion) so
-  # severe class imbalance cannot exhaust the call stack (Fix 6).
-  if (length(unique(y)) >= 2L) {
-    max_retries <- 1000L
-    attempt     <- 0L
-    while (length(unique(y[sampled_idx])) < 2L) {
-      attempt <- attempt + 1L
-      if (attempt > max_retries) {
-        stop(
-          "group_bootstrap_indices: could not draw a class-diverse subsample ",
-          "after ", max_retries, " attempts. ",
-          "Check class balance or group structure.",
-          call. = FALSE
-        )
-      }
-      sampled_idx <- draw_once()
-    }
-  }
+  sampled_idx <- .guard_diverse_bootstrap(
+    y, sampled_idx, draw_once,
+    caller = "group_bootstrap_indices",
+    hint   = "Check class balance or group structure."
+  )
 
   sampled_idx
+}
+
+.guard_diverse_bootstrap <- function(y, idx, draw_once, caller, hint,
+                                     max_retries = 1000L) {
+  if (length(unique(y)) < 2L) return(idx)
+  attempt <- 0L
+  while (length(unique(y[idx])) < 2L) {
+    attempt <- attempt + 1L
+    if (attempt > max_retries) {
+      stop(
+        caller, ": could not draw a class-diverse subsample after ",
+        max_retries, " attempts. ", hint,
+        call. = FALSE
+      )
+    }
+    idx <- draw_once()
+  }
+  idx
 }
 
 .bootstrap_strata_ids <- function(strata, n, arg = "strata") {
