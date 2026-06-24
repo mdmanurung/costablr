@@ -174,6 +174,16 @@ make_adaptive_lasso_adapter <- function(
   }
 }
 
+.stop_if_cox_sgl <- function(family) {
+  if (identical(family, "cox")) {
+    stop(
+      "Cox family is not supported by sparse_group_lasso. ",
+      "Use base_learner = \"lasso\" or \"adaptive_lasso\" with family = \"cox\".",
+      call. = FALSE
+    )
+  }
+}
+
 #' Build a Sparse Group Lasso Learner Adapter
 #'
 #' Returns a closure that fits `sparsegl::sparsegl()` on a single bootstrap
@@ -234,13 +244,7 @@ make_sgl_adapter <- function(
     bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
 ) {
   .require_pkg("sparsegl", "for base_learner = \"sparse_group_lasso\"")
-  if (identical(family, "cox")) {
-    stop(
-      "Cox family is not supported by sparse_group_lasso. ",
-      "Use base_learner = \"lasso\" or \"adaptive_lasso\" with family = \"cox\".",
-      call. = FALSE
-    )
-  }
+  .stop_if_cox_sgl(family)
   if (missing(feature_groups) || is.null(feature_groups)) {
     stop("`feature_groups` must be provided for sparse group lasso.", call. = FALSE)
   }
@@ -545,13 +549,7 @@ auto_lambda_grid <- function(
 
 .make_sgl_batch_adapter <- function(family, feature_groups, alpha_fixed,
                                     bootstrap_threshold) {
-  if (identical(family, "cox")) {
-    stop(
-      "Cox family is not supported by sparse_group_lasso. ",
-      "Use base_learner = \"lasso\" or \"adaptive_lasso\" with family = \"cox\".",
-      call. = FALSE
-    )
-  }
+  .stop_if_cox_sgl(family)
   groups   <- as.integer(as.factor(feature_groups))
   # sparsegl requires features sorted by group (non-decreasing group index).
   # sort_ord/inv_ord/grp_s depend only on feature_groups, so hoist them here
