@@ -29,7 +29,7 @@ make_rp_features <- function(x, n_injected) {
 
 #' Make Knockoff Artificial Features
 #'
-#' Generates model-X knockoff features via `knockoff::create.fixed()`, with
+#' Generates **fixed-X** knockoff features via `knockoff::create.fixed()`, with
 #' column-chunking for datasets that exceed 3 000 features (mirroring the
 #' Python STABL implementation that chunks calls to `GaussianSampler`).
 #' Falls back to random-permutation features when the knockoff constructor
@@ -112,6 +112,195 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
   )
 }
 
+# ── Shared helpers for model-X generators ─────────────────────────────────────
+
+# Estimate a positive-definite covariance matrix from x.
+# Falls back to corpcor shrinkage when cov(x) is not PD.
+.estimate_pd_sigma <- function(x) {
+  Sigma <- cov(x)
+  min_eig <- min(eigen(Sigma, symmetric = TRUE, only.values = TRUE)$values)
+  if (min_eig > 0) return(Sigma)
+  # Rank-deficient (p > n) or near-singular: use Ledoit-Wolf shrinkage if available
+  if (requireNamespace("corpcor", quietly = TRUE)) {
+    Sigma <- suppressMessages(
+      corpcor::make.positive.definite(Sigma, tol = 1e-3)
+    )
+  } else {
+    diag(Sigma) <- diag(Sigma) + (1e-5 - min_eig)
+  }
+  Sigma
+}
+
+#' Make Model-X Equicorrelated Knockoff Artificial Features
+#'
+#' Generates **model-X equicorrelated** knockoff features via
+#' `knockoff::create.gaussian(..., method = "equi")`.  This matches the
+#' `GaussianSampler(X, method='equicorrelated')` call used by the Python STABL
+#' library, making it the parity-correct knockoff type for cross-language
+#' comparisons.  Column-chunking for datasets that exceed 3 000 features is
+#' applied (same as [make_knockoff_features()]).  Falls back to random-permutation
+#' features when the knockoff constructor fails.
+#'
+#' @param x Numeric matrix of predictors (samples \eqn{\times} features).
+#' @param n_injected Integer; number of knockoff columns to select.
+#' @param random_state Optional integer seed.
+#'
+#' @return Named list with elements `x_augmented` and `noise_col_indices`;
+#'   see [make_rp_features()] for details.
+#' @keywords internal
+make_knockoff_equi_features <- function(x, n_injected, random_state = NULL) {
+  .require_pkg("knockoff", "for artificial_type = \"knockoff_equi\"")
+
+  n_features <- ncol(x)
+  chunk_size <- 3000L
+
+  .make_equi_chunk <- function(x_chunk) {
+    tryCatch(
+      {
+        mu    <- colMeans(x_chunk)
+        Sigma <- .estimate_pd_sigma(x_chunk)
+        knockoff::create.gaussian(x_chunk, mu, Sigma, method = "equi")
+      },
+      error = function(e) {
+        warning(
+          "knockoff_equi: create.gaussian failed; falling back to random ",
+          "permutation for this chunk. Reason: ", conditionMessage(e),
+          call. = FALSE
+        )
+        make_rp_features(x_chunk, ncol(x_chunk))$x_augmented[
+          , ncol(x_chunk) + seq_len(ncol(x_chunk)), drop = FALSE
+        ]
+      }
+    )
+  }
+
+  if (n_features > chunk_size) {
+    n_chunks        <- ceiling(n_features / chunk_size)
+    ko_blocks       <- vector("list", n_chunks)
+    orig_map_blocks <- vector("list", n_chunks)
+    for (i in seq_len(n_chunks)) {
+      col_idx              <- sample.int(n_features,
+                                         size = min(chunk_size, n_features),
+                                         replace = FALSE)
+      ko_blocks[[i]]       <- .make_equi_chunk(x[, col_idx, drop = FALSE])
+      orig_map_blocks[[i]] <- col_idx
+    }
+    x_art_full <- do.call(cbind, ko_blocks)
+    orig_map   <- unlist(orig_map_blocks)
+    keep_idx   <- sample.int(ncol(x_art_full), size = n_features, replace = FALSE)
+    x_art_full <- x_art_full[, keep_idx, drop = FALSE]
+    orig_map   <- orig_map[keep_idx]
+  } else {
+    x_art_full <- .make_equi_chunk(x)
+    orig_map   <- seq_len(n_features)
+  }
+
+  sel_idx <- sample.int(n = ncol(x_art_full), size = n_injected, replace = FALSE)
+  x_art   <- x_art_full[, sel_idx, drop = FALSE]
+
+  list(
+    x_augmented      = cbind(x, x_art),
+    noise_col_indices = orig_map[sel_idx]
+  )
+}
+
+#' Make Model-X MVR Knockoff Artificial Features
+#'
+#' Generates **model-X MVR (minimum-variance-reconstructability)** knockoff
+#' features.  The S-matrix is solved via [solve_mvr()] (a pure-R coordinate-
+#' descent port of `knockpy.mrc._solve_mvr_ungrouped`), then the knockoff
+#' sample is drawn with `knockoff::create.gaussian(..., diag_s = S)`.
+#' This is a novel feature exclusive to `stablr` — the Python STABL library
+#' does not implement MVR knockoffs.  Chunking and fallback behaviour mirror
+#' [make_knockoff_equi_features()]: MVR-solver failure falls back to equi;
+#' `create.gaussian` failure falls back to random permutation.
+#'
+#' @param x Numeric matrix of predictors (samples \eqn{\times} features).
+#' @param n_injected Integer; number of knockoff columns to select.
+#' @param random_state Optional integer seed; passed to [solve_mvr()] for the
+#'   coordinate-shuffle RNG.
+#'
+#' @return Named list with elements `x_augmented` and `noise_col_indices`;
+#'   see [make_rp_features()] for details.
+#' @keywords internal
+make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
+  .require_pkg("knockoff", "for artificial_type = \"knockoff_mvr\"")
+
+  n_features <- ncol(x)
+  chunk_size <- 3000L
+
+  .make_mvr_chunk <- function(x_chunk) {
+    tryCatch(
+      {
+        mu    <- colMeans(x_chunk)
+        Sigma <- .estimate_pd_sigma(x_chunk)
+
+        # Attempt MVR S-solve; fall back to equi on solver failure
+        S_diag <- tryCatch(
+          solve_mvr(Sigma, random_state = random_state),
+          error   = function(e) {
+            warning("solve_mvr failed; using equi S for this chunk. Reason: ",
+                    conditionMessage(e), call. = FALSE)
+            NULL
+          },
+          warning = function(w) {
+            # Propagate warning but still try to get a result
+            withCallingHandlers(
+              solve_mvr(Sigma, random_state = random_state),
+              warning = function(w2) invokeRestart("muffleWarning")
+            )
+          }
+        )
+
+        if (is.null(S_diag)) {
+          knockoff::create.gaussian(x_chunk, mu, Sigma, method = "equi")
+        } else {
+          knockoff::create.gaussian(x_chunk, mu, Sigma, diag_s = S_diag)
+        }
+      },
+      error = function(e) {
+        warning(
+          "knockoff_mvr: create.gaussian failed; falling back to random ",
+          "permutation for this chunk. Reason: ", conditionMessage(e),
+          call. = FALSE
+        )
+        make_rp_features(x_chunk, ncol(x_chunk))$x_augmented[
+          , ncol(x_chunk) + seq_len(ncol(x_chunk)), drop = FALSE
+        ]
+      }
+    )
+  }
+
+  if (n_features > chunk_size) {
+    n_chunks        <- ceiling(n_features / chunk_size)
+    ko_blocks       <- vector("list", n_chunks)
+    orig_map_blocks <- vector("list", n_chunks)
+    for (i in seq_len(n_chunks)) {
+      col_idx              <- sample.int(n_features,
+                                         size = min(chunk_size, n_features),
+                                         replace = FALSE)
+      ko_blocks[[i]]       <- .make_mvr_chunk(x[, col_idx, drop = FALSE])
+      orig_map_blocks[[i]] <- col_idx
+    }
+    x_art_full <- do.call(cbind, ko_blocks)
+    orig_map   <- unlist(orig_map_blocks)
+    keep_idx   <- sample.int(ncol(x_art_full), size = n_features, replace = FALSE)
+    x_art_full <- x_art_full[, keep_idx, drop = FALSE]
+    orig_map   <- orig_map[keep_idx]
+  } else {
+    x_art_full <- .make_mvr_chunk(x)
+    orig_map   <- seq_len(n_features)
+  }
+
+  sel_idx <- sample.int(n = ncol(x_art_full), size = n_injected, replace = FALSE)
+  x_art   <- x_art_full[, sel_idx, drop = FALSE]
+
+  list(
+    x_augmented      = cbind(x, x_art),
+    noise_col_indices = orig_map[sel_idx]
+  )
+}
+
 #' Dispatcher for Artificial Feature Generation
 #'
 #' Selects and calls the appropriate artificial-feature generator based on
@@ -125,26 +314,35 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
 #' rate drives the FDP+ bound computed in [compute_fdp_plus()], eliminating
 #' the need to choose a stability threshold by hand.
 #'
-#' Two noise strategies are supported:
+#' Four noise strategies are supported:
 #' \describe{
 #'   \item{`"random_permutation"`}{Copies `n_injected` randomly chosen real
 #'     columns and shuffles each copy independently, breaking all signal while
 #'     preserving marginal distributions.  Fast and broadly applicable.}
-#'   \item{`"knockoff"`}{Generates model-X knockoffs via
+#'   \item{`"knockoff"`}{Generates **fixed-X** knockoffs via
 #'     [knockoff::create.fixed()], which preserve the covariance structure of
-#'     the original features.  More powerful when features are correlated, at
-#'     the cost of requiring the optional `knockoff` package and higher
-#'     compute.}
+#'     the original features under the fixed-design assumption.  Kept for
+#'     backward compatibility.}
+#'   \item{`"knockoff_equi"`}{Generates **model-X equicorrelated** knockoffs
+#'     via `knockoff::create.gaussian(..., method = "equi")`.  This matches the
+#'     `GaussianSampler(method='equicorrelated')` call in Python STABL and is
+#'     the parity-correct knockoff type for cross-language comparisons.}
+#'   \item{`"knockoff_mvr"`}{Generates **model-X MVR** (minimum-variance-
+#'     reconstructability) knockoffs.  The S-matrix is solved by [solve_mvr()]
+#'     (a pure-R port of `knockpy.mrc`); sampling uses
+#'     `knockoff::create.gaussian(..., diag_s = S)`.  This is a novel feature
+#'     exclusive to `stablr`.}
 #' }
 #'
 #' @param x Numeric matrix of predictors (samples \eqn{\times} features).
 #'   Must have more columns than `n_injected` for random permutation; for
-#'   knockoffs, must not be rank-deficient (a fallback to random permutation
-#'   is attempted otherwise).
+#'   knockoffs, a fallback to random permutation is attempted when the
+#'   knockoff constructor fails (e.g., rank-deficient input).
 #' @param n_injected Positive integer; number of artificial columns to append.
 #'   Typically `round(ncol(x) * artificial_proportion)` as computed in
 #'   [stabl_fit()].
-#' @param type Character string; `"random_permutation"` or `"knockoff"`.
+#' @param type Character string; one of `"random_permutation"`, `"knockoff"`,
+#'   `"knockoff_equi"`, or `"knockoff_mvr"`.
 #' @param random_state Optional integer; passed to [set.seed()] before any
 #'   random operations for reproducibility.  `NULL` leaves the RNG unchanged.
 #'   Seeding happens exactly once in this dispatcher; downstream generators
@@ -173,8 +371,13 @@ make_artificial_features <- function(x, n_injected, type, random_state = NULL) {
     random_permutation = make_rp_features(x, n_injected),
     knockoff           = make_knockoff_features(x, n_injected,
                                                 random_state = random_state),
+    knockoff_equi      = make_knockoff_equi_features(x, n_injected,
+                                                     random_state = random_state),
+    knockoff_mvr       = make_knockoff_mvr_features(x, n_injected,
+                                                    random_state = random_state),
     stop(
-      "`type` must be \"random_permutation\" or \"knockoff\", got: ", type,
+      "`type` must be one of \"random_permutation\", \"knockoff\", ",
+      "\"knockoff_equi\", or \"knockoff_mvr\", got: ", type,
       call. = FALSE
     )
   )
