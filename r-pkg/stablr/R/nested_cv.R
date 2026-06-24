@@ -113,106 +113,38 @@ stabl_multiomic_nested_cv <- function(
     random_state = random_state
   )
 
-  process_outer_fold <- function(outer_i) {
-    outer <- outer_folds[[outer_i]]
-    train_ids <- outer$train_ids
-    valid_ids <- outer$valid_ids
-
-    inner_seed <- .derive_nested_seed(random_state, outer_i, 1000L)
-    inner_folds <- .make_cv_folds(
-      y = strata_labels[train_ids],
-      v = inner_v,
-      stratified = stratified,
-      random_state = inner_seed
-    )
-
-    inner_eval <- .evaluate_stabl_candidates_inner(
-      x_list = x_list,
-      y = y,
-      train_ids = train_ids,
-      candidates = candidates,
-      inner_folds = inner_folds,
-      lambda_grid = lambda_grid,
-      metric = metric,
-      family = family,
-      n_bootstraps = n_bootstraps,
+  fold_runner <- function(outer_i) {
+    .run_nested_cv_fold(
+      outer_i         = outer_i,
+      outer_folds     = outer_folds,
+      strata_labels   = strata_labels,
+      inner_v         = inner_v,
+      stratified      = stratified,
+      x_list          = x_list,
+      y               = y,
+      candidates      = candidates,
+      lambda_grid     = lambda_grid,
+      metric          = metric,
+      family          = family,
+      n_bootstraps    = n_bootstraps,
       artificial_type = artificial_type,
-      hard_threshold = hard_threshold,
-      random_state = .derive_nested_seed(random_state, outer_i, 2000L),
-      n_lambda = n_lambda,
-      l1_ratio = l1_ratio,
-      workers = workers,
+      hard_threshold  = hard_threshold,
+      random_state    = random_state,
+      n_lambda        = n_lambda,
+      l1_ratio        = l1_ratio,
+      workers         = workers,
       ...
-    )
-
-    selected_name <- .select_nested_candidate(inner_eval$summary, metric)
-    selected_candidate <- candidates[[selected_name]]
-
-    outer_fit <- .fit_stabl_nested_candidate(
-      x_list = x_list,
-      y = y,
-      train_ids = train_ids,
-      valid_ids = valid_ids,
-      candidate = selected_candidate,
-      lambda_grid = lambda_grid,
-      family = family,
-      n_bootstraps = n_bootstraps,
-      artificial_type = artificial_type,
-      hard_threshold = hard_threshold,
-      random_state = .derive_nested_seed(random_state, outer_i, 3000L),
-      n_lambda = n_lambda,
-      l1_ratio = l1_ratio,
-      workers = workers,
-      ...
-    )
-
-    pred_df <- data.frame(
-      repeat_id = outer[["repeat"]],
-      fold = outer$fold,
-      fold_id = outer$fold_id,
-      sample_id = valid_ids,
-      truth = as.character(y[valid_ids]),
-      predicted = outer_fit$predicted,
-      selected_candidate = selected_name,
-      stringsAsFactors = FALSE
-    )
-    feature_df <- .stabl_nested_feature_table(
-      selected_features = outer_fit$selected_features,
-      importances = outer_fit$importances,
-      repeat_id = outer[["repeat"]],
-      fold = outer$fold,
-      fold_id = outer$fold_id,
-      method = "stablr",
-      candidate = selected_name
-    )
-
-    inner_diag <- inner_eval$summary
-    inner_diag$repeat_id <- outer[["repeat"]]
-    inner_diag$fold <- outer$fold
-    inner_diag$fold_id <- outer$fold_id
-
-    list(
-      fold_result = list(
-        outer_fold = outer,
-        inner_folds = inner_folds,
-        inner_results = inner_eval,
-        selected_candidate = selected_name,
-        fit = outer_fit
-      ),
-      diagnostics = inner_diag,
-      predictions = pred_df,
-      selected_features = feature_df
     )
   }
 
   if (cv_workers > 1L && .Platform$OS.type != "windows") {
     outer_results <- parallel::mclapply(
       seq_along(outer_folds),
-      process_outer_fold,
+      fold_runner,
       mc.cores = min(cv_workers, length(outer_folds))
     )
   } else {
-    outer_results <- lapply(seq_along(outer_folds), process_outer_fold)
+    outer_results <- lapply(seq_along(outer_folds), fold_runner)
   }
 
   fold_results <- lapply(outer_results, `[[`, "fold_result")
@@ -620,6 +552,102 @@ stabl_multiomic_nested_cv <- function(
     )
   })
   do.call(rbind, rows)
+}
+
+.run_nested_cv_fold <- function(outer_i, outer_folds, strata_labels, inner_v,
+                               stratified, x_list, y, candidates, lambda_grid,
+                               metric, family, n_bootstraps, artificial_type,
+                               hard_threshold, random_state, n_lambda, l1_ratio,
+                               workers, ...) {
+  outer <- outer_folds[[outer_i]]
+  train_ids <- outer$train_ids
+  valid_ids <- outer$valid_ids
+
+  inner_seed <- .derive_nested_seed(random_state, outer_i, 1000L)
+  inner_folds <- .make_cv_folds(
+    y = strata_labels[train_ids],
+    v = inner_v,
+    stratified = stratified,
+    random_state = inner_seed
+  )
+
+  inner_eval <- .evaluate_stabl_candidates_inner(
+    x_list = x_list,
+    y = y,
+    train_ids = train_ids,
+    candidates = candidates,
+    inner_folds = inner_folds,
+    lambda_grid = lambda_grid,
+    metric = metric,
+    family = family,
+    n_bootstraps = n_bootstraps,
+    artificial_type = artificial_type,
+    hard_threshold = hard_threshold,
+    random_state = .derive_nested_seed(random_state, outer_i, 2000L),
+    n_lambda = n_lambda,
+    l1_ratio = l1_ratio,
+    workers = workers,
+    ...
+  )
+
+  selected_name <- .select_nested_candidate(inner_eval$summary, metric)
+  selected_candidate <- candidates[[selected_name]]
+
+  outer_fit <- .fit_stabl_nested_candidate(
+    x_list = x_list,
+    y = y,
+    train_ids = train_ids,
+    valid_ids = valid_ids,
+    candidate = selected_candidate,
+    lambda_grid = lambda_grid,
+    family = family,
+    n_bootstraps = n_bootstraps,
+    artificial_type = artificial_type,
+    hard_threshold = hard_threshold,
+    random_state = .derive_nested_seed(random_state, outer_i, 3000L),
+    n_lambda = n_lambda,
+    l1_ratio = l1_ratio,
+    workers = workers,
+    ...
+  )
+
+  pred_df <- data.frame(
+    repeat_id = outer[["repeat"]],
+    fold = outer$fold,
+    fold_id = outer$fold_id,
+    sample_id = valid_ids,
+    truth = as.character(y[valid_ids]),
+    predicted = outer_fit$predicted,
+    selected_candidate = selected_name,
+    stringsAsFactors = FALSE
+  )
+  feature_df <- .stabl_nested_feature_table(
+    selected_features = outer_fit$selected_features,
+    importances = outer_fit$importances,
+    repeat_id = outer[["repeat"]],
+    fold = outer$fold,
+    fold_id = outer$fold_id,
+    method = "stablr",
+    candidate = selected_name
+  )
+
+  inner_diag <- inner_eval$summary
+  inner_diag$repeat_id <- outer[["repeat"]]
+  inner_diag$fold <- outer$fold
+  inner_diag$fold_id <- outer$fold_id
+
+  list(
+    fold_result = list(
+      outer_fold = outer,
+      inner_folds = inner_folds,
+      inner_results = inner_eval,
+      selected_candidate = selected_name,
+      fit = outer_fit
+    ),
+    diagnostics = inner_diag,
+    predictions = pred_df,
+    selected_features = feature_df
+  )
 }
 
 #' @describeIn stabl_multiomic_nested_cv Print a concise summary of a
