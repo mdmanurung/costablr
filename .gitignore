@@ -196,3 +196,6 @@ scratch/**/results/
 !papers/application-note/artifacts/knockoff_parity.csv
 !papers/application-note/artifacts/parity_summary.csv
 !papers/application-note/artifacts/max_score_concordance.csv
+!papers/application-note/artifacts/mvr_fdr_power.csv
+!papers/application-note/artifacts/coop_rho_sweep.csv
+!papers/application-note/artifacts/coop_rho_sweep_summary.csv
