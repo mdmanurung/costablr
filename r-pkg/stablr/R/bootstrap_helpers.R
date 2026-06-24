@@ -429,18 +429,17 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
 
 .unstratified_group_bootstrap_indices <- function(groups, group_levels,
                                                   n_subsamples, replace) {
-  # When replace = FALSE, each group may only be drawn once.
-  # Track the remaining available pool so we stop re-drawing exhausted groups.
-  # Collect each drawn group's indices into a list to avoid quadratic
-  # c()-in-loop growth; unlist() once after the loop.
+  .sample_groups_until(group_levels, groups, n_subsamples, replace)
+}
+
+# Shared group-sampling while-loop: draw groups until target_n indices are
+# accumulated; use index-then-subset to avoid R's sample(x,1) length-1 pitfall.
+.sample_groups_until <- function(group_levels, groups, target_n, replace) {
   remaining  <- group_levels
   idx_chunks <- list()
   total_len  <- 0L
 
-  while (total_len < n_subsamples && length(remaining) > 0L) {
-    # Use index-then-subset to avoid R's `sample(x, 1)` length-1 pitfall:
-    # when length(remaining) == 1 and remaining is numeric, sample(remaining, 1L)
-    # silently behaves as sample.int(remaining, 1L) and fabricates a label.
+  while (total_len < target_n && length(remaining) > 0L) {
     pick_pos  <- sample.int(length(remaining), size = 1L)
     g         <- remaining[[pick_pos]]
     remaining <- if (replace) remaining else remaining[-pick_pos]
@@ -449,10 +448,8 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
     total_len <- total_len + length(chunk)
   }
 
-  sampled_idx <- unlist(idx_chunks, use.names = FALSE)
-  # Groups are non-overlapping by definition, so unique() is a no-op in
-  # replace=FALSE mode — kept for consistency with the original contract.
-  if (!replace) unique(sampled_idx) else sampled_idx
+  idx <- unlist(idx_chunks, use.names = FALSE)
+  if (!replace) unique(idx) else idx
 }
 
 .stratified_group_bootstrap_indices <- function(strata_ids, groups, group_levels,
@@ -476,21 +473,9 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
   outer_chunks <- list()
 
   for (stratum in names(target_counts)) {
-    remaining    <- group_levels[group_strata == stratum]
-    inner_chunks <- list()
-    stratum_len  <- 0L
-
-    while (stratum_len < target_counts[[stratum]] && length(remaining) > 0L) {
-      pick_pos  <- sample.int(length(remaining), size = 1L)
-      g         <- remaining[[pick_pos]]
-      remaining <- if (replace) remaining else remaining[-pick_pos]
-      chunk     <- which(groups == g)
-      inner_chunks[[length(inner_chunks) + 1L]] <- chunk
-      stratum_len <- stratum_len + length(chunk)
-    }
-
-    stratum_idx <- unlist(inner_chunks, use.names = FALSE)
-    if (!replace) stratum_idx <- unique(stratum_idx)
+    stratum_idx <- .sample_groups_until(
+      group_levels[group_strata == stratum], groups, target_counts[[stratum]], replace
+    )
 
     if (length(stratum_idx) < target_counts[[stratum]]) {
       stop(
