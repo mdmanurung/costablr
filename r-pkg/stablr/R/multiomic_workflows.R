@@ -507,37 +507,80 @@ stabl_multiomic_cv <- function(
 .late_fusion_multiomic_fit <- function(selected_train, selected_valid, y_train,
                                         y_valid, omic_names, family, n_iter_lf,
                                         random_state) {
-  task_type    <- .family_to_task_type(family)
-  y_train_mean <- if (identical(task_type, "regression")) {
-    mean(unname(y_train))
-  } else {
-    NA_real_
-  }
-
+  task_type <- .family_to_task_type(family)
   if (identical(task_type, "multiclass")) {
-    train_preds <- .named_omic_list(omic_names)
-    valid_preds <- if (!is.null(selected_valid)) .named_omic_list(omic_names) else NULL
+    .late_fusion_multiclass(selected_train, selected_valid, y_train, y_valid,
+                            omic_names, n_iter_lf, random_state)
   } else {
-    train_preds <- matrix(
-      NA_real_,
-      nrow = length(y_train),
-      ncol = length(omic_names),
-      dimnames = list(names(y_train), omic_names)
+    .late_fusion_scalar(selected_train, selected_valid, y_train, y_valid,
+                        omic_names, task_type, n_iter_lf, random_state)
+  }
+}
+
+.late_fusion_multiclass <- function(selected_train, selected_valid, y_train, y_valid,
+                                    omic_names, n_iter_lf, random_state) {
+  train_preds <- .named_omic_list(omic_names)
+  valid_preds <- if (!is.null(selected_valid)) .named_omic_list(omic_names) else NULL
+  y_levels    <- levels(factor(y_train))
+
+  for (omic in omic_names) {
+    omic_result <- .late_fusion_fit_omic(
+      x_train_sel  = selected_train[[omic]],
+      y_train      = y_train,
+      x_valid_sel  = if (!is.null(selected_valid)) selected_valid[[omic]] else NULL,
+      y_train_mean = NA_real_,
+      task_type    = "multiclass",
+      levels       = y_levels
     )
-    valid_preds <- if (!is.null(selected_valid)) {
-      matrix(
-        NA_real_,
-        nrow = length(y_valid),
-        ncol = length(omic_names),
-        dimnames = list(names(y_valid), omic_names)
-      )
-    } else {
-      NULL
-    }
+    train_preds[[omic]] <- omic_result$train_preds
+    if (!is.null(valid_preds)) valid_preds[[omic]] <- omic_result$valid_preds
   }
 
-  y_levels <- if (identical(task_type, "multiclass")) {
-    levels(factor(y_train))
+  stacked <- stacked_multi_omic(
+    predictions  = train_preds,
+    y            = unname(y_train),
+    task_type    = "multiclass",
+    n_iter       = n_iter_lf,
+    random_state = random_state
+  )
+
+  lf_valid_preds <- if (is.null(valid_preds)) NULL else
+    .apply_multiclass_stack_weights(valid_preds, stacked$weights$Associated_weight)
+
+  lf_result <- list(
+    weights           = stacked$weights,
+    train_predictions = stacked$predictions,
+    valid_predictions = lf_valid_preds,
+    score             = stacked$score,
+    task_type         = "multiclass",
+    levels            = stacked$levels,
+    log_loss          = stacked$log_loss,
+    train_metrics     = .classification_metrics(
+      truth     = factor(y_train, levels = stacked$levels),
+      predicted = factor(stacked$predictions$predicted_class, levels = stacked$levels)
+    )
+  )
+  if (!is.null(y_valid) && !is.null(lf_valid_preds)) {
+    lf_result$valid_metrics <- .classification_metrics(
+      truth     = factor(y_valid, levels = stacked$levels),
+      predicted = factor(lf_valid_preds$predicted_class, levels = stacked$levels)
+    )
+  }
+  lf_result
+}
+
+.late_fusion_scalar <- function(selected_train, selected_valid, y_train, y_valid,
+                                omic_names, task_type, n_iter_lf, random_state) {
+  y_train_mean <- if (identical(task_type, "regression")) mean(unname(y_train)) else NA_real_
+  train_preds  <- matrix(
+    NA_real_,
+    nrow     = length(y_train),
+    ncol     = length(omic_names),
+    dimnames = list(names(y_train), omic_names)
+  )
+  valid_preds <- if (!is.null(selected_valid)) {
+    matrix(NA_real_, nrow = length(y_valid), ncol = length(omic_names),
+           dimnames = list(names(y_valid), omic_names))
   } else {
     NULL
   }
@@ -549,19 +592,10 @@ stabl_multiomic_cv <- function(
       x_valid_sel  = if (!is.null(selected_valid)) selected_valid[[omic]] else NULL,
       y_train_mean = y_train_mean,
       task_type    = task_type,
-      levels       = y_levels
+      levels       = NULL
     )
-    if (identical(task_type, "multiclass")) {
-      train_preds[[omic]] <- omic_result$train_preds
-      if (!is.null(valid_preds)) {
-        valid_preds[[omic]] <- omic_result$valid_preds
-      }
-    } else {
-      train_preds[, omic] <- omic_result$train_preds
-      if (!is.null(valid_preds)) {
-        valid_preds[, omic] <- omic_result$valid_preds
-      }
-    }
+    train_preds[, omic] <- omic_result$train_preds
+    if (!is.null(valid_preds)) valid_preds[, omic] <- omic_result$valid_preds
   }
 
   stacked <- stacked_multi_omic(
@@ -572,39 +606,13 @@ stabl_multiomic_cv <- function(
     random_state = random_state
   )
 
-  lf_valid_preds <- if (is.null(valid_preds)) {
-    NULL
-  } else if (identical(task_type, "multiclass")) {
-    .apply_multiclass_stack_weights(valid_preds, stacked$weights$Associated_weight)
-  } else {
-    .weighted_masked_mean(valid_preds, stacked$weights$Associated_weight)
-  }
-
-  lf_result <- list(
+  list(
     weights           = stacked$weights,
     train_predictions = stacked$predictions,
-    valid_predictions = lf_valid_preds,
+    valid_predictions = if (is.null(valid_preds)) NULL else
+      .weighted_masked_mean(valid_preds, stacked$weights$Associated_weight),
     score             = stacked$score
   )
-  if (identical(task_type, "multiclass")) {
-    lf_result$task_type <- task_type
-    lf_result$levels <- stacked$levels
-    lf_result$log_loss <- stacked$log_loss
-    lf_result$train_metrics <- .classification_metrics(
-      truth = factor(y_train, levels = stacked$levels),
-      predicted = factor(stacked$predictions$predicted_class,
-                         levels = stacked$levels)
-    )
-    if (!is.null(y_valid) && !is.null(lf_valid_preds)) {
-      lf_result$valid_metrics <- .classification_metrics(
-        truth = factor(y_valid, levels = stacked$levels),
-        predicted = factor(lf_valid_preds$predicted_class,
-                           levels = stacked$levels)
-      )
-    }
-  }
-
-  lf_result
 }
 
 .validate_multiomic_validation_inputs <- function(x_valid_list,
