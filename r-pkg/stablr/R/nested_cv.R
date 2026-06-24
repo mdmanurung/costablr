@@ -496,11 +496,14 @@ stabl_multiomic_nested_cv <- function(
   )
 }
 
+.majority_class_prediction <- function(y_train, n) {
+  rep(names(which.max(table(y_train))), n)
+}
+
 .predict_selected_multinomial <- function(x_train, y_train, x_valid, levels) {
   y_train <- factor(y_train, levels = levels)
   if (ncol(x_train) == 0L || length(unique(y_train)) < 2L) {
-    majority <- names(which.max(table(y_train)))  # ties: first alphabetically (table sort order)
-    return(rep(majority, nrow(x_valid)))
+    return(.majority_class_prediction(y_train, nrow(x_valid)))
   }
 
   pred <- tryCatch({
@@ -512,8 +515,7 @@ stabl_multiomic_nested_cv <- function(
     )
     as.character(stats::predict(fit, newx = x_valid, s = "lambda.min", type = "class")[, 1L])
   }, error = function(e) {
-    majority <- names(which.max(table(y_train)))  # ties: first alphabetically (table sort order)
-    rep(majority, nrow(x_valid))
+    .majority_class_prediction(y_train, nrow(x_valid))
   })
 
   pred
