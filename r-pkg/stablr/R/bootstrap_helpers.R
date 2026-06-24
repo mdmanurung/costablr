@@ -308,28 +308,12 @@ group_bootstrap_indices <- function(y, groups, n_subsamples, replace = FALSE,
   }
 
   n <- length(sample_ids)
+  if (is.matrix(strata)) {
+    strata <- as.data.frame(strata, stringsAsFactors = FALSE)
+  }
   if (is.data.frame(strata)) {
     out <- strata
     rn <- rownames(out)
-    has_ids <- .bootstrap_strata_has_row_ids(rn, sample_ids, nrow(out))
-    if (has_ids) {
-      if (!all(sample_ids %in% rn)) {
-        stop("Sample mismatch between `x` row names and `", arg, "` row names.",
-             call. = FALSE)
-      }
-      return(out[sample_ids, , drop = FALSE])
-    }
-    if (nrow(out) != n) {
-      stop("`", arg, "` must have one row per sample or row names matching `x`.",
-           call. = FALSE)
-    }
-    rownames(out) <- sample_ids
-    return(out)
-  }
-
-  if (is.matrix(strata)) {
-    out <- as.data.frame(strata, stringsAsFactors = FALSE)
-    rn <- rownames(strata)
     has_ids <- .bootstrap_strata_has_row_ids(rn, sample_ids, nrow(out))
     if (has_ids) {
       if (!all(sample_ids %in% rn)) {
