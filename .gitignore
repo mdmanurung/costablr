@@ -174,8 +174,12 @@ r-pkg/stablr/tests/testthat/fixtures/multinomial_elastic_net/
 r-pkg/stablr/tests/testthat/fixtures/metrics_scalars.csv
 r-pkg/stablr/tests/testthat/fixtures/metrics_vectors.csv
 
-# Generated publication artifacts (keep OUTLINE.md tracked)
-papers/application-note/artifacts/
+# Generated publication artifacts — block transient PDFs/logs; curated CSVs are tracked
+papers/application-note/artifacts/*.pdf
+papers/application-note/artifacts/*.log
+papers/application-note/artifacts/*.txt
+papers/application-note/artifacts/*.png
+papers/application-note/artifacts/generation.log
 
 # R package check/build debris
 stablr.Rcheck/
@@ -187,3 +191,8 @@ scratch/**/cache/
 scratch/**/export/
 scratch/**/exports/
 scratch/**/results/
+
+# Curated manuscript artifact CSVs (override the global *.csv rule above)
+!papers/application-note/artifacts/knockoff_parity.csv
+!papers/application-note/artifacts/parity_summary.csv
+!papers/application-note/artifacts/max_score_concordance.csv
