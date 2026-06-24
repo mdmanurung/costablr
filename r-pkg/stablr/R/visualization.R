@@ -340,11 +340,9 @@ plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
 #' @export
 plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
   .require_ggplot2()
-  y_true  <- as.integer(y_true)
-  y_preds <- as.numeric(y_preds)
-  if (length(y_true) != length(y_preds)) {
-    stop("`y_true` and `y_preds` must have the same length.", call. = FALSE)
-  }
+  inputs  <- .coerce_binary_inputs(y_true, y_preds)
+  y_true  <- inputs$y_true
+  y_preds <- inputs$y_preds
 
   roc_df  <- .roc_curve(y_true, y_preds)
   auc_val <- .trapz(roc_df$fpr, roc_df$tpr)
@@ -407,11 +405,9 @@ plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
 #' @export
 plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall Curve") {
   .require_ggplot2()
-  y_true  <- as.integer(y_true)
-  y_preds <- as.numeric(y_preds)
-  if (length(y_true) != length(y_preds)) {
-    stop("`y_true` and `y_preds` must have the same length.", call. = FALSE)
-  }
+  inputs  <- .coerce_binary_inputs(y_true, y_preds)
+  y_true  <- inputs$y_true
+  y_preds <- inputs$y_preds
 
   prc_df  <- .prc_curve(y_true, y_preds)
   auc_val <- .trapz(prc_df$recall, prc_df$precision)
@@ -580,6 +576,16 @@ scatterplot_features <- function(features, x, y, title = "Selected Features", nc
 }
 
 # ── Internal computation helpers ──────────────────────────────────────────────
+
+# Coerce and validate binary classifier inputs; returns list(y_true, y_preds).
+.coerce_binary_inputs <- function(y_true, y_preds) {
+  y_true  <- as.integer(y_true)
+  y_preds <- as.numeric(y_preds)
+  if (length(y_true) != length(y_preds)) {
+    stop("`y_true` and `y_preds` must have the same length.", call. = FALSE)
+  }
+  list(y_true = y_true, y_preds = y_preds)
+}
 
 # Intersect features with x columns; stop if none remain.
 .filter_features <- function(features, x) {
