@@ -50,7 +50,7 @@
 make_glmnet_adapter <- function(
     family              = "gaussian",
     alpha_fixed         = NULL,
-    bootstrap_threshold = 1e-5
+    bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
 ) {
   .require_pkg("glmnet")
   cox_ties <- .COX_TIES
@@ -133,7 +133,7 @@ make_adaptive_lasso_adapter <- function(
     family              = "gaussian",
     gamma               = 1.0,
     epsilon             = 1e-6,
-    bootstrap_threshold = 1e-5
+    bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
 ) {
   .require_pkg("glmnet")
   cox_ties <- .COX_TIES
@@ -231,7 +231,7 @@ make_sgl_adapter <- function(
     family              = "gaussian",
     feature_groups,
     alpha_fixed         = NULL,
-    bootstrap_threshold = 1e-5
+    bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
 ) {
   .require_pkg("sparsegl", "for base_learner = \"sparse_group_lasso\"")
   if (identical(family, "cox")) {
