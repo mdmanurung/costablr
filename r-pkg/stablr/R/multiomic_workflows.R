@@ -1004,12 +1004,32 @@ stabl_multiomic_cv <- function(
   best_score  <- diagnostics$metric_value[[best_index]]
   selector    <- cooperative_args$cooperation_selector
 
+  .build_cooperative_selection_result(
+    best_fit     = best_fit,
+    best_rho     = best_rho,
+    best_lambda  = best_lambda,
+    best_score   = best_score,
+    selector     = selector,
+    diagnostics  = diagnostics,
+    x_train_mv   = x_train_mv,
+    x_valid_mv   = x_valid_mv,
+    family       = family,
+    type_measure = cooperative_args$cooperation_type_measure,
+    s            = selector,
+    foldid       = foldid
+  )
+}
+
+.build_cooperative_selection_result <- function(best_fit, best_rho, best_lambda,
+                                                best_score, selector, diagnostics,
+                                                x_train_mv, x_valid_mv, family,
+                                                type_measure, s, foldid) {
   train_pred <- .cooperative_predict(
     fit          = best_fit,
     newx         = x_train_mv,
-    s            = selector,
+    s            = s,
     family       = family,
-    type_measure = cooperative_args$cooperation_type_measure
+    type_measure = type_measure
   )
   valid_pred <- if (is.null(x_valid_mv)) {
     NULL
@@ -1017,12 +1037,12 @@ stabl_multiomic_cv <- function(
     .cooperative_predict(
       fit          = best_fit,
       newx         = x_valid_mv,
-      s            = selector,
+      s            = s,
       family       = family,
-      type_measure = cooperative_args$cooperation_type_measure
+      type_measure = type_measure
     )
   }
-  coef_table <- .cooperative_coefficient_table(best_fit, s = selector)
+  coef_table <- .cooperative_coefficient_table(best_fit, s = s)
 
   list(
     best_fit    = best_fit,
@@ -1100,33 +1120,19 @@ stabl_multiomic_cv <- function(
   selected_row <- which(diagnostics$rho == best_rho & diagnostics$lambda == best_lambda)[1L]
   diagnostics$selected[[selected_row]] <- TRUE
 
-  train_pred <- .cooperative_predict(
-    fit          = best_fit,
-    newx         = x_train_mv,
-    s            = best_lambda,
+  .build_cooperative_selection_result(
+    best_fit     = best_fit,
+    best_rho     = best_rho,
+    best_lambda  = best_lambda,
+    best_score   = best_score,
+    selector     = selector,
+    diagnostics  = diagnostics,
+    x_train_mv   = x_train_mv,
+    x_valid_mv   = x_valid_mv,
     family       = family,
-    type_measure = cooperative_args$cooperation_type_measure
-  )
-  valid_pred <- .cooperative_predict(
-    fit          = best_fit,
-    newx         = x_valid_mv,
+    type_measure = cooperative_args$cooperation_type_measure,
     s            = best_lambda,
-    family       = family,
-    type_measure = cooperative_args$cooperation_type_measure
-  )
-  coef_table <- .cooperative_coefficient_table(best_fit, s = best_lambda)
-
-  list(
-    best_fit    = best_fit,
-    best_rho    = best_rho,
-    best_lambda = best_lambda,
-    best_score  = best_score,
-    selector    = selector,
-    diagnostics = diagnostics,
-    train_pred  = train_pred,
-    valid_pred  = valid_pred,
-    coef_table  = coef_table,
-    foldid      = NULL
+    foldid       = NULL
   )
 }
 
