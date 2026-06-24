@@ -301,14 +301,7 @@ stabl_multiomic_nested_cv <- function(
         class_ids <- sample(ids[y == lvl])
         fold_ids[class_ids] <- rep(seq_len(v), length.out = length(class_ids))
       }
-      lapply(seq_len(v), function(i) {
-        valid_ids <- names(fold_ids)[fold_ids == i]
-        list(
-          train_ids = setdiff(ids, valid_ids),
-          valid_ids = valid_ids,
-          fold = paste0("Fold", i)
-        )
-      })
+      .build_fold_list(ids, fold_ids, v)
     }
   )
 }
@@ -325,16 +318,20 @@ stabl_multiomic_nested_cv <- function(
       shuffled <- sample(ids)
       fold_ids <- rep(seq_len(v), length.out = length(shuffled))
       names(fold_ids) <- shuffled
-      lapply(seq_len(v), function(i) {
-        valid_ids <- names(fold_ids)[fold_ids == i]
-        list(
-          train_ids = setdiff(ids, valid_ids),
-          valid_ids = valid_ids,
-          fold = paste0("Fold", i)
-        )
-      })
+      .build_fold_list(ids, fold_ids, v)
     }
   )
+}
+
+.build_fold_list <- function(ids, fold_ids, v) {
+  lapply(seq_len(v), function(i) {
+    valid_ids <- names(fold_ids)[fold_ids == i]
+    list(
+      train_ids = setdiff(ids, valid_ids),
+      valid_ids = valid_ids,
+      fold      = paste0("Fold", i)
+    )
+  })
 }
 
 .derive_nested_seed <- function(random_state, index, offset) {
