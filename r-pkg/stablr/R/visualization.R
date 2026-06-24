@@ -492,10 +492,7 @@ plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall
 #' @export
 boxplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
   .require_ggplot2()
-  features <- intersect(features, colnames(x))
-  if (length(features) == 0L) {
-    stop("None of the requested `features` are columns of `x`.", call. = FALSE)
-  }
+  features <- .filter_features(features, x)
 
   df <- .features_long(features, x, y)
 
@@ -549,10 +546,7 @@ boxplot_features <- function(features, x, y, title = "Selected Features", ncol =
 #' @export
 scatterplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
   .require_ggplot2()
-  features <- intersect(features, colnames(x))
-  if (length(features) == 0L) {
-    stop("None of the requested `features` are columns of `x`.", call. = FALSE)
-  }
+  features <- .filter_features(features, x)
 
   y_num <- as.numeric(y)
   df_list <- lapply(features, function(f) {
@@ -586,6 +580,15 @@ scatterplot_features <- function(features, x, y, title = "Selected Features", nc
 }
 
 # ── Internal computation helpers ──────────────────────────────────────────────
+
+# Intersect features with x columns; stop if none remain.
+.filter_features <- function(features, x) {
+  features <- intersect(features, colnames(x))
+  if (length(features) == 0L) {
+    stop("None of the requested `features` are columns of `x`.", call. = FALSE)
+  }
+  features
+}
 
 # Compute ROC curve: returns data.frame(fpr, tpr)
 .roc_curve <- function(y_true, y_preds) {
