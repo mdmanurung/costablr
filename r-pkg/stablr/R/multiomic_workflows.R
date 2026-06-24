@@ -1522,23 +1522,20 @@ stacked_multi_omic <- function(
     priors <- as.numeric(table(y_train) / length(y_train))
     names(priors) <- levels
     fallback_matrix <- function(n, row_names) {
-      out <- matrix(
-        rep(priors, each = n),
-        nrow = n,
-        ncol = length(priors),
+      matrix(
+        rep(priors, each = n), nrow = n, ncol = length(priors),
         dimnames = list(row_names, names(priors))
       )
-      out
     }
-    if (n_sel == 0L) {
-      train_preds <- fallback_matrix(nrow(x_train_sel), rownames(x_train_sel))
-      valid_preds <- if (!is.null(x_valid_sel)) {
-        fallback_matrix(nrow(x_valid_sel), rownames(x_valid_sel))
-      } else {
-        NULL
-      }
-      return(list(train_preds = train_preds, valid_preds = valid_preds, model = NULL))
+    fallback_result <- function() {
+      list(
+        train_preds = fallback_matrix(nrow(x_train_sel), rownames(x_train_sel)),
+        valid_preds = if (!is.null(x_valid_sel))
+          fallback_matrix(nrow(x_valid_sel), rownames(x_valid_sel)) else NULL,
+        model = NULL
+      )
     }
+    if (n_sel == 0L) return(fallback_result())
 
     model_fit <- tryCatch({
       glmnet::cv.glmnet(
@@ -1550,15 +1547,7 @@ stacked_multi_omic <- function(
       )
     }, error = function(e) NULL)
 
-    if (is.null(model_fit)) {
-      train_preds <- fallback_matrix(nrow(x_train_sel), rownames(x_train_sel))
-      valid_preds <- if (!is.null(x_valid_sel)) {
-        fallback_matrix(nrow(x_valid_sel), rownames(x_valid_sel))
-      } else {
-        NULL
-      }
-      return(list(train_preds = train_preds, valid_preds = valid_preds, model = NULL))
-    }
+    if (is.null(model_fit)) return(fallback_result())
 
     coerce_prob <- function(pred, row_names) {
       pred <- as.matrix(pred[, , 1L])
