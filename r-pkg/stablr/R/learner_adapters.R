@@ -53,6 +53,7 @@ make_glmnet_adapter <- function(
     bootstrap_threshold = 1e-5
 ) {
   .require_pkg("glmnet")
+  cox_ties <- .COX_TIES
 
   function(x, y, lambda_val) {
     alpha_use <- if (!is.null(alpha_fixed)) {
@@ -71,7 +72,7 @@ make_glmnet_adapter <- function(
       family    = family,
       alpha     = alpha_use,
       lambda    = lambda_use,
-      cox.ties  = "efron"
+      cox.ties  = cox_ties
     )
     .feature_abs_coefs(fit = fit, s = lambda_use, family = family) > bootstrap_threshold
   }
@@ -135,6 +136,7 @@ make_adaptive_lasso_adapter <- function(
     bootstrap_threshold = 1e-5
 ) {
   .require_pkg("glmnet")
+  cox_ties <- .COX_TIES
   if (!is.numeric(gamma) || length(gamma) != 1L || gamma <= 0) {
     stop("`gamma` must be a positive numeric scalar.", call. = FALSE)
   }
@@ -152,7 +154,7 @@ make_adaptive_lasso_adapter <- function(
       family   = family,
       alpha    = 0,
       nlambda  = 30L,
-      cox.ties = "efron"
+      cox.ties = cox_ties
     )
     init_lambda <- tail(init_fit$lambda, n = 1L)
     init_scores <- .feature_abs_coefs(fit = init_fit, s = init_lambda,
@@ -166,7 +168,7 @@ make_adaptive_lasso_adapter <- function(
       alpha          = 1,
       lambda         = lambda_use,
       penalty.factor = penalty_factor,
-      cox.ties       = "efron"
+      cox.ties       = cox_ties
     )
     .feature_abs_coefs(fit = fit, s = lambda_use, family = family) > bootstrap_threshold
   }
@@ -376,6 +378,7 @@ auto_lambda_grid <- function(
     l1_ratio = NULL
 ) {
   .require_pkg("glmnet")
+  cox_ties <- .COX_TIES
 
   alphas <- if (is.null(l1_ratio)) 1.0 else as.numeric(l1_ratio)
   add_alpha <- !is.null(l1_ratio)
@@ -388,7 +391,7 @@ auto_lambda_grid <- function(
       family   = family,
       alpha    = alphas[[i]],
       nlambda  = n_lambda,
-      cox.ties = "efron"
+      cox.ties = cox_ties
     )
     lam_seq <- fit_tmp$lambda
     grids[[i]] <- if (add_alpha) {
@@ -484,6 +487,7 @@ auto_lambda_grid <- function(
 # from n_bootstraps × n_lambdas model fits to just n_bootstraps fits.
 
 .make_glmnet_batch_adapter <- function(family, alpha_fixed, bootstrap_threshold) {
+  cox_ties <- .COX_TIES
   function(x, y, lambda_grid) {
     n_lambdas  <- nrow(lambda_grid)
     n_features <- ncol(x)
@@ -498,7 +502,7 @@ auto_lambda_grid <- function(
         lambda_seq        <- lambda_grid[["lambda"]][row_idx]
         fit               <- glmnet::glmnet(x, y, family = family, alpha = a,
                                             lambda = sort(lambda_seq, decreasing = TRUE),
-                                            cox.ties = "efron")
+                                            cox.ties = cox_ties)
         result[, row_idx] <- .feature_abs_coefs_batch(fit, lambda_seq, family = family) > bootstrap_threshold
       }
     } else {
@@ -507,7 +511,7 @@ auto_lambda_grid <- function(
       lambda_seq <- lambda_grid[["lambda"]]
       fit        <- glmnet::glmnet(x, y, family = family, alpha = alpha,
                                    lambda = sort(lambda_seq, decreasing = TRUE),
-                                   cox.ties = "efron")
+                                   cox.ties = cox_ties)
       result     <- .feature_abs_coefs_batch(fit, lambda_seq, family = family) > bootstrap_threshold
     }
 
@@ -517,12 +521,13 @@ auto_lambda_grid <- function(
 
 .make_adaptive_lasso_batch_adapter <- function(family, gamma, epsilon,
                                                bootstrap_threshold) {
+  cox_ties <- .COX_TIES
   function(x, y, lambda_grid) {
     lambda_seq <- lambda_grid[["lambda"]]
 
     # Ridge initialization to compute adaptive penalty weights
     init_fit       <- glmnet::glmnet(x, y, family = family, alpha = 0,
-                                     nlambda = 30L, cox.ties = "efron")
+                                     nlambda = 30L, cox.ties = cox_ties)
     init_lambda    <- tail(init_fit$lambda, n = 1L)
     init_scores    <- .feature_abs_coefs(fit = init_fit, s = init_lambda,
                        family = family)
@@ -532,7 +537,7 @@ auto_lambda_grid <- function(
     fit      <- glmnet::glmnet(x, y, family = family, alpha = 1,
                                lambda         = sort(lambda_seq, decreasing = TRUE),
                                penalty.factor = penalty_factor,
-                               cox.ties       = "efron")
+                               cox.ties       = cox_ties)
     coef_mat <- .feature_abs_coefs_batch(fit, lambda_seq, family = family)
     coef_mat > bootstrap_threshold
   }
