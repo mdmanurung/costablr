@@ -156,10 +156,7 @@ stabl_multiomic_nested_cv <- function(
   predictions <- do.call(rbind, prediction_rows)
   diagnostics <- do.call(rbind, inner_rows)
   selected_features <- do.call(rbind, feature_rows)
-  performance <- .classification_metrics(
-    truth = factor(predictions$truth, levels = levels(y)),
-    predicted = factor(predictions$predicted, levels = levels(y))
-  )
+  performance <- .classification_metrics_from_preds_df(predictions, y)
 
   structure(
     list(
@@ -384,10 +381,7 @@ stabl_multiomic_nested_cv <- function(
     }
 
     preds <- do.call(rbind, pred_rows)
-    metrics <- .classification_metrics(
-      truth = factor(preds$truth, levels = levels(y)),
-      predicted = factor(preds$predicted, levels = levels(y))
-    )
+    metrics <- .classification_metrics_from_preds_df(preds, y)
     candidate_rows[[cand_name]] <- data.frame(
       candidate = cand_name,
       accuracy = metrics$accuracy,
@@ -498,6 +492,13 @@ stabl_multiomic_nested_cv <- function(
 
 .majority_class_prediction <- function(y_train, n) {
   rep(names(which.max(table(y_train))), n)
+}
+
+.classification_metrics_from_preds_df <- function(predictions, y) {
+  .classification_metrics(
+    truth     = factor(predictions$truth,     levels = levels(y)),
+    predicted = factor(predictions$predicted, levels = levels(y))
+  )
 }
 
 .predict_selected_multinomial <- function(x_train, y_train, x_valid, levels) {
