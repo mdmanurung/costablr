@@ -1,9 +1,0 @@
-config,knockoff_type,method_a,method_b,n,pearson_r,spearman_r,max_abs_dev,mean_abs_dev,is_constant_a
-ar1_p20_rho05,equicorrelated,R_knockoff_equi,Python_knockpy_equi,20,NA,NA,0.000654506599402027,0.000654506599402027,TRUE
-ar1_p20_rho05,mvr,R_knockoff_mvr,Python_knockpy_mvr,20,0.999999999941065,0.86015037593985,1.3608356094208e-06,4.32371588962588e-07,FALSE
-ar1_p20_rho07,equicorrelated,R_knockoff_equi,Python_knockpy_equi,20,NA,NA,0.000346700875759332,0.000346700875759332,TRUE
-ar1_p20_rho07,mvr,R_knockoff_mvr,Python_knockpy_mvr,20,0.999999999782258,0.873684210526316,2.93937514761478e-06,7.72208118350604e-07,FALSE
-ar1_p50_rho03,equicorrelated,R_knockoff_equi,Python_knockpy_equi,50,NA,NA,0.0009765625,0.0009765625,TRUE
-ar1_p50_rho03,mvr,R_knockoff_mvr,Python_knockpy_mvr,50,0.999999999996225,0.521920768307323,2.52981057324853e-07,4.10470659373274e-08,FALSE
-block_p40_rho08,equicorrelated,R_knockoff_equi,Python_knockpy_equi,40,NA,NA,0.000390625000000255,0.000390625000000255,TRUE
-block_p40_rho08,mvr,R_knockoff_mvr,Python_knockpy_mvr,40,0.376179031165857,0.326641651031895,2.82504575288556e-12,7.09840519697025e-13,FALSE

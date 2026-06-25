@@ -1,0 +1,13 @@
+^doc$
+^Meta$
+^docs$
+^R/RcppExports\.R$
+^scripts$
+^vignettes/.*\.html$
+^vignettes/.*-cache$
+^vignettes/tcga_results$
+# stray graphics-device byproducts produced on headless hosts during tests
+Rplots\.pdf$
+# CI configuration and CRAN submission notes — not part of the package source tarball
+^\.github$
+^cran-comments\.md$

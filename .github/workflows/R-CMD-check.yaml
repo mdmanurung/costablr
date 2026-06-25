@@ -14,19 +14,21 @@ on:
   push:
     branches: [stabl_lw, feature-cooperativelearning]
     paths:
-      - "r-pkg/stablr/**"
+      - "R/**"
+      - "src/**"
+      - "tests/**"
+      - "DESCRIPTION"
       - ".github/workflows/R-CMD-check.yaml"
   pull_request:
     branches: [stabl_lw, feature-cooperativelearning]
     paths:
-      - "r-pkg/stablr/**"
+      - "R/**"
+      - "src/**"
+      - "tests/**"
+      - "DESCRIPTION"
       - ".github/workflows/R-CMD-check.yaml"
 
 name: R-CMD-check
-
-defaults:
-  run:
-    working-directory: r-pkg/stablr
 
 jobs:
   R-CMD-check:
@@ -60,12 +62,10 @@ jobs:
         with:
           extra-packages: any::rcmdcheck
           needs: check
-          working-directory: r-pkg/stablr
 
       - uses: r-lib/actions/check-r-package@v2
         with:
           upload-snapshots: true
-          working-directory: r-pkg/stablr
 
   coverage:
     runs-on: ubuntu-latest
@@ -85,7 +85,6 @@ jobs:
         with:
           extra-packages: any::covr, any::xml2
           needs: coverage
-          working-directory: r-pkg/stablr
 
       - name: Test coverage
         run: |
