@@ -18,7 +18,7 @@ Named list with elements \code{x_augmented} and \code{noise_col_indices};
 see \code{\link[=make_rp_features]{make_rp_features()}} for details.
 }
 \description{
-Generates model-X knockoff features via \code{knockoff::create.fixed()}, with
+Generates \strong{fixed-X} knockoff features via \code{knockoff::create.fixed()}, with
 column-chunking for datasets that exceed 3 000 features (mirroring the
 Python STABL implementation that chunks calls to \code{GaussianSampler}).
 Falls back to random-permutation features when the knockoff constructor

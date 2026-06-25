@@ -345,6 +345,7 @@ get_importances.stabl_fit <- function(object) {
 
 #' @describeIn stabl_fit Print a concise summary of a fitted `stabl_fit` object;
 #'   invisibly returns `x`.
+#' @param ... Ignored; present for S3 `print` method compatibility.
 #' @export
 print.stabl_fit <- function(x, ...) {
   cat("<stabl_fit>\n")

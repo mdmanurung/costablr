@@ -129,6 +129,8 @@ grid used by existing workflows.}
 to derive sparse-group feature groups from pairwise correlations of
 original features. Used only when
 \code{base_learner = "sparse_group_lasso"}.}
+
+\item{...}{Ignored; present for S3 \code{print} method compatibility.}
 }
 \value{
 An S3 object of class \code{"stabl_fit"} containing:

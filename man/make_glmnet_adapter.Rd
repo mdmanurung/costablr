@@ -7,7 +7,7 @@
 make_glmnet_adapter(
   family = "gaussian",
   alpha_fixed = NULL,
-  bootstrap_threshold = 1e-05
+  bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
 )
 }
 \arguments{

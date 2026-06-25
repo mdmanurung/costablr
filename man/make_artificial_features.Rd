@@ -9,14 +9,15 @@ make_artificial_features(x, n_injected, type, random_state = NULL)
 \arguments{
 \item{x}{Numeric matrix of predictors (samples \eqn{\times} features).
 Must have more columns than \code{n_injected} for random permutation; for
-knockoffs, must not be rank-deficient (a fallback to random permutation
-is attempted otherwise).}
+knockoffs, a fallback to random permutation is attempted when the
+knockoff constructor fails (e.g., rank-deficient input).}
 
 \item{n_injected}{Positive integer; number of artificial columns to append.
 Typically \code{round(ncol(x) * artificial_proportion)} as computed in
 \code{\link[=stabl_fit]{stabl_fit()}}.}
 
-\item{type}{Character string; \code{"random_permutation"} or \code{"knockoff"}.}
+\item{type}{Character string; one of \code{"random_permutation"}, \code{"knockoff"},
+\code{"knockoff_equi"}, or \code{"knockoff_mvr"}.}
 
 \item{random_state}{Optional integer; passed to \code{\link[=set.seed]{set.seed()}} before any
 random operations for reproducibility.  \code{NULL} leaves the RNG unchanged.
@@ -50,16 +51,24 @@ is selected at a given stability threshold.  This observed noise-selection
 rate drives the FDP+ bound computed in \code{\link[=compute_fdp_plus]{compute_fdp_plus()}}, eliminating
 the need to choose a stability threshold by hand.
 
-Two noise strategies are supported:
+Four noise strategies are supported:
 \describe{
 \item{\code{"random_permutation"}}{Copies \code{n_injected} randomly chosen real
 columns and shuffles each copy independently, breaking all signal while
 preserving marginal distributions.  Fast and broadly applicable.}
-\item{\code{"knockoff"}}{Generates model-X knockoffs via
+\item{\code{"knockoff"}}{Generates \strong{fixed-X} knockoffs via
 \code{\link[knockoff:create.fixed]{knockoff::create.fixed()}}, which preserve the covariance structure of
-the original features.  More powerful when features are correlated, at
-the cost of requiring the optional \code{knockoff} package and higher
-compute.}
+the original features under the fixed-design assumption.  Kept for
+backward compatibility.}
+\item{\code{"knockoff_equi"}}{Generates \strong{model-X equicorrelated} knockoffs
+via \code{knockoff::create.gaussian(..., method = "equi")}.  This matches the
+\code{GaussianSampler(method='equicorrelated')} call in Python STABL and is
+the parity-correct knockoff type for cross-language comparisons.}
+\item{\code{"knockoff_mvr"}}{Generates \strong{model-X MVR} (minimum-variance-
+reconstructability) knockoffs.  The S-matrix is solved by \code{solve_mvr()}
+(a pure-R port of \code{knockpy.mrc}); sampling uses
+\code{knockoff::create.gaussian(..., diag_s = S)}.  This is a novel feature
+exclusive to \code{stablr}.}
 }
 }
 \seealso{

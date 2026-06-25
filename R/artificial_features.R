@@ -207,7 +207,7 @@ make_knockoff_equi_features <- function(x, n_injected, random_state = NULL) {
 #' Make Model-X MVR Knockoff Artificial Features
 #'
 #' Generates **model-X MVR (minimum-variance-reconstructability)** knockoff
-#' features.  The S-matrix is solved via [solve_mvr()] (a pure-R coordinate-
+#' features.  The S-matrix is solved via `solve_mvr()` (a pure-R coordinate-
 #' descent port of `knockpy.mrc._solve_mvr_ungrouped`), then the knockoff
 #' sample is drawn with `knockoff::create.gaussian(..., diag_s = S)`.
 #' This is a novel feature exclusive to `stablr` — the Python STABL library
@@ -217,7 +217,7 @@ make_knockoff_equi_features <- function(x, n_injected, random_state = NULL) {
 #'
 #' @param x Numeric matrix of predictors (samples \eqn{\times} features).
 #' @param n_injected Integer; number of knockoff columns to select.
-#' @param random_state Optional integer seed; passed to [solve_mvr()] for the
+#' @param random_state Optional integer seed; passed to `solve_mvr()` for the
 #'   coordinate-shuffle RNG.
 #'
 #' @return Named list with elements `x_augmented` and `noise_col_indices`;
@@ -328,7 +328,7 @@ make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
 #'     `GaussianSampler(method='equicorrelated')` call in Python STABL and is
 #'     the parity-correct knockoff type for cross-language comparisons.}
 #'   \item{`"knockoff_mvr"`}{Generates **model-X MVR** (minimum-variance-
-#'     reconstructability) knockoffs.  The S-matrix is solved by [solve_mvr()]
+#'     reconstructability) knockoffs.  The S-matrix is solved by `solve_mvr()`
 #'     (a pure-R port of `knockpy.mrc`); sampling uses
 #'     `knockoff::create.gaussian(..., diag_s = S)`.  This is a novel feature
 #'     exclusive to `stablr`.}

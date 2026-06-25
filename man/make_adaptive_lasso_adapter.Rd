@@ -8,7 +8,7 @@ make_adaptive_lasso_adapter(
   family = "gaussian",
   gamma = 1,
   epsilon = 1e-06,
-  bootstrap_threshold = 1e-05
+  bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
 )
 }
 \arguments{

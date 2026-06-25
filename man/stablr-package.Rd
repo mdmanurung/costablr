@@ -52,4 +52,16 @@ Authors:
   \item Mikaël Manurung \email{mikhael.manurung@gmail.com}
 }
 
+Other contributors:
+\itemize{
+  \item Jean Hédou (Original STABL method (Hédou et al., Nat Biotechnol 2024)) [contributor]
+  \item Ivana Marić (Original STABL method (Hédou et al., Nat Biotechnol 2024)) [contributor]
+  \item Gregory Bellan (Original STABL method (Hédou et al., Nat Biotechnol 2024)) [contributor]
+  \item David Gfeller (Original STABL method (Hédou et al., Nat Biotechnol 2024)) [contributor]
+  \item Daisy Yi Ding (Cooperative learning / multiview method (Ding et al., PNAS 2022)) [contributor]
+  \item Shuangning Li (Cooperative learning / multiview method (Ding et al., PNAS 2022)) [contributor]
+  \item Balasubramanian Narasimhan (Cooperative learning / multiview method (Ding et al., PNAS 2022)) [contributor]
+  \item Robert J. Tibshirani (Cooperative learning / multiview method (Ding et al., PNAS 2022)) [contributor]
+}
+
 }
