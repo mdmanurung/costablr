@@ -68,6 +68,7 @@ NeedsCompilation: yes
 SystemRequirements: C++17
 Collate:
     'stablr-package.R'
+    'knockoff_mvr.R'
     'artificial_features.R'
     'bootstrap_helpers.R'
     'data_helpers.R'

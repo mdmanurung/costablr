@@ -10,4 +10,6 @@
 Rplots\.pdf$
 # CI configuration and CRAN submission notes — not part of the package source tarball
 ^\.github$
+^\.claude$
 ^cran-comments\.md$
+^_pkgdown\.yml$

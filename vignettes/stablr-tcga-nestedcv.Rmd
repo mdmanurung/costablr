@@ -72,22 +72,27 @@ most recurrent features, with explicit post-selection qualification.
 
 ## Run on SLURM
 
-```{r cache-setup}
+```{r cache-setup, eval = TRUE}
 experiments_root <- Sys.getenv(
   "STABLR_EXPERIMENTS_ROOT",
   unset = file.path(dirname(getwd()), "stablr-experiments")
 )
 analysis_dir <- file.path(experiments_root, "analysis")
 analysis_script <- file.path(analysis_dir, "run_tcga_nestedcv.R")
-source(analysis_script)
+if (file.exists(analysis_script)) {
+  source(analysis_script)
+} else {
+  tcga_cache_complete <- function(path) file.exists(path)
+}
 
 cache_path <- file.path(analysis_dir, "cache", "tcga_nestedcv_results.rds")
 slurm_cmd <- paste("sbatch", file.path(analysis_dir, "tcga_nestedcv.slurm"))
+has_results <- FALSE  # updated by cache-status chunk below
 cat("Expected cache:", cache_path, "\n")
 cat("Submit command:", slurm_cmd, "\n")
 ```
 
-```{r cache-status}
+```{r cache-status, eval = TRUE}
 has_results <- tcga_cache_complete(cache_path)
 if (!has_results) {
   cat(

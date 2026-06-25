@@ -148,6 +148,10 @@ test_that("jaccard_matrix returns correct dimensions with remove_diag", {
 })
 
 test_that("metrics functions match frozen Python reference values", {
+  skip_if_not(
+    dir.exists(testthat::test_path("fixtures", "python_parity")),
+    "python_parity fixtures not present (run from stablr-experiments)"
+  )
   ref <- .load_python_metrics_reference()
   inp <- .python_metric_inputs()
   tol <- 1e-12
