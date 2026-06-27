@@ -80,3 +80,78 @@ test_that("E1: get_stabl_scores errors on an unfitted object", {
   class(not_fit) <- "stabl_fit"
   expect_error(get_stabl_scores(not_fit), regexp = "stabl_scores_")
 })
+
+test_that("transform_stabl subsets matrix input in fitted feature order and preserves row names", {
+  fit <- structure(
+    list(
+      stabl_scores_ = matrix(c(0.1, 0.9, 0.7), ncol = 1L,
+                             dimnames = list(c("b", "a", "c"), NULL)),
+      hard_threshold = 0.5,
+      fdr_min_threshold_ = NULL,
+      explore = FALSE,
+      n_explore = 1L,
+      feature_names = c("b", "a", "c"),
+      n_features_in_ = 3L
+    ),
+    class = "stabl_fit"
+  )
+  x <- matrix(
+    1:12,
+    nrow = 3L,
+    dimnames = list(c("s1", "s2", "s3"), c("a", "b", "c", "d"))
+  )
+
+  out <- transform_stabl(fit, x)
+
+  expect_true(is.matrix(out))
+  expect_identical(rownames(out), rownames(x))
+  expect_identical(colnames(out), c("a", "c"))
+  expect_equal(out, x[, c("a", "c"), drop = FALSE])
+})
+
+test_that("transform_stabl handles data.frame input, zero selections, and threshold override", {
+  fit <- structure(
+    list(
+      stabl_scores_ = matrix(c(0.2, 0.4), ncol = 1L,
+                             dimnames = list(c("a", "b"), NULL)),
+      hard_threshold = 0.9,
+      fdr_min_threshold_ = NULL,
+      explore = FALSE,
+      n_explore = 1L,
+      feature_names = c("a", "b"),
+      n_features_in_ = 2L
+    ),
+    class = "stabl_fit"
+  )
+  x <- data.frame(b = 1:3, a = 4:6, row.names = paste0("s", 1:3))
+
+  none <- transform_stabl(fit, x)
+  expect_s3_class(none, "data.frame")
+  expect_equal(dim(none), c(3L, 0L))
+  expect_identical(rownames(none), rownames(x))
+
+  selected <- transform_stabl(fit, x, new_hard_threshold = 0.1)
+  expect_s3_class(selected, "data.frame")
+  expect_identical(names(selected), c("a", "b"))
+})
+
+test_that("transform_stabl rejects missing or duplicate input feature names", {
+  fit <- structure(
+    list(
+      stabl_scores_ = matrix(c(0.8, 0.1), ncol = 1L,
+                             dimnames = list(c("a", "b"), NULL)),
+      hard_threshold = 0.5,
+      fdr_min_threshold_ = NULL,
+      explore = FALSE,
+      n_explore = 1L,
+      feature_names = c("a", "b"),
+      n_features_in_ = 2L
+    ),
+    class = "stabl_fit"
+  )
+
+  expect_error(transform_stabl(fit, data.frame(b = 1:2)), "missing.*a", ignore.case = TRUE)
+
+  x_dup <- matrix(1:4, nrow = 2L, dimnames = list(c("s1", "s2"), c("a", "a")))
+  expect_error(transform_stabl(fit, x_dup), "duplicate", ignore.case = TRUE)
+})

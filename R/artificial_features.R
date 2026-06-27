@@ -365,6 +365,21 @@ make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
 #'   [stabl_fit()] which calls this function automatically.
 #' @export
 make_artificial_features <- function(x, n_injected, type, random_state = NULL) {
+  if (!is.matrix(x) || !is.numeric(x)) {
+    stop("`x` must be a numeric matrix.", call. = FALSE)
+  }
+  n_injected <- .validate_scalar_integer_like(
+    n_injected,
+    "n_injected",
+    min = 1L,
+    max = ncol(x)
+  )
+  if (!is.character(type) || length(type) != 1L || is.na(type)) {
+    stop("`type` must be a single character string.", call. = FALSE)
+  }
+  if (!is.null(random_state)) {
+    random_state <- .validate_scalar_integer_like(random_state, "random_state")
+  }
   if (!is.null(random_state)) set.seed(random_state)
   switch(
     type,

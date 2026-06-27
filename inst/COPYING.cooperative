@@ -12,4 +12,5 @@ See https://www.gnu.org/licenses/old-licenses/gpl-2.0.html
 
 When distributing stablr, the cooperative-learning sources in
 R/cooperative-*.R and src/ (including glmnetpp headers) remain
-under GPL-2. The remainder of stablr is under the MIT license (file LICENSE).
+under GPL-2. The package is distributed under GPL (>= 2) to provide one
+consistent license for the combined work.

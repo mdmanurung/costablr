@@ -1,6 +1,13 @@
 # Audit M-2 / V-7 (parallel determinism) and M-5 (RNG isolation between
 # artificial-feature generation and bootstrap-index draws).
 
+test_that(".can_open_test_server_socket returns a scalar logical", {
+  result <- .can_open_test_server_socket()
+  expect_type(result, "logical")
+  expect_length(result, 1L)
+  expect_false(is.na(result))
+})
+
 test_that("stabl_fit is reproducible: same random_state yields identical scores (sequential)", {
   withr::local_seed(0)
   n <- 50L; p <- 6L
@@ -24,6 +31,10 @@ test_that("stabl_fit is reproducible: same random_state yields identical scores 
 test_that("stabl_fit parallel and sequential paths produce identical stabl_scores_ for the same random_state", {
   skip_if_not_installed("furrr")
   skip_if_not_installed("future")
+  skip_if_not(
+    .can_open_test_server_socket(),
+    "future multisession requires opening a local server socket"
+  )
 
   withr::local_seed(0)
   n <- 60L; p <- 8L
@@ -39,9 +50,11 @@ test_that("stabl_fit parallel and sequential paths produce identical stabl_score
   old_plan <- future::plan(future::multisession, workers = 2L)
   withr::defer(future::plan(old_plan))
 
-  fit_par <- stabl_fit(x, y, lambda_grid = lam, n_bootstraps = 12L,
-                       artificial_type = "random_permutation",
-                       random_state = 7L, workers = 2L)
+  fit_par <- suppressWarnings(stabl_fit(
+    x, y, lambda_grid = lam, n_bootstraps = 12L,
+    artificial_type = "random_permutation",
+    random_state = 7L, workers = 2L
+  ))
 
   expect_equal(fit_seq$stabl_scores_, fit_par$stabl_scores_, tolerance = 0)
   expect_equal(fit_seq$stabl_scores_artificial_,

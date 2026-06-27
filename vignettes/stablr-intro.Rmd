@@ -67,8 +67,8 @@ case:
 1. preparing the input objects expected by `stabl_fit()`;
 2. building a compact penalty grid with `auto_lambda_grid()`;
 3. fitting a small binary or regression example;
-4. extracting selected features (`get_support()`) and stability scores
-   (`get_importances()`).
+4. extracting selected feature names (`get_feature_names_out()`), logical
+   support masks (`get_support()`), and stability scores (`get_importances()`).
 5. reading the stability-path and FDP diagnostic plots;
 6. switching between lasso, adaptive lasso, and elastic-net base learners.
 
@@ -135,8 +135,22 @@ The main arguments are:
 |---|---|
 | `family` | Passed to `glmnet`; `"binomial"` for 0/1 outcome, `"gaussian"` for continuous. |
 | `n_bootstraps` | Number of bootstrap resamples.  The examples use 40-50; final analyses usually need hundreds. |
-| `artificial_type` | `"random_permutation"` adds column-permuted decoys; `"knockoff"` uses model-X knockoffs for stronger FDP control. |
+| `artificial_type` | Decoy feature type used for FDP calibration. |
 | `random_state` | Integer seed for full reproducibility. |
+
+Supported artificial-feature settings are:
+
+| Value | Meaning |
+|---|---|
+| `"random_permutation"` | Column-permuted decoys; no optional dependency. |
+| `"knockoff"` | Fixed-X knockoffs via the optional `knockoff` package. |
+| `"knockoff_equi"` | Model-X equicorrelated Gaussian knockoffs. |
+| `"knockoff_mvr"` | Model-X MVR Gaussian knockoffs. |
+| `NULL` | No artificial features; FDP diagnostics are unavailable. |
+
+Scalar tuning arguments such as `n_bootstraps` and `random_state` must be
+finite integer-like scalars.  Plot titles, output paths, and file-format
+arguments must be non-empty character scalars.
 
 The example uses `n_bootstraps = 50` and keeps the strong-penalty end of a
 20-point lambda path.  This keeps the runtime short and the selected set
@@ -196,6 +210,10 @@ validation, mechanism, and the shape of the stability-score gap.
 # Features selected at the STABL threshold
 selected_bin <- get_feature_names_out(fit_bin)
 selected_bin
+
+# Subset new data to the selected columns
+X_bin_selected <- transform_stabl(fit_bin, X_bin)
+dim(X_bin_selected)
 
 # Compare the selected set against the known simulation truth
 setdiff(signal_features_bin, selected_bin)  # missed planted features

@@ -394,6 +394,16 @@ test_that("stacked_multi_omic errors when multiclass labels are absent from prob
   )
 })
 
+test_that("stacked_multi_omic rejects invalid n_iter values", {
+  preds <- data.frame(a = c(0.1, 0.9, 0.2, 0.8), b = c(0.2, 0.8, 0.3, 0.7))
+  y <- c(0L, 1L, 0L, 1L)
+
+  expect_error(stacked_multi_omic(preds, y, task_type = "binary", n_iter = 0L), "n_iter")
+  expect_error(stacked_multi_omic(preds, y, task_type = "binary", n_iter = 1.5), "n_iter")
+  expect_error(stacked_multi_omic(preds, y, task_type = "binary", n_iter = NA_integer_), "n_iter")
+  expect_error(stacked_multi_omic(preds, y, task_type = "binary", n_iter = "5"), "n_iter")
+})
+
 # Characterization tests for stacked_multi_omic loop-invariant hoist (Item 12).
 # Pin exact score and weights for binary and regression tasks so that the
 # is_obs / y_na_mask hoist can be verified to produce bit-identical output.
@@ -421,6 +431,96 @@ test_that("stacked_multi_omic regression: loop-invariant hoist produces bit-iden
   expect_equal(res$score, 0.010970174330076, tolerance = 1e-12)
   expect_equal(res$weights$Associated_weight,
                c(2.876192552503198, 2.322242232039571), tolerance = 1e-12)
+})
+
+
+.slow_stacked_multi_omic_scalar_reference <- function(predictions, y, task_type, n_iter, random_state = NULL) {
+  predictions <- as.matrix(predictions)
+  n_omics <- ncol(predictions)
+  n_samples <- nrow(predictions)
+  is_obs_preds <- !is.na(predictions)
+  y_na_mask <- !is.na(y)
+  score_fn <- if (identical(task_type, "binary")) stablr:::.r_auc else stablr:::.r_squared
+
+  stablr:::.with_local_seed(
+    if (!is.null(random_state)) as.integer(random_state),
+    {
+      best_score <- -Inf
+      best_weights <- rep(1 / n_omics, n_omics)
+      best_probs <- rep(NA_real_, n_samples)
+
+      for (i in seq_len(n_iter)) {
+        weights <- stats::runif(n_omics, 0, 10)
+        weighted_probs <- stablr:::.weighted_masked_mean(predictions, weights, is_obs = is_obs_preds)
+        complete_idx <- !is.na(weighted_probs) & y_na_mask
+        if (sum(complete_idx) < 2L) next
+
+        score <- tryCatch(
+          score_fn(y[complete_idx], weighted_probs[complete_idx]),
+          error = function(e) NA_real_
+        )
+        if (!is.na(score) && score > best_score) {
+          best_score <- score
+          best_weights <- weights
+          best_probs <- weighted_probs
+        }
+      }
+
+      list(weights = best_weights, predictions = best_probs, score = best_score)
+    }
+  )
+}
+
+test_that("stacked_multi_omic batched binary path matches slow scalar reference with missing rows", {
+  set.seed(451)
+  n <- 32L
+  y <- rbinom(n, 1L, 0.45)
+  preds <- data.frame(
+    omic_a = y + rnorm(n, sd = 0.35),
+    omic_b = y + rnorm(n, sd = 0.8),
+    omic_c = rnorm(n)
+  )
+  preds[c(2L, 7L, 19L), "omic_b"] <- NA_real_
+  preds[5L, ] <- NA_real_
+
+  fast <- stacked_multi_omic(preds, y, task_type = "binary", n_iter = 300L, random_state = 451L)
+  slow <- .slow_stacked_multi_omic_scalar_reference(preds, y, "binary", 300L, 451L)
+
+  expect_equal(fast$score, slow$score, tolerance = 1e-12)
+  expect_equal(fast$weights$Associated_weight, slow$weights, tolerance = 1e-12)
+  expect_equal(fast$predictions[["Stacked Gen. Predictions"]], slow$predictions, tolerance = 1e-12)
+})
+
+test_that("stacked_multi_omic batched regression path matches slow scalar reference with all-NA rows", {
+  set.seed(452)
+  n <- 28L
+  y <- rnorm(n)
+  preds <- data.frame(
+    omic_a = y + rnorm(n, sd = 0.4),
+    omic_b = rnorm(n),
+    omic_c = y + rnorm(n, sd = 0.9)
+  )
+  preds[c(4L, 11L), ] <- NA_real_
+  preds[c(3L, 9L), "omic_c"] <- NA_real_
+
+  fast <- stacked_multi_omic(preds, y, task_type = "regression", n_iter = 300L, random_state = 452L)
+  slow <- .slow_stacked_multi_omic_scalar_reference(preds, y, "regression", 300L, 452L)
+
+  expect_equal(fast$score, slow$score, tolerance = 1e-12)
+  expect_equal(fast$weights$Associated_weight, slow$weights, tolerance = 1e-12)
+  expect_equal(fast$predictions[["Stacked Gen. Predictions"]], slow$predictions, tolerance = 1e-12)
+})
+
+test_that("stacked_multi_omic batched scalar path keeps first strict incumbent on ties", {
+  y <- rep(c(0L, 1L), 12L)
+  preds <- data.frame(omic_a = y, omic_b = y, omic_c = y)
+
+  fast <- stacked_multi_omic(preds, y, task_type = "binary", n_iter = 20L, random_state = 453L)
+  slow <- .slow_stacked_multi_omic_scalar_reference(preds, y, "binary", 20L, 453L)
+
+  expect_equal(fast$score, slow$score, tolerance = 1e-12)
+  expect_equal(fast$weights$Associated_weight, slow$weights, tolerance = 1e-12)
+  expect_equal(fast$predictions[["Stacked Gen. Predictions"]], slow$predictions, tolerance = 1e-12)
 })
 
 # ---------------------------------------------------------------------------

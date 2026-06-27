@@ -39,9 +39,7 @@
 #' @export
 export_stabl_to_csv <- function(object, path) {
   .check_fitted_stabl(object)
-  if (!is.character(path) || length(path) != 1L) {
-    stop("`path` must be a single character string.", call. = FALSE)
-  }
+  path <- .validate_nonempty_scalar_character(path, "path")
   dir.create(path, recursive = TRUE, showWarnings = FALSE)
 
   feat_names <- object$feature_names
@@ -147,8 +145,10 @@ save_stabl_results <- function(
     override            = FALSE
 ) {
   .check_fitted_stabl(object)
-  if (!is.character(path) || length(path) != 1L) {
-    stop("`path` must be a single character string.", call. = FALSE)
+  path <- .validate_nonempty_scalar_character(path, "path")
+  figure_fmt <- .validate_nonempty_scalar_character(figure_fmt, "figure_fmt")
+  if (!is.logical(override) || length(override) != 1L || is.na(override)) {
+    stop("`override` must be a non-missing logical scalar.", call. = FALSE)
   }
   task_type <- match.arg(task_type, c("binary", "multiclass", "regression"))
 
@@ -233,13 +233,12 @@ save_stabl_results <- function(
   utils::write.csv(max_df, file = file.path(path, filename))
 }
 
-# Row-wise max without external dependencies.
-# Special-cases nrow=0 (returns numeric(0)) and ncol=1 (avoids apply overhead
-# and dimension-drop ambiguity) for type-stable, allocation-free fast paths.
+# Row-wise max wrapper.
+# Special-cases nrow=0 and ncol=1 to preserve historical edge behavior.
 rowMaxs <- function(m) {
   if (nrow(m) == 0L) return(numeric(0L))
   if (ncol(m) == 1L) return(as.numeric(m[, 1L]))
-  apply(m, 1L, max)
+  matrixStats::rowMaxs(as.matrix(m))
 }
 
 # Build readable column labels from the lambda grid (one label per row)

@@ -111,6 +111,10 @@ stabl_multiomic_train_validate <- function(
     cooperation_nfolds = 5L,
     ...
 ) {
+  if (!is.null(random_state)) {
+    random_state <- .validate_scalar_integer_like(random_state, "random_state")
+  }
+  n_iter_lf <- .validate_scalar_integer_like(n_iter_lf, "n_iter_lf", min = 1L)
   validate_multiomic_inputs(x_list = x_train_list, y = y_train,
                             groups = groups_train)
 
@@ -321,6 +325,11 @@ stabl_multiomic_cv <- function(
   cooperation_nfolds = 5L,
   ...
 ) {
+  v <- .validate_scalar_integer_like(v, "v", min = 2L)
+  if (!is.null(random_state)) {
+    random_state <- .validate_scalar_integer_like(random_state, "random_state")
+  }
+  n_iter_lf <- .validate_scalar_integer_like(n_iter_lf, "n_iter_lf", min = 1L)
   validate_multiomic_inputs(x_list = x_list, y = y, groups = groups)
 
   sample_ids <- rownames(x_list[[1L]])
@@ -635,6 +644,13 @@ stabl_multiomic_cv <- function(
       stop(sprintf("Validation omic '%s' must be a data.frame or matrix.", omic),
            call. = FALSE)
     }
+    sample_ids <- rownames(x_valid)
+    if (is.null(sample_ids) || anyNA(sample_ids) || any(sample_ids == "")) {
+      stop(sprintf("Validation omic '%s' must have non-empty row names.", omic),
+           call. = FALSE)
+    }
+    .validate_unique_names(sample_ids, sprintf("validation omic '%s' row names", omic))
+    .validate_feature_names(x_valid, sprintf("validation omic '%s'", omic))
     if (!is.null(y_valid)) {
       validate_sample_alignment(x = x_valid, y = y_valid, groups = NULL)
     }
@@ -661,12 +677,6 @@ stabl_multiomic_cv <- function(
                                      groups,
                                      v,
                                      random_state = NULL) {
-  if (length(v) != 1L || is.na(v) || v < 2L) {
-    stop("`v` must be a single integer greater than or equal to 2.", call. = FALSE)
-  }
-
-  v <- as.integer(v)
-
   units <- if (is.null(groups)) {
     sample_ids
   } else {
@@ -700,9 +710,8 @@ stabl_multiomic_cv <- function(
 }
 
 .permute_for_cv <- function(x, random_state = NULL) {
-  if (!is.null(random_state) && (length(random_state) != 1L || is.na(random_state))) {
-    stop("`random_state` must be a single non-missing integer when supplied.",
-         call. = FALSE)
+  if (!is.null(random_state)) {
+    random_state <- .validate_scalar_integer_like(random_state, "random_state")
   }
   .with_local_seed(
     if (!is.null(random_state)) as.integer(random_state),
@@ -1251,6 +1260,12 @@ stabl_multiomic_cv <- function(
 #' Missing values in `predictions` are handled per-row: rows with all-NA
 #' predictions receive `NA` in the stacked output.
 #'
+#' For binary and regression tasks, candidate weighted predictions are
+#' evaluated in chunks while preserving the scalar algorithm's RNG order,
+#' strict `score > best_score` incumbent update, and first-maximum tie policy.
+#' The multiclass path remains scalar because exact probability-normalization
+#' and tie parity are prioritized for this release.
+#'
 #' @param predictions For `task_type = "binary"` or `"regression"`, a
 #'   `data.frame` or numeric matrix with one column per omic and one row per
 #'   sample. For `task_type = "multiclass"`, a named list of class-probability
@@ -1285,6 +1300,10 @@ stacked_multi_omic <- function(
     random_state = NULL
 ) {
   task_type <- match.arg(task_type)
+  n_iter <- .validate_scalar_integer_like(n_iter, "n_iter", min = 1L)
+  if (!is.null(random_state)) {
+    random_state <- .validate_scalar_integer_like(random_state, "random_state")
+  }
   if (identical(task_type, "multiclass")) {
     return(.stacked_multi_omic_multiclass(
       predictions = predictions,
@@ -1314,23 +1333,39 @@ stacked_multi_omic <- function(
       best_score   <- -Inf
       best_weights <- rep(1 / n_omics, n_omics)
       best_probs   <- rep(NA_real_, n_samples)
+      candidate_weights <- matrix(
+        stats::runif(n_iter * n_omics, 0, 10),
+        nrow = n_iter,
+        ncol = n_omics,
+        byrow = TRUE
+      )
 
-      for (i in seq_len(as.integer(n_iter))) {
-        weights        <- stats::runif(n_omics, 0, 10)
-        weighted_probs <- .weighted_masked_mean(predictions, weights, is_obs = is_obs_preds)
-
-        complete_idx <- !is.na(weighted_probs) & y_na_mask
-        if (sum(complete_idx) < 2L) next
-
-        score <- tryCatch(
-          score_fn(y[complete_idx], weighted_probs[complete_idx]),
-          error = function(e) NA_real_
+      chunk_size <- min(512L, n_iter)
+      starts <- seq.int(1L, n_iter, by = chunk_size)
+      for (start in starts) {
+        end <- min(start + chunk_size - 1L, n_iter)
+        idx <- seq.int(start, end)
+        weighted_probs_chunk <- .weighted_masked_mean_batch(
+          predictions,
+          candidate_weights[idx, , drop = FALSE],
+          is_obs = is_obs_preds
         )
 
-        if (!is.na(score) && score > best_score) {
-          best_score   <- score
-          best_weights <- weights
-          best_probs   <- weighted_probs
+        for (j in seq_along(idx)) {
+          weighted_probs <- weighted_probs_chunk[, j]
+          complete_idx <- !is.na(weighted_probs) & y_na_mask
+          if (sum(complete_idx) < 2L) next
+
+          score <- tryCatch(
+            score_fn(y[complete_idx], weighted_probs[complete_idx]),
+            error = function(e) NA_real_
+          )
+
+          if (!is.na(score) && score > best_score) {
+            best_score   <- score
+            best_weights <- candidate_weights[idx[[j]], ]
+            best_probs   <- weighted_probs
+          }
         }
       }
 
@@ -1348,6 +1383,10 @@ stacked_multi_omic <- function(
                                            y,
                                            n_iter = 10000L,
                                            random_state = NULL) {
+  n_iter <- .validate_scalar_integer_like(n_iter, "n_iter", min = 1L)
+  if (!is.null(random_state)) {
+    random_state <- .validate_scalar_integer_like(random_state, "random_state")
+  }
   arr <- .as_multiclass_prediction_array(predictions)
   n_samples <- dim(arr)[[1L]]
   n_classes <- dim(arr)[[2L]]
@@ -1375,7 +1414,7 @@ stacked_multi_omic <- function(
       best_probs <- matrix(NA_real_, nrow = n_samples, ncol = n_classes,
                            dimnames = list(dimnames(arr)[[1L]], classes))
 
-      for (i in seq_len(as.integer(n_iter))) {
+      for (i in seq_len(n_iter)) {
         weights <- stats::runif(n_omics, 0, 10)
         probs <- .weighted_multiclass_probabilities(arr, weights)
         loss <- .multiclass_log_loss(y, probs)
@@ -1449,6 +1488,15 @@ stacked_multi_omic <- function(
   denom  <- rowSums(is_obs * w_mat)
   num    <- rowSums(ifelse(is_obs, P * w_mat, 0))
   ifelse(denom > 0, num / denom, NA_real_)
+}
+
+.weighted_masked_mean_batch <- function(P, weights, is_obs = !is.na(P)) {
+  P_zero <- ifelse(is_obs, P, 0)
+  denom <- is_obs %*% t(weights)
+  num <- P_zero %*% t(weights)
+  out <- num / denom
+  out[denom <= 0] <- NA_real_
+  out
 }
 
 .weighted_multiclass_probabilities <- function(pred_array, weights) {

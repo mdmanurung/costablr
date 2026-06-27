@@ -1,6 +1,21 @@
 ## R CMD check results
 
-0 errors | 0 warnings | 1 note
+0 errors | 0 warnings | 0 notes
+
+Checked with:
+
+```sh
+R CMD build --no-build-vignettes .
+R CMD check --no-manual --ignore-vignettes --no-build-vignettes stablr_0.1.0.tar.gz
+```
+
+Local testthat result: `FAIL 0 | WARN 0 | SKIP 1 | PASS 1611`.
+The no-manual/no-vignette release check completed with `Status: OK`.
+
+Documentation review builds:
+
+- All six source vignettes rendered to `/tmp/stablr-vignette-review`.
+- The pkgdown site built to `/tmp/stablr-pkgdown`.
 
 ## Submission notes
 
@@ -20,8 +35,15 @@ comment block. The messages are benign and do not affect functionality.
 `tests/testthat/test-fdp-calibration.R` and
 `tests/testthat/test-signal-recovery.R` carry `skip_on_cran()` guards. These
 tests run long-form FDP calibration sweeps and signal-recovery benchmarks that
-take several minutes. They run in CI (GitHub Actions) on every push to the main
-branch; they are skipped on CRAN to stay within check time limits.
+take several minutes. They run in CI (GitHub Actions) on push and pull-request
+events; they are skipped on CRAN to stay within check time limits.
+
+### Tests skipped in the local sandbox (1)
+
+The local release check skipped one environment-dependent test because
+`Sample Data/data.zip` is not available in this workspace
+(`tests/testthat/test-phase7.R`). This does not affect the no-failure
+release-check result.
 
 ### Compiled code (C++17)
 

@@ -75,6 +75,16 @@ stabl_multiomic_nested_cv <- function(
     ...
 ) {
   metric <- match.arg(metric)
+  outer_v <- .validate_scalar_integer_like(outer_v, "outer_v", min = 2L)
+  outer_repeats <- .validate_scalar_integer_like(outer_repeats, "outer_repeats", min = 1L)
+  inner_v <- .validate_scalar_integer_like(inner_v, "inner_v", min = 2L)
+  strata_bins <- .validate_scalar_integer_like(strata_bins, "strata_bins", min = 1L)
+  cv_workers <- .validate_scalar_integer_like(cv_workers, "cv_workers", min = 1L)
+  workers <- .validate_scalar_integer_like(workers, "workers", min = 1L)
+  n_lambda <- .validate_scalar_integer_like(n_lambda, "n_lambda", min = 1L)
+  if (!is.null(random_state)) {
+    random_state <- .validate_scalar_integer_like(random_state, "random_state")
+  }
   validate_multiomic_inputs(x_list = x_list, y = y)
 
   y <- .subset_outcome_by_ids(y, rownames(x_list[[1L]]))
@@ -90,16 +100,6 @@ stabl_multiomic_nested_cv <- function(
     bins = strata_bins
   )
 
-  outer_v <- as.integer(outer_v)
-  outer_repeats <- as.integer(outer_repeats)
-  inner_v <- as.integer(inner_v)
-  cv_workers <- as.integer(cv_workers)
-  if (outer_v < 2L || outer_repeats < 1L || inner_v < 2L) {
-    stop("`outer_v`, `outer_repeats`, and `inner_v` must define valid CV folds.", call. = FALSE)
-  }
-  if (cv_workers < 1L) {
-    stop("`cv_workers` must be a positive integer.", call. = FALSE)
-  }
   if (isTRUE(stratified) && min(table(strata_labels)) < max(outer_v, inner_v)) {
     stop("Each stratum must have at least `max(outer_v, inner_v)` samples.", call. = FALSE)
   }
@@ -236,7 +236,6 @@ stabl_multiomic_nested_cv <- function(
   }
 
   if (is.numeric(strata) || is.integer(strata)) {
-    bins <- as.integer(bins)
     if (bins < 2L) {
       stop("`strata_bins` must be at least 2 for numeric strata.", call. = FALSE)
     }

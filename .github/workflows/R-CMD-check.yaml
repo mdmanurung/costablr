@@ -1,7 +1,6 @@
 # R CMD check + test-coverage CI
 #
-# Runs on every push and pull-request to stabl_lw and
-# feature-cooperativelearning.  Heavy vignettes (stablr-multiomic,
+# Runs on every push and pull request. Heavy vignettes (stablr-multiomic,
 # stablr-tcga, stablr-tcga-nestedcv) are gated to eval=FALSE in their
 # setup chunks so they do not execute during the check build.
 #
@@ -12,21 +11,7 @@
 
 on:
   push:
-    branches: [stabl_lw, feature-cooperativelearning]
-    paths:
-      - "R/**"
-      - "src/**"
-      - "tests/**"
-      - "DESCRIPTION"
-      - ".github/workflows/R-CMD-check.yaml"
   pull_request:
-    branches: [stabl_lw, feature-cooperativelearning]
-    paths:
-      - "R/**"
-      - "src/**"
-      - "tests/**"
-      - "DESCRIPTION"
-      - ".github/workflows/R-CMD-check.yaml"
 
 name: R-CMD-check
 

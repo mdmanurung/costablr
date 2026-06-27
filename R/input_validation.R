@@ -37,6 +37,8 @@ validate_sample_alignment <- function(x, y, groups = NULL) {
   if (is.null(sample_ids) || anyNA(sample_ids) || any(sample_ids == "")) {
     stop("`x` must have non-empty row names used as sample ids.", call. = FALSE)
   }
+  .validate_unique_names(sample_ids, "`x` row names")
+  .validate_feature_names(x, "`x`")
 
   y_ids <- .outcome_sample_ids(y)
   if (is.null(y_ids)) {
@@ -45,6 +47,7 @@ validate_sample_alignment <- function(x, y, groups = NULL) {
       call. = FALSE
     )
   }
+  .validate_unique_names(y_ids, "`y` sample ids")
 
   if (!setequal(sample_ids, y_ids)) {
     stop("Sample mismatch between `x` row names and `y` names.", call. = FALSE)
@@ -59,6 +62,7 @@ validate_sample_alignment <- function(x, y, groups = NULL) {
     if (is.null(names(groups))) {
       stop("`groups` must be a named vector where names are sample ids.", call. = FALSE)
     }
+    .validate_unique_names(names(groups), "`groups` sample ids")
     if (!setequal(sample_ids, names(groups))) {
       stop("Sample mismatch between `x` row names and `groups` names.", call. = FALSE)
     }
@@ -140,12 +144,14 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
   if (is.null(names(x_list)) || anyNA(names(x_list)) || any(names(x_list) == "")) {
     stop("`x_list` must have non-empty names for each omic table.", call. = FALSE)
   }
+  .validate_unique_names(names(x_list), "omic names")
 
   for (name in names(x_list)) {
     x <- x_list[[name]]
     if (!(is.data.frame(x) || is.matrix(x))) {
       stop(sprintf("Omic '%s' must be a data.frame or matrix.", name), call. = FALSE)
     }
+    .validate_feature_names(x, sprintf("omic '%s'", name))
     validate_sample_alignment(x = x, y = y, groups = groups)
   }
 
@@ -247,11 +253,11 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
     stop("`rho` must contain only non-negative values.", call. = FALSE)
   }
 
-  if (length(cooperation_nfolds) != 1L || is.na(cooperation_nfolds)) {
-    stop("`cooperation_nfolds` must be a single non-missing integer.", call. = FALSE)
-  }
-
-  cooperation_nfolds <- as.integer(cooperation_nfolds)
+  cooperation_nfolds <- .validate_scalar_integer_like(
+    cooperation_nfolds,
+    "cooperation_nfolds",
+    min = 3L
+  )
   if (cooperation_nfolds < 3L) {
     stop("`cooperation_nfolds` must be greater than or equal to 3.", call. = FALSE)
   }
@@ -283,5 +289,73 @@ validate_multiomic_inputs <- function(x_list, y, groups = NULL) {
     cooperation_selector = cooperation_selector,
     cooperation_type_measure = type_measure,
     cooperation_nfolds = cooperation_nfolds
+  )
+}
+
+.validate_unique_names <- function(x, what) {
+  if (anyDuplicated(x)) {
+    stop(sprintf("%s must not contain duplicate values.", what), call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+.validate_feature_names <- function(x, what = "`x`") {
+  feature_names <- colnames(x)
+  if (is.null(feature_names)) {
+    return(invisible(TRUE))
+  }
+  if (anyNA(feature_names) || any(feature_names == "")) {
+    stop(sprintf("%s feature names must be non-empty.", what), call. = FALSE)
+  }
+  if (anyDuplicated(feature_names)) {
+    stop(sprintf("%s feature names must not contain duplicates.", what), call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+.validate_scalar_numeric <- function(x, arg, min = -Inf, max = Inf,
+                                     min_open = FALSE, max_open = FALSE,
+                                     allow_null = FALSE) {
+  if (allow_null && is.null(x)) {
+    return(NULL)
+  }
+  if (!is.numeric(x) || length(x) != 1L || is.na(x) || !is.finite(x)) {
+    stop(sprintf("`%s` must be a finite numeric scalar.", arg), call. = FALSE)
+  }
+  if ((min_open && x <= min) || (!min_open && x < min)) {
+    stop(sprintf("`%s` must be %s %s.", arg, if (min_open) ">" else ">=", min), call. = FALSE)
+  }
+  if ((max_open && x >= max) || (!max_open && x > max)) {
+    stop(sprintf("`%s` must be %s %s.", arg, if (max_open) "<" else "<=", max), call. = FALSE)
+  }
+  x
+}
+
+.validate_scalar_integer_like <- function(x, arg, min = -Inf, max = Inf,
+                                          allow_null = FALSE) {
+  x <- .validate_scalar_numeric(
+    x,
+    arg,
+    min = min,
+    max = max,
+    allow_null = allow_null
+  )
+  if (is.null(x)) {
+    return(NULL)
+  }
+  if (x != floor(x)) {
+    stop(sprintf("`%s` must be an integer-like scalar.", arg), call. = FALSE)
+  }
+  as.integer(x)
+}
+
+.validate_proportion <- function(x, arg, allow_one = TRUE) {
+  .validate_scalar_numeric(
+    x,
+    arg,
+    min = 0,
+    max = 1,
+    min_open = TRUE,
+    max_open = !allow_one
   )
 }

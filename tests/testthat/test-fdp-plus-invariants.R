@@ -108,3 +108,69 @@ test_that("rowMaxs handles 1-column matrix (no silent apply dimension-drop)", {
   expect_equal(stablr:::rowMaxs(m), c(7, 2, 9), tolerance = 0)
   expect_true(is.numeric(stablr:::rowMaxs(m)))
 })
+
+test_that("stabl_fit injects at least one artificial feature for tiny positive proportions", {
+  set.seed(2L)
+  x <- matrix(rnorm(12), nrow = 12L,
+              dimnames = list(paste0("s", 1:12), "only_feature"))
+  y <- setNames(rnorm(12L), rownames(x))
+
+  fit <- stabl_fit(
+    x = x,
+    y = y,
+    lambda_grid = data.frame(lambda = c(0.1)),
+    n_bootstraps = 2L,
+    artificial_type = "random_permutation",
+    artificial_proportion = 0.001,
+    hard_threshold = NULL,
+    random_state = 1L
+  )
+
+  expect_equal(nrow(fit$stabl_scores_artificial_), 1L)
+  expect_equal(fit$effective_artificial_proportion, 1)
+  expect_equal(fit$artificial_proportion, 0.001)
+})
+
+test_that("stabl_fit caps artificial feature injection at ncol(x)", {
+  set.seed(3L)
+  x <- matrix(rnorm(30), nrow = 10L,
+              dimnames = list(paste0("s", 1:10), paste0("f", 1:3)))
+  y <- setNames(rnorm(10L), rownames(x))
+
+  fit <- stabl_fit(
+    x = x,
+    y = y,
+    lambda_grid = data.frame(lambda = c(0.1)),
+    n_bootstraps = 2L,
+    artificial_type = "random_permutation",
+    artificial_proportion = 1,
+    random_state = 1L
+  )
+
+  expect_equal(nrow(fit$stabl_scores_artificial_), ncol(x))
+  expect_equal(fit$effective_artificial_proportion, 1)
+})
+
+test_that("stabl_fit supports all documented artificial feature strategies", {
+  x <- matrix(rnorm(60), nrow = 20L,
+              dimnames = list(paste0("s", 1:20), paste0("f", 1:3)))
+  y <- setNames(rnorm(20L), rownames(x))
+  strategies <- c("random_permutation", "knockoff", "knockoff_equi", "knockoff_mvr")
+
+  for (strategy in strategies) {
+    if (startsWith(strategy, "knockoff")) {
+      skip_if_not_installed("knockoff")
+    }
+    fit <- stabl_fit(
+      x = x,
+      y = y,
+      lambda_grid = data.frame(lambda = c(0.1)),
+      n_bootstraps = 2L,
+      artificial_type = strategy,
+      artificial_proportion = 0.2,
+      random_state = 1L
+    )
+    expect_equal(nrow(fit$stabl_scores_artificial_), 1L)
+    expect_equal(fit$effective_artificial_proportion, 1 / ncol(x))
+  }
+})

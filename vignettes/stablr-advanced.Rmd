@@ -27,7 +27,7 @@ are easy to miss when reading only the quick-start paths:
 |-------|-----------|
 | Survival STABL | `stabl_fit(family = "cox")` |
 | Multinomial classification | `stabl_fit(family = "multinomial")` |
-| Knockoff decoys | `artificial_type = "knockoff"` |
+| Artificial features | `artificial_type = "random_permutation"`, `"knockoff"`, `"knockoff_equi"`, `"knockoff_mvr"`, or `NULL` |
 | Grouped bootstrap | `groups`, `group_bootstrap_indices()` |
 | Reproducibility metrics | `jaccard_similarity()`, `adjusted_similarity()` |
 | Disk export | `export_stabl_to_csv()`, `save_stabl_results()` |
@@ -121,18 +121,16 @@ get_feature_names_out(fit_multi)
 
 ## 3. Knockoff artificial features
 
-Model-X knockoffs (`artificial_type = "knockoff"`) provide stronger FDP control
-than random permutations when the `knockoff` package is installed.
+Supported artificial-feature settings are `"random_permutation"`, `"knockoff"`, `"knockoff_equi"`, `"knockoff_mvr"`, and `NULL`. Model-X knockoffs (`artificial_type = "knockoff"`) provide stronger FDP control than random permutations when the optional `knockoff` package is installed.
 
 ```{r knockoff-check, include = FALSE}
 has_knockoff <- requireNamespace("knockoff", quietly = TRUE)
-knitr::opts_chunk$set(eval = has_knockoff)
 if (!has_knockoff) {
-  message("Install the 'knockoff' package to evaluate knockoff chunks.")
+  message("Install the knockoff package to evaluate the knockoff example.")
 }
 ```
 
-```{r knockoff-fit}
+```{r knockoff-fit, eval = has_knockoff}
 n <- 60
 p <- 20
 ids <- paste0("s", seq_len(n))
@@ -154,12 +152,9 @@ fit_ko <- stabl_fit(
   random_state    = 7L
 )
 
-sum(get_support(fit_ko))
+get_feature_names_out(fit_ko)
 ```
 
-```{r reset-knockoff-chunk, include = FALSE}
-knitr::opts_chunk$set(eval = TRUE)
-```
 
 ---
 
@@ -172,8 +167,8 @@ related samples.
 ```{r grouped-bootstrap}
 n <- 48
 p <- 10
-ids <- paste0("s", rep(seq_len(12), each = 4))
-groups <- setNames(rep(paste0("subj", rep(seq_len(12), each = 4)), each = 1), ids)
+ids <- paste0("s", seq_len(n))
+groups <- setNames(rep(paste0("subj", seq_len(12)), each = 4), ids)
 x_grp <- matrix(
   rnorm(n * p), nrow = n,
   dimnames = list(ids, paste0("f", seq_len(p)))
@@ -242,8 +237,7 @@ jaccard_matrix(sels)
 ## 6. Export results to disk
 
 `export_stabl_to_csv()` writes stability-score tables for a single-omic fit.
-`save_stabl_results()` bundles scores, diagnostics, and optional figures for a
-full analysis folder.
+`save_stabl_results()` bundles scores, diagnostics, selected-feature tables, and feature-distribution figures for a full analysis folder. It writes `STABL scores.csv`, `Max STABL scores.csv`, `FDR Graph.<fmt>`, `Stability Path.<fmt>`, `Selected Features/Selected features.csv`, and `Selected Features/Feature distributions.<fmt>` when the relevant diagnostics and selected features are available.
 
 ```{r export, eval = FALSE}
 tmp <- tempfile("stablr_export")
@@ -253,9 +247,13 @@ export_stabl_to_csv(fit_grp, path = file.path(tmp, "grp"))
 list.files(file.path(tmp, "grp"))
 
 save_stabl_results(
-  fit_grp,
-  path = file.path(tmp, "bundle"),
-  save_figures = FALSE
+  object     = fit_grp,
+  path       = file.path(tmp, "bundle"),
+  x          = x_grp,
+  y          = y_grp,
+  task_type  = "regression",
+  figure_fmt = "png",
+  override   = TRUE
 )
 ```
 
@@ -341,4 +339,4 @@ plot(cf$fit)
 - `vignette("stablr-multiomic")` — early and late fusion on OOL data.
 - `vignette("stablr-cooperative")` — cooperation strength `rho`, validation vs
   CV tuning, binomial cooperative fusion.
-- `vignette("stablr-python-parity")` — mapping to the Python tutorial notebook.
+- `docs/PYTHON_TO_R_MAPPING.md` — mapping to the Python tutorial API.

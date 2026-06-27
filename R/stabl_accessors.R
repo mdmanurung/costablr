@@ -159,6 +159,49 @@ get_feature_names_out.stabl_fit <- function(object, new_hard_threshold = NULL) {
   object$feature_names[mask]
 }
 
+#' Transform New Data to the Selected STABL Feature Set
+#'
+#' Subsets a matrix or data frame to the features selected by a fitted
+#' [stabl_fit()] object. Columns are returned in fitted feature order, rows are
+#' preserved, and the output remains two-dimensional even when no features are
+#' selected.
+#'
+#' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
+#' @param x A matrix or `data.frame` with feature names in columns.
+#' @param new_hard_threshold Numeric in `(0, 1]` or `NULL`. When supplied,
+#'   overrides the fitted threshold for this transformation only.
+#'
+#' @return A matrix when `x` is a matrix, or a `data.frame` when `x` is a
+#'   `data.frame`, containing selected columns in fitted feature order.
+#'
+#' @seealso [get_feature_names_out()], [get_support()]
+#' @export
+transform_stabl <- function(object, x, new_hard_threshold = NULL) {
+  .check_fitted_stabl(object)
+  if (!(is.matrix(x) || is.data.frame(x))) {
+    stop("`x` must be a matrix or data.frame.", call. = FALSE)
+  }
+  feature_names <- colnames(x)
+  if (is.null(feature_names) || anyNA(feature_names) || any(feature_names == "")) {
+    stop("`x` must have non-empty column names.", call. = FALSE)
+  }
+  if (anyDuplicated(feature_names)) {
+    stop("`x` column names must not contain duplicates.", call. = FALSE)
+  }
+
+  selected <- get_feature_names_out(object, new_hard_threshold = new_hard_threshold)
+  missing <- setdiff(selected, feature_names)
+  if (length(missing) > 0L) {
+    stop(
+      "`x` is missing selected feature columns: ",
+      paste(missing, collapse = ", "),
+      call. = FALSE
+    )
+  }
+
+  x[, selected, drop = FALSE]
+}
+
 #' Get Cooperative-Fusion Selected Features
 #'
 #' Returns the feature names selected by the cooperative-fusion branch of a

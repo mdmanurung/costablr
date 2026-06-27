@@ -36,6 +36,21 @@
 - **Verification:** `mixOmics` (Suggests) is used only in TCGA vignettes and is
   already guarded by `requireNamespace()` + global `eval = FALSE`; no change
   needed.
+- **Release metadata:** aligned pkgdown URLs, article listings, and the public
+  reference index with the current `mdmanurung/stablr` repository. Removed the
+  stale Python-parity article link; the Python-to-R mapping now lives in
+  `docs/PYTHON_TO_R_MAPPING.md`.
+- **Parallel tests:** the parallel RNG determinism test now probes
+  `future::multisession`/PSOCK availability and skips with a clear reason in
+  socket-restricted check sandboxes.
+- **Release hardening:** added shared scalar validators, duplicate sample/feature
+  name guards, effective FDP+ decoy scaling, `transform_stabl()` for selected
+  feature subsetting, `matrixStats`-backed row maxima, bundled Python-parity
+  fixture checks, fixed-seed methodology/stacking scripts, validator rollout
+  across workflow/plot/export helpers, and parity-preserving chunked
+  `stacked_multi_omic()` evaluation for binary/regression tasks. The multiclass
+  stacking path remains scalar by design to preserve probability-normalization
+  parity.
 
 ## Quality and publication-readiness sweep
 
@@ -64,7 +79,11 @@
   extracted `.scores_to_long_df` to deduplicate the real- and
   artificial-feature long-data-frame loops in `plot_stabl_path`.
 - **Tests:** added tests for `get_stabl_scores` and `load_ool_data`; modernised
-  `skip()` to `skip_if()` idiom; test baseline 1553 pass / 0 fail.
+  `skip()` to `skip_if()` idiom. Current local no-vignette release check:
+  FAIL 0 | WARN 0 | SKIP 1 | PASS 1611.
+  No-manual/no-vignette `R CMD check` is `Status: OK`; all six source
+  vignettes rendered to `/tmp/stablr-vignette-review`; pkgdown built to
+  `/tmp/stablr-pkgdown`.
 - **CI:** added `.github/workflows/R-CMD-check.yaml` (ubuntu release+devel,
   macOS release) with a separate covr/Codecov coverage job; gated heavy
   vignettes (`stablr-multiomic`, `stablr-tcga`, `stablr-tcga-nestedcv`) with

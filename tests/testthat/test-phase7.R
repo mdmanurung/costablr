@@ -657,3 +657,44 @@ test_that("scatterplot_features silently skips missing features", {
   p_plot <- scatterplot_features(c("f1","f2","f99"), x, y)
   expect_s3_class(p_plot, "ggplot")
 })
+
+
+test_that("plotting and export helpers reject invalid scalar arguments", {
+  skip_if_not_installed("ggplot2")
+  fit <- .make_fit()
+  fit_no_art <- .make_fit(artificial_type = NULL, hard_threshold = 0.3)
+  x <- matrix(rnorm(20), 10, 2,
+              dimnames = list(paste0("s", seq_len(10)), c("f1", "f2")))
+  y_bin <- factor(rep(c("A", "B"), length.out = 10))
+  y_num <- rnorm(10)
+
+  expect_error(plot_fdr_graph(fit, fdr_target = NA_real_), "fdr_target")
+  expect_error(plot_fdr_graph(fit, fdr_target = Inf), "fdr_target")
+  expect_error(plot_fdr_graph(fit, fdr_target = c(0.05, 0.1)), "fdr_target")
+  expect_error(plot_fdr_graph(fit, fdr_target = "0.05"), "fdr_target")
+  expect_error(plot_fdr_graph(fit, title = ""), "title")
+
+  expect_error(plot_prc(c(0, 1), c(0.1, 0.9), show_iso = NA), "show_iso")
+  expect_error(plot_prc(c(0, 1), c(0.1, 0.9), show_iso = c(TRUE, FALSE)), "show_iso")
+  expect_error(plot_prc(c(0, 1), c(0.1, 0.9), show_iso = 1), "show_iso")
+  expect_error(plot_prc(c(0, 1), c(0.1, 0.9), title = ""), "title")
+
+  expect_error(boxplot_features("f1", x, y_bin, ncol = NA_integer_), "ncol")
+  expect_error(boxplot_features("f1", x, y_bin, ncol = 0L), "ncol")
+  expect_error(boxplot_features("f1", x, y_bin, ncol = 1.5), "ncol")
+  expect_error(boxplot_features("f1", x, y_bin, ncol = "2"), "ncol")
+  expect_error(boxplot_features("f1", x, y_bin, title = ""), "title")
+  expect_error(scatterplot_features("f1", x, y_num, ncol = 0L), "ncol")
+  expect_error(scatterplot_features("f1", x, y_num, title = ""), "title")
+
+  expect_error(export_stabl_to_csv(fit_no_art, path = NA_character_), "path")
+  expect_error(export_stabl_to_csv(fit_no_art, path = ""), "path")
+  expect_error(export_stabl_to_csv(fit_no_art, path = c("a", "b")), "path")
+
+  path <- file.path(tempdir(), paste0("stabl-results-invalid-", sample.int(1e6, 1L)))
+  expect_error(save_stabl_results(fit_no_art, path, x = x, y = y_num, figure_fmt = ""), "figure_fmt")
+  expect_error(save_stabl_results(fit_no_art, path, x = x, y = y_num, figure_fmt = c("png", "pdf")), "figure_fmt")
+  expect_error(save_stabl_results(fit_no_art, path, x = x, y = y_num, override = NA), "override")
+  expect_error(save_stabl_results(fit_no_art, path, x = x, y = y_num, override = c(TRUE, FALSE)), "override")
+  expect_error(save_stabl_results(fit_no_art, path, x = x, y = y_num, override = 1), "override")
+})

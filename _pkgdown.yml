@@ -1,4 +1,4 @@
-url: https://gregbellan.github.io/Stabl/stablr/
+url: https://mdmanurung.github.io/stablr/
 
 destination: ../../docs/stablr
 
@@ -26,18 +26,24 @@ navbar:
         href: articles/stablr-intro.html
       - text: Multi-omic OOL workflow
         href: articles/stablr-multiomic.html
-      - text: Python-to-R workflow mapping
-        href: articles/stablr-python-parity.html
       - text: TCGA Breast Cancer workflow
         href: articles/stablr-tcga.html
+      - text: TCGA nested CV and DIABLO
+        href: articles/stablr-tcga-nestedcv.html
       - text: Cooperative fusion
         href: articles/stablr-cooperative.html
+      - text: Advanced workflows
+        href: articles/stablr-advanced.html
     github:
       icon: fa-github
-      href: https://github.com/gregbellan/Stabl
+      href: https://github.com/mdmanurung/stablr
       aria-label: GitHub
 
 reference:
+- title: Package Overview
+  contents:
+  - stablr-package
+
 - title: Core STABL Engine
   desc: Fit single-matrix STABL selectors and compute FDP+ thresholds.
   contents:
@@ -56,8 +62,6 @@ reference:
   desc: Decoy-feature generation for FDP+ calibration.
   contents:
   - make_artificial_features
-  - make_rp_features
-  - make_knockoff_features
 
 - title: Input Validation and Bootstrapping
   contents:
@@ -70,6 +74,7 @@ reference:
   contents:
   - get_support
   - get_feature_names_out
+  - transform_stabl
   - get_stabl_scores
   - get_importances
   - get_cooperative_features
@@ -79,6 +84,7 @@ reference:
   contents:
   - stabl_multiomic_train_validate
   - stabl_multiomic_cv
+  - stabl_multiomic_nested_cv
   - stacked_multi_omic
   - load_ool_data
 
@@ -116,6 +122,7 @@ articles:
   contents:
   - stablr-intro
   - stablr-multiomic
-  - stablr-python-parity
   - stablr-tcga
+  - stablr-tcga-nestedcv
   - stablr-cooperative
+  - stablr-advanced

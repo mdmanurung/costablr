@@ -144,11 +144,11 @@ fit_mirna
 ```
 
 ```{r selected-per-omic}
-cat("mRNA selected features:\n")
-print(get_support(fit_mrna))
+cat("mRNA selected feature names:\n")
+print(get_feature_names_out(fit_mrna))
 
-cat("\nmiRNA selected features:\n")
-print(get_support(fit_mirna))
+cat("\nmiRNA selected feature names:\n")
+print(get_feature_names_out(fit_mirna))
 ```
 
 ```{r stability-paths, fig.alt = "mRNA and miRNA stability paths"}
@@ -189,13 +189,13 @@ multi_fit
 
 ```{r integrated-results}
 cat("mRNA (integrated):\n")
-print(get_support(multi_fit$fits$mrna))
+print(get_feature_names_out(multi_fit$fits$mrna))
 
 cat("\nmiRNA (integrated):\n")
-print(get_support(multi_fit$fits$mirna))
+print(get_feature_names_out(multi_fit$fits$mirna))
 
-cat("\nEarly fusion selected features:\n")
-print(get_support(multi_fit$early_fusion$fit))
+cat("\nEarly fusion selected feature names:\n")
+print(get_feature_names_out(multi_fit$early_fusion$fit))
 
 cat("\nLate fusion omic weights:\n")
 print(multi_fit$late_fusion$weights)
@@ -209,7 +209,7 @@ print(plot_stabl_path(multi_fit$fits$mirna, title = "Integrated - miRNA"))
 ## 4. Validation performance
 
 Feature stability is only one axis of evidence.  The held-out test set asks
-whether the selected features and fusion weights carry predictive information
+whether the selected feature names and fusion weights carry predictive information
 outside the training data.
 
 ```{r validation-performance}
@@ -234,7 +234,7 @@ cat(sprintf("Balanced Error Rate:     %.3f\n", ber))
 ```
 
 ```{r feature-boxplots, fig.alt = "Distribution of selected mRNA features"}
-mrna_feats <- names(which(get_support(multi_fit$fits$mrna)))
+mrna_feats <- get_feature_names_out(multi_fit$fits$mrna)
 if (length(mrna_feats) > 0) {
   boxplot_features(
     features = mrna_feats,
@@ -275,7 +275,7 @@ frequency survives resampling and passes an FDP-aware threshold**.
 | What is the deliverable? | Components, block loadings, `selectVar()` lists tied to components | Explicit feature names, stability scores, FDP+ threshold |
 | Integration mechanism | Joint multiblock PLS / sGCCA with a design matrix coupling blocks | Per-omic STABL, early/late fusion, or cooperative fusion (`rho`) |
 | FDR / stability calibration | Sparsity via `keepX` tuning; no bootstrap stability or knockoff FDP+ | Knockoffs or random artificial features; FDP+ threshold sweep |
-| Prediction | Native (`predict`, `centroids.dist`) | Requires a downstream refit on selected features (e.g. multinomial glmnet) |
+| Prediction | Native (`predict`, `centroids.dist`) | Requires a downstream refit on selected feature names (e.g. multinomial glmnet) |
 
 ### Objective strengths and limitations
 

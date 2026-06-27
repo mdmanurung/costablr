@@ -242,7 +242,7 @@ Report paired fold deltas with bootstrap confidence intervals (see
 | Compute profile | Many bootstraps × lambda grid | Component + `keepX` tuning (typically faster per fold) |
 
 For Python STABL parity (selection semantics, not prediction contests), see
-`vignette("stablr-python-parity")`.
+`docs/PYTHON_TO_R_MAPPING.md`.
 
 ## Session Info
 

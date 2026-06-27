@@ -49,6 +49,12 @@ predictions receive \code{NA} in the stacked output.
 In each of \code{n_iter} iterations a weight vector is sampled from
 \code{Uniform(0, 10)}.  For each sample the weighted average of available
 omic predictions is computed (missing omics for that sample are skipped).
+For binary and regression tasks, candidate weighted predictions are evaluated
+in chunks after drawing the same row-wise candidate weights as the scalar
+reference loop. The strict \code{score > best_score} incumbent update is still
+applied in candidate order, so seeded RNG order and first-maximum tie parity are
+preserved. The multiclass path remains scalar by design because per-sample
+probability normalization and tie parity are the release priority.
 The iteration that maximises AUC (binary), R² (regression), or negative
 multiclass log loss is retained.
 }

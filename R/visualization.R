@@ -74,6 +74,7 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
                             title = "STABL Stability Path") {
   .check_fitted_stabl(object)
   .require_ggplot2()
+  title <- .validate_nonempty_scalar_character(title, "title")
 
   scores     <- object$stabl_scores_
   feat_names <- object$feature_names
@@ -238,12 +239,13 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
   .check_fitted_stabl(object)
   .require_ggplot2()
-  if (!is.null(fdr_target) &&
-      !(is.numeric(fdr_target) && length(fdr_target) == 1L &&
-        is.finite(fdr_target) && fdr_target >= 0)) {
-    stop("`fdr_target` must be a non-negative numeric scalar or NULL.",
-         call. = FALSE)
-  }
+  title <- .validate_nonempty_scalar_character(title, "title")
+  fdr_target <- .validate_scalar_numeric(
+    fdr_target,
+    "fdr_target",
+    min = 0,
+    allow_null = TRUE
+  )
   if (is.null(object$FDRs_) || is.null(object$fdr_threshold_range)) {
     stop(
       "`object` was fitted without artificial features (artificial_type = NULL). ",
@@ -340,6 +342,7 @@ plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
 #' @export
 plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
   .require_ggplot2()
+  title <- .validate_nonempty_scalar_character(title, "title")
   inputs  <- .coerce_binary_inputs(y_true, y_preds)
   y_true  <- inputs$y_true
   y_preds <- inputs$y_preds
@@ -405,6 +408,10 @@ plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
 #' @export
 plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall Curve") {
   .require_ggplot2()
+  if (!is.logical(show_iso) || length(show_iso) != 1L || is.na(show_iso)) {
+    stop("`show_iso` must be a non-missing logical scalar.", call. = FALSE)
+  }
+  title <- .validate_nonempty_scalar_character(title, "title")
   inputs  <- .coerce_binary_inputs(y_true, y_preds)
   y_true  <- inputs$y_true
   y_preds <- inputs$y_preds
@@ -488,6 +495,8 @@ plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall
 #' @export
 boxplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
   .require_ggplot2()
+  title <- .validate_nonempty_scalar_character(title, "title")
+  ncol <- .validate_scalar_integer_like(ncol, "ncol", min = 1L)
   features <- .filter_features(features, x)
 
   df <- .features_long(features, x, y)
@@ -498,7 +507,7 @@ boxplot_features <- function(features, x, y, title = "Selected Features", ncol =
   ) +
     ggplot2::geom_boxplot(outlier.size = 0.8, alpha = 0.8, width = 0.6) +
     ggplot2::geom_jitter(width = 0.15, size = 0.5, alpha = 0.5) +
-    ggplot2::facet_wrap(~ feature, scales = "free_y", ncol = as.integer(ncol)) +
+    ggplot2::facet_wrap(~ feature, scales = "free_y", ncol = ncol) +
     ggplot2::labs(title = title, x = NULL, y = "Value") +
     ggplot2::theme_minimal(base_size = 10) +
     ggplot2::theme(
@@ -542,6 +551,8 @@ boxplot_features <- function(features, x, y, title = "Selected Features", ncol =
 #' @export
 scatterplot_features <- function(features, x, y, title = "Selected Features", ncol = 3L) {
   .require_ggplot2()
+  title <- .validate_nonempty_scalar_character(title, "title")
+  ncol <- .validate_scalar_integer_like(ncol, "ncol", min = 1L)
   features <- .filter_features(features, x)
 
   y_num <- as.numeric(y)
@@ -566,7 +577,7 @@ scatterplot_features <- function(features, x, y, title = "Selected Features", nc
       se      = TRUE,
       linewidth = 0.9
     ) +
-    ggplot2::facet_wrap(~ feature, scales = "free_x", ncol = as.integer(ncol)) +
+    ggplot2::facet_wrap(~ feature, scales = "free_x", ncol = ncol) +
     ggplot2::labs(title = title, x = "Feature value", y = "Outcome") +
     ggplot2::theme_minimal(base_size = 10) +
     ggplot2::theme(
@@ -644,4 +655,11 @@ scatterplot_features <- function(features, x, y, title = "Selected Features", nc
     )
   })
   do.call(rbind, df_list)
+}
+
+.validate_nonempty_scalar_character <- function(x, arg) {
+  if (!is.character(x) || length(x) != 1L || is.na(x) || identical(x, "")) {
+    stop(sprintf("`%s` must be a non-empty character scalar.", arg), call. = FALSE)
+  }
+  x
 }

@@ -1,0 +1,46 @@
+# stablr Review-Clear-Execute Tasks
+
+- [x] Re-read `docs/review-clear-execute-plan.md`, this task list, and the current repository diff.
+- [x] Confirm the existing release-hygiene edits are preserved and no unrelated user changes are reverted.
+- [x] Audit every exported function in `NAMESPACE` for validation, documented arguments, return shape, examples or usage docs, and API/pkgdown coverage.
+- [x] Add shared validators for scalar integer-like and numeric parameters.
+- [x] Apply validators across core fitting, nested CV, multi-omic workflows, cooperative options, plotting, and export helpers.
+- [x] Add tests rejecting `NA`, `Inf`, length greater than 1, fractional integer inputs, zero or negative counts, invalid proportions, and numeric strings where numeric input is required.
+- [x] Reject duplicate sample IDs and duplicate feature names before alignment, matching, subsetting, train/validation split, multi-omic concatenation, or validation-data alignment.
+- [x] Add tests for duplicate `rownames(x)`, `names(y)`, `names(groups)`, omic row names, validation IDs, and feature names.
+- [x] Fix FDP+ decoy injection to inject at least one artificial feature when `artificial_type` is non-`NULL` and cap at `ncol(x)`.
+- [x] Make FDP+ scaling use the effective artificial proportion `n_injected / n_features`.
+- [x] Add `stabl_fit()` regression tests for tiny positive `artificial_proportion`, one-feature matrices, capped decoy count, and all decoy types.
+- [x] Update public docs to list `random_permutation`, `knockoff`, `knockoff_equi`, and `knockoff_mvr`.
+- [x] Add `transform_stabl(object, x, new_hard_threshold = NULL)` in `R/stabl_accessors.R`.
+- [x] Export and document `transform_stabl()`.
+- [x] Add `transform_stabl()` tests for matrix input, data.frame input, rowname preservation, selected column order, zero selected columns, threshold override, missing selected columns, duplicate input names, and two-dimensional output.
+- [x] Verify `.can_open_server_socket()` runtime call sites.
+- [x] Remove production socket probing if no runtime caller exists.
+- [x] Add a test helper for PSOCK/server-socket availability and update RNG determinism tests.
+- [x] Run `Rscript -e "devtools::test(filter = 'rng-determinism')"` or the closest equivalent available locally.
+- [x] Add `matrixStats` to `DESCRIPTION` `Imports`.
+- [x] Update the local `rowMaxs()` wrapper to delegate to `matrixStats::rowMaxs()` while preserving current edge behavior.
+- [x] Add or update tests for zero-row and one-column row-max behavior.
+- [x] Add seeded `stacked_multi_omic()` characterization tests for binary, regression, and multiclass behavior before vectorization.
+- [x] Cover missing rows, all-NA rows, tie behavior, exact weights, predictions, probability shapes, and invalid `n_iter` in stacking tests.
+- [x] Vectorize or batch `stacked_multi_omic()` only where seeded output parity is preserved.
+- [x] Preserve strict `score > best_score`, RNG order, finite-value masking, multiclass per-sample renormalization, and public return shapes.
+- [x] Document any stacking path intentionally left scalar because exact parity could not be preserved cleanly.
+- [x] Add committed Python-parity fixtures under `tests/testthat/fixtures/python_parity/`.
+- [x] Add fixture provenance or a generation script.
+- [x] Make bundled parity fixture tests fail rather than skip when fixtures are missing.
+- [x] Add release-gated correctness tests for validation, FDP+ edge cases, `transform_stabl()`, row maxima, parity fixtures, and stacking behavior.
+- [x] Add a fixed-seed methodology validation script at `inst/analysis/run_methodology_validation.R` that writes artifacts under a caller-supplied `/tmp` output path.
+- [x] Add a fixed-seed stacking benchmark script at `bench/stacked_multi_omic_benchmark.R` that writes artifacts under a caller-supplied `/tmp` output path.
+- [x] Update `README.md`, vignettes, `docs/API_REFERENCE.md`, `docs/PYTHON_TO_R_MAPPING.md`, and `docs/CODEMAPS/architecture.md`.
+- [x] Update `_pkgdown.yml`, `NEWS.md`, `cran-comments.md`, generated `.Rd`, `DESCRIPTION`, and `NAMESPACE` as required.
+- [x] Run `Rscript -e "devtools::test()"`.
+- [x] Run `Rscript -e "devtools::test(filter = 'rng-determinism|input-validation|fdp|multiomic|accessor|phase7')"`.
+- [x] Run `Rscript -e "roxygen2::roxygenise(roclets = 'rd')"` and inspect generated documentation changes.
+- [x] Run `cd /tmp && R CMD build --no-build-vignettes /exports/para-lipg-hpc/mdmanurung/stablr`.
+- [x] Run `R CMD check --no-manual --ignore-vignettes --no-build-vignettes /tmp/stablr_0.1.0.tar.gz`.
+- [x] Run `Rscript -e "pkgdown::build_site('/exports/para-lipg-hpc/mdmanurung/stablr', install = FALSE, override = list(destination = '/tmp/stablr-pkgdown'))"`.
+- [x] Run `Rscript /exports/para-lipg-hpc/mdmanurung/stablr/inst/analysis/run_methodology_validation.R --out /tmp/stablr-methodology-validation`.
+- [x] Run `Rscript /exports/para-lipg-hpc/mdmanurung/stablr/bench/stacked_multi_omic_benchmark.R --out /tmp/stablr-benchmarks`.
+- [x] Finish with a concise report of changes, validation results, skipped checks, and residual risks.

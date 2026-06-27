@@ -219,7 +219,22 @@ stabl_fit <- function(
   # ---- Validate scalar params -----------------------------------------------
   .validate_stabl_params(n_bootstraps, sample_fraction, replace,
                          hard_threshold, artificial_type,
-                         artificial_proportion, stratify_bootstrap)
+                         artificial_proportion, stratify_bootstrap,
+                         n_explore, n_lambda, workers, random_state)
+  n_bootstraps <- .validate_scalar_integer_like(n_bootstraps, "n_bootstraps", min = 1L)
+  sample_fraction <- .validate_scalar_numeric(sample_fraction, "sample_fraction", min = 0, min_open = TRUE)
+  if (!is.null(hard_threshold)) {
+    hard_threshold <- .validate_proportion(hard_threshold, "hard_threshold")
+  }
+  if (!is.null(artificial_type)) {
+    artificial_proportion <- .validate_proportion(artificial_proportion, "artificial_proportion")
+  }
+  n_explore <- .validate_scalar_integer_like(n_explore, "n_explore", min = 1L)
+  n_lambda <- .validate_scalar_integer_like(n_lambda, "n_lambda", min = 1L)
+  workers <- .validate_scalar_integer_like(workers, "workers", min = 1L)
+  if (!is.null(random_state)) {
+    random_state <- .validate_scalar_integer_like(random_state, "random_state")
+  }
 
   n_samples   <- nrow(x)
   n_features  <- ncol(x)
@@ -265,7 +280,16 @@ stabl_fit <- function(
   }
 
   # ---- Artificial features --------------------------------------------------
-  n_injected        <- as.integer(round(n_features * artificial_proportion))
+  n_injected        <- if (!is.null(artificial_type)) {
+    min(n_features, max(1L, as.integer(round(n_features * artificial_proportion))))
+  } else {
+    0L
+  }
+  effective_artificial_proportion <- if (!is.null(artificial_type)) {
+    n_injected / n_features
+  } else {
+    NULL
+  }
   x_fit             <- x
   noise_col_indices <- NULL
 
@@ -368,7 +392,7 @@ stabl_fit <- function(
     fdp <- compute_fdp_plus(
       stabl_scores            = stabl_scores_,
       stabl_scores_artificial = stabl_scores_art,
-      artificial_proportion   = artificial_proportion,
+      artificial_proportion   = effective_artificial_proportion,
       fdr_threshold_range     = fdr_threshold_range
     )
   }
@@ -387,6 +411,7 @@ stabl_fit <- function(
       hard_threshold        = hard_threshold,
       artificial_type       = artificial_type,
       artificial_proportion = artificial_proportion,
+      effective_artificial_proportion = effective_artificial_proportion,
       stratify_bootstrap    = !is.null(bootstrap_strata_ids),
       bootstrap_strata_levels = if (!is.null(bootstrap_strata_ids)) {
         sort(unique(as.character(bootstrap_strata_ids)))
@@ -418,14 +443,16 @@ stabl_fit <- function(
 .validate_stabl_params <- function(n_bootstraps, sample_fraction, replace,
                                    hard_threshold, artificial_type,
                                    artificial_proportion,
-                                   stratify_bootstrap) {
-  if (!is.numeric(n_bootstraps) || length(n_bootstraps) != 1L ||
-      n_bootstraps < 1L) {
-    stop("`n_bootstraps` must be a positive integer.", call. = FALSE)
-  }
-  if (!is.numeric(sample_fraction) || length(sample_fraction) != 1L ||
-      sample_fraction <= 0) {
-    stop("`sample_fraction` must be a positive numeric.", call. = FALSE)
+                                   stratify_bootstrap,
+                                   n_explore, n_lambda, workers,
+                                   random_state) {
+  .validate_scalar_integer_like(n_bootstraps, "n_bootstraps", min = 1L)
+  .validate_scalar_numeric(sample_fraction, "sample_fraction", min = 0, min_open = TRUE)
+  .validate_scalar_integer_like(n_explore, "n_explore", min = 1L)
+  .validate_scalar_integer_like(n_lambda, "n_lambda", min = 1L)
+  .validate_scalar_integer_like(workers, "workers", min = 1L)
+  if (!is.null(random_state)) {
+    .validate_scalar_integer_like(random_state, "random_state")
   }
   if (!is.logical(replace) || length(replace) != 1L || is.na(replace)) {
     stop("`replace` must be TRUE or FALSE.", call. = FALSE)
@@ -441,10 +468,7 @@ stabl_fit <- function(
     )
   }
   if (!is.null(hard_threshold)) {
-    if (!is.numeric(hard_threshold) || hard_threshold <= 0 ||
-        hard_threshold > 1) {
-      stop("`hard_threshold` must be a numeric in (0, 1].", call. = FALSE)
-    }
+    .validate_proportion(hard_threshold, "hard_threshold")
   }
   if (is.null(hard_threshold) && is.null(artificial_type)) {
     stop(
@@ -452,9 +476,12 @@ stabl_fit <- function(
       call. = FALSE
     )
   }
-  if (!is.null(artificial_type) &&
-      (artificial_proportion <= 0 || artificial_proportion > 1)) {
-    stop("`artificial_proportion` must be in (0, 1].", call. = FALSE)
+  if (!is.null(artificial_type)) {
+    if (!is.character(artificial_type) || length(artificial_type) != 1L ||
+        is.na(artificial_type)) {
+      stop("`artificial_type` must be a single character string or NULL.", call. = FALSE)
+    }
+    .validate_proportion(artificial_proportion, "artificial_proportion")
   }
   invisible(NULL)
 }
