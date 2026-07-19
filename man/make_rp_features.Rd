@@ -17,6 +17,8 @@ Named list:
 \item{x_augmented}{Original matrix with artificial columns appended.}
 \item{noise_col_indices}{Integer vector (1-based) of original column
 indices selected as sources for the artificial block.}
+\item{artificial_provenance}{List describing the requested generator,
+actual generator modes, and any fallback chunks.}
 }
 }
 \description{

@@ -523,6 +523,25 @@ test_that("stacked_multi_omic batched scalar path keeps first strict incumbent o
   expect_equal(fast$predictions[["Stacked Gen. Predictions"]], slow$predictions, tolerance = 1e-12)
 })
 
+test_that("batch AUC scoring matches scalar rank AUC column-wise with ties", {
+  y <- c(0L, 1L, 1L, 0L, 1L, 0L)
+  scores <- cbind(
+    a = c(0.1, 0.8, 0.7, 0.4, 0.9, 0.2),
+    b = c(0.5, 0.5, 0.7, 0.5, 0.7, 0.1),
+    c = c(0.3, 0.2, 0.2, 0.9, 0.2, 0.9)
+  )
+
+  expected <- vapply(seq_len(ncol(scores)), function(i) {
+    stablr:::.r_auc(y, scores[, i])
+  }, numeric(1L))
+
+  expect_equal(
+    stablr:::.r_auc_batch(y, scores),
+    expected,
+    tolerance = 1e-12
+  )
+})
+
 # ---------------------------------------------------------------------------
 # Early fusion tests
 # ---------------------------------------------------------------------------

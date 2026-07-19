@@ -21,8 +21,9 @@
 #' @param n_bootstraps Positive integer; bootstrap iterations per lambda.
 #'   Default: `1000L`.
 #' @param artificial_type Character or `NULL`; `"random_permutation"`,
-#'   `"knockoff"`, or `NULL` (no artificial features — requires
-#'   `hard_threshold`).  Default: `"random_permutation"`.
+#'   `"knockoff"`, `"knockoff_equi"`, `"knockoff_mvr"`, or `NULL` (no
+#'   artificial features — requires `hard_threshold`).  Default:
+#'   `"random_permutation"`.
 #' @param artificial_proportion Numeric in `(0, 1]`; fraction of original
 #'   features to inject as artificial noise.  Default: `1.0`.
 #' @param sample_fraction Positive numeric; fraction of samples drawn per
@@ -87,6 +88,10 @@
 #'     \item{`fdrs_table_`}{Per-lambda FDP+ matrix, or `NULL`.}
 #'     \item{`hard_threshold`}{As supplied.}
 #'     \item{`artificial_type`}{As supplied.}
+#'     \item{`artificial_provenance`}{List returned by
+#'       [make_artificial_features()] recording actual artificial-feature
+#'       generation modes and fallback counts/reasons, or `NULL` when
+#'       `artificial_type = NULL`.}
 #'     \item{`artificial_proportion`}{As supplied.}
 #'     \item{`explore`}{As supplied.}
 #'     \item{`n_explore`}{As supplied.}
@@ -292,6 +297,7 @@ stabl_fit <- function(
   }
   x_fit             <- x
   noise_col_indices <- NULL
+  artificial_provenance <- NULL
 
   if (!is.null(artificial_type)) {
     if (verbose) message("Generating artificial features (type=",
@@ -300,6 +306,7 @@ stabl_fit <- function(
                                                   artificial_type, art_seed)
     x_fit             <- art_result$x_augmented
     noise_col_indices <- art_result$noise_col_indices
+    artificial_provenance <- art_result$artificial_provenance
   }
 
   # ---- Sparse-group feature groups -----------------------------------------
@@ -410,6 +417,7 @@ stabl_fit <- function(
       fdr_threshold_range   = fdr_threshold_range,
       hard_threshold        = hard_threshold,
       artificial_type       = artificial_type,
+      artificial_provenance = artificial_provenance,
       artificial_proportion = artificial_proportion,
       effective_artificial_proportion = effective_artificial_proportion,
       stratify_bootstrap    = !is.null(bootstrap_strata_ids),

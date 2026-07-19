@@ -59,8 +59,9 @@ data-driven grid via \code{\link[=auto_lambda_grid]{auto_lambda_grid()}} (uses \
 Default: \code{1000L}.}
 
 \item{artificial_type}{Character or \code{NULL}; \code{"random_permutation"},
-\code{"knockoff"}, or \code{NULL} (no artificial features — requires
-\code{hard_threshold}).  Default: \code{"random_permutation"}.}
+\code{"knockoff"}, \code{"knockoff_equi"}, \code{"knockoff_mvr"}, or \code{NULL} (no
+artificial features — requires \code{hard_threshold}).  Default:
+\code{"random_permutation"}.}
 
 \item{artificial_proportion}{Numeric in \verb{(0, 1]}; fraction of original
 features to inject as artificial noise.  Default: \code{1.0}.}
@@ -147,6 +148,10 @@ actually used.}
 \item{\code{fdrs_table_}}{Per-lambda FDP+ matrix, or \code{NULL}.}
 \item{\code{hard_threshold}}{As supplied.}
 \item{\code{artificial_type}}{As supplied.}
+\item{\code{artificial_provenance}}{List returned by
+\code{\link[=make_artificial_features]{make_artificial_features()}} recording actual artificial-feature
+generation modes and fallback counts/reasons, or \code{NULL} when
+\code{artificial_type = NULL}.}
 \item{\code{artificial_proportion}}{As supplied.}
 \item{\code{explore}}{As supplied.}
 \item{\code{n_explore}}{As supplied.}

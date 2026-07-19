@@ -25,7 +25,7 @@ Seeding happens exactly once in this dispatcher; downstream generators
 inherit the seeded RNG state and do not re-seed (audit M-5).}
 }
 \value{
-Named list with two elements:
+Named list with three elements:
 \describe{
 \item{\code{x_augmented}}{Numeric matrix of size
 (nrow(x)) \eqn{\times} (ncol(x) + n_injected) with the artificial
@@ -36,6 +36,9 @@ containing the 1-based indices into the \strong{original} \code{x} columns
 were used to build each artificial column.  Used by \code{\link[=stabl_fit]{stabl_fit()}}
 to look up sparse-group-lasso group memberships for the artificial
 block via \code{.append_noise_groups}.}
+\item{\code{artificial_provenance}}{Additive metadata describing the
+requested artificial-feature type, actual generator modes used for the
+selected artificial columns, and per-chunk fallback counts/reasons.}
 }
 }
 \description{

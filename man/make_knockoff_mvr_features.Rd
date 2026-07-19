@@ -15,8 +15,8 @@ make_knockoff_mvr_features(x, n_injected, random_state = NULL)
 coordinate-shuffle RNG.}
 }
 \value{
-Named list with elements \code{x_augmented} and \code{noise_col_indices};
-see \code{\link[=make_rp_features]{make_rp_features()}} for details.
+Named list with elements \code{x_augmented}, \code{noise_col_indices}, and
+\code{artificial_provenance}; see \code{\link[=make_rp_features]{make_rp_features()}} for details.
 }
 \description{
 Generates \strong{model-X MVR (minimum-variance-reconstructability)} knockoff

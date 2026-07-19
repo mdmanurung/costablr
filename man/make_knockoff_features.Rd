@@ -14,8 +14,8 @@ make_knockoff_features(x, n_injected, random_state = NULL)
 \item{random_state}{Optional integer seed.}
 }
 \value{
-Named list with elements \code{x_augmented} and \code{noise_col_indices};
-see \code{\link[=make_rp_features]{make_rp_features()}} for details.
+Named list with elements \code{x_augmented}, \code{noise_col_indices}, and
+\code{artificial_provenance}; see \code{\link[=make_rp_features]{make_rp_features()}} for details.
 }
 \description{
 Generates \strong{fixed-X} knockoff features via \code{knockoff::create.fixed()}, with

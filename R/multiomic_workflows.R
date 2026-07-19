@@ -1243,10 +1243,28 @@ stabl_multiomic_cv <- function(
   (sum(r[pos]) - n1 * (n1 + 1L) / 2L) / (n1 * n0)
 }
 
+.r_auc_batch <- function(y, scores) {
+  pos <- which(y == 1L)
+  n1 <- length(pos)
+  n0 <- length(y) - n1
+  if (n1 == 0L || n0 == 0L) return(rep(0.5, ncol(scores)))
+  ranks <- matrixStats::colRanks(scores, ties.method = "average",
+                                  preserveShape = TRUE)
+  unname(
+    (colSums(ranks[pos, , drop = FALSE]) - n1 * (n1 + 1L) / 2L) / (n1 * n0)
+  )
+}
+
 .r_squared <- function(y, y_hat) {
   ss_tot <- sum((y - mean(y))^2)
   if (ss_tot == 0) return(0)
   1 - sum((y - y_hat)^2) / ss_tot
+}
+
+.r_squared_batch <- function(y, y_hat) {
+  ss_tot <- sum((y - mean(y))^2)
+  if (ss_tot == 0) return(rep(0, ncol(y_hat)))
+  unname(1 - colSums((y_hat - y)^2) / ss_tot)
 }
 
 # ---------------------------------------------------------------------------
@@ -1325,7 +1343,7 @@ stacked_multi_omic <- function(
   # Hoisting avoids recomputing these inside the n_iter loop.
   is_obs_preds <- !is.na(predictions)
   y_na_mask    <- !is.na(y)
-  score_fn     <- if (task_type == "binary") .r_auc else .r_squared
+  complete_idx <- rowSums(is_obs_preds) > 0L & y_na_mask
 
   .with_local_seed(
     if (!is.null(random_state)) as.integer(random_state),
@@ -1351,20 +1369,20 @@ stacked_multi_omic <- function(
           is_obs = is_obs_preds
         )
 
+        if (sum(complete_idx) < 2L) next
+        score_mat <- weighted_probs_chunk[complete_idx, , drop = FALSE]
+        scores <- if (task_type == "binary") {
+          .r_auc_batch(y[complete_idx], score_mat)
+        } else {
+          .r_squared_batch(y[complete_idx], score_mat)
+        }
+
         for (j in seq_along(idx)) {
-          weighted_probs <- weighted_probs_chunk[, j]
-          complete_idx <- !is.na(weighted_probs) & y_na_mask
-          if (sum(complete_idx) < 2L) next
-
-          score <- tryCatch(
-            score_fn(y[complete_idx], weighted_probs[complete_idx]),
-            error = function(e) NA_real_
-          )
-
+          score <- scores[[j]]
           if (!is.na(score) && score > best_score) {
             best_score   <- score
             best_weights <- candidate_weights[idx[[j]], ]
-            best_probs   <- weighted_probs
+            best_probs   <- weighted_probs_chunk[, j]
           }
         }
       }

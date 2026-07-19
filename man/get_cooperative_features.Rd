@@ -38,11 +38,16 @@ x_list <- list(
                  dimnames = list(paste0("s", 1:n), paste0("p", 1:4)))
 )
 y <- setNames(rnorm(n), paste0("s", 1:n))
+train <- 1:30
+valid <- 31:40
+x_train <- lapply(x_list, function(x) x[train, , drop = FALSE])
+x_valid <- lapply(x_list, function(x) x[valid, , drop = FALSE])
 lam <- data.frame(lambda = c(0.3, 0.1))
 fit <- stabl_multiomic_train_validate(
-  x_list, y, family = "gaussian",
-  train_idx = 1:30, valid_idx = 31:40,
-  lambda_grid = lam, n_bootstraps = 4L,
+  x_train, y[train], lambda_grid = lam,
+  x_valid_list = x_valid, y_valid = y[valid],
+  family = "gaussian",
+  n_bootstraps = 4L,
   hard_threshold = 0.2, cooperative_fusion = TRUE,
   random_state = 1L
 )

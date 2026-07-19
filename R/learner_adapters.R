@@ -444,14 +444,40 @@ auto_lambda_grid <- function(
 # These extract coefficients for ALL lambdas in one call, returning a
 # (p × n_lambda) numeric matrix of absolute coefficient values.
 
+.near_lambda_match <- function(lambda_seq, fit_lambda,
+                               tolerance = 100 * .Machine$double.eps) {
+  col_idx <- match(lambda_seq, fit_lambda)
+  miss <- is.na(col_idx)
+  if (!any(miss) || length(fit_lambda) == 0L) {
+    return(col_idx)
+  }
+
+  for (i in which(miss)) {
+    if (!is.finite(lambda_seq[[i]])) {
+      next
+    }
+    dist <- abs(fit_lambda - lambda_seq[[i]])
+    nearest <- which.min(dist)
+    if (length(nearest) == 0L || !is.finite(dist[[nearest]])) {
+      next
+    }
+    scale <- max(1, abs(lambda_seq[[i]]), abs(fit_lambda[[nearest]]))
+    if (dist[[nearest]] <= tolerance * scale) {
+      col_idx[[i]] <- nearest
+    }
+  }
+
+  col_idx
+}
+
 .feature_abs_coefs_batch <- function(fit, lambda_seq, family = "gaussian") {
   # Fast path: when every requested lambda is on fit$lambda, read fit$beta
   # directly instead of making ~n_lambda coef.glmnet() calls.  For on-grid
   # lambdas this is bit-identical to the per-lambda path (verified by
   # test-coef-batch-ongrid.R) but avoids repeated sparse-to-dense coercions.
-  # Falls back to per-lambda coef() for off-grid values (e.g. adaptive lasso
-  # init lambda).
-  col_idx <- match(lambda_seq, fit$lambda)
+  # Near-on-grid lambdas are accepted within a tight floating-point tolerance;
+  # true off-grid values still fall back to per-lambda coef().
+  col_idx <- .near_lambda_match(lambda_seq, fit$lambda)
   if (!anyNA(col_idx)) {
     if (is.list(fit$beta)) {
       # Multinomial: fit$beta is a list of p × n_lambda matrices (one per class,
