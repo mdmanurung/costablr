@@ -318,13 +318,16 @@ plot_fdr_graph <- function(object, title = "FDR Estimate", fdr_target = 0.05) {
 #' specificity (1 - FPR) across all possible classification thresholds.  Use
 #' this plot to assess overall discriminative ability after applying STABL
 #' feature selection and fitting a downstream classifier on the selected
-#' features.  The Area Under the Curve (AUC) is shown in the caption.
+#' features.  Tied prediction scores are aggregated at a single threshold
+#' before AUC computation, making the result invariant to row order.  The Area
+#' Under the Curve (AUC) is shown in the caption.
 #'
-#' @param y_true Integer or logical vector of binary outcomes (1/`TRUE` for
-#'   the positive class, 0/`FALSE` for the negative class).  Must be the same
-#'   length as `y_preds`.
+#' @param y_true Numeric 0/1 or logical vector of binary outcomes (1/`TRUE`
+#'   for the positive class, 0/`FALSE` for the negative class).  Must contain
+#'   both classes and be the same length as `y_preds`.  Character or factor
+#'   labels should be recoded explicitly so the positive class is unambiguous.
 #' @param y_preds Numeric vector of predicted probabilities for the positive
-#'   class.  Values must be in \eqn{[0, 1]} for interpretable results.
+#'   class.  Values must be finite and in \eqn{[0, 1]}.
 #' @param title Character scalar; plot title.  Default `"ROC Curve"`.
 #'
 #' @return A `ggplot` object.  The AUC is shown as a caption.
@@ -382,19 +385,24 @@ plot_roc <- function(y_true, y_preds, title = "ROC Curve") {
 #' class is rare (class imbalance), because they focus on the model's
 #' performance on positive predictions without being diluted by the large
 #' number of true negatives.  Use this plot after applying STABL feature
-#' selection and fitting a downstream binary classifier.  The Area Under the
-#' PRC (AUPRC) is shown in the caption.
+#' selection and fitting a downstream binary classifier.  Tied prediction
+#' scores are aggregated at a single threshold before stepwise average
+#' precision computation, making the result invariant to row order and avoiding
+#' optimistic linear interpolation across precision drops.  Average precision
+#' is shown in the caption.
 #'
-#' @param y_true Integer or logical vector of binary outcomes (1/`TRUE` for
-#'   the positive class).  Must be the same length as `y_preds`.
+#' @param y_true Numeric 0/1 or logical vector of binary outcomes (1/`TRUE`
+#'   for the positive class, 0/`FALSE` for the negative class).  Must contain
+#'   both classes and be the same length as `y_preds`.  Character or factor
+#'   labels should be recoded explicitly so the positive class is unambiguous.
 #' @param y_preds Numeric vector of predicted probabilities for the positive
-#'   class.
+#'   class.  Values must be finite and in \eqn{[0, 1]}.
 #' @param show_iso Logical; if `TRUE` (default), four iso-F1 contour lines
 #'   at F1 = 0.2, 0.4, 0.6, 0.8 are drawn as reference guides.
 #' @param title Character scalar; plot title.  Default
 #'   `"Precision-Recall Curve"`.
 #'
-#' @return A `ggplot` object.  The AUPRC is shown as a caption.
+#' @return A `ggplot` object.  Average precision is shown as a caption.
 #'
 #' @seealso [plot_roc()] for the ROC curve alternative.
 #'
@@ -417,7 +425,7 @@ plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall
   y_preds <- inputs$y_preds
 
   prc_df  <- .prc_curve(y_true, y_preds)
-  auc_val <- .trapz(prc_df$recall, prc_df$precision)
+  ap_val <- .average_precision(prc_df)
 
   p <- ggplot2::ggplot()
 
@@ -452,7 +460,7 @@ plot_prc <- function(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall
       title   = title,
       x       = "Recall",
       y       = "Precision",
-      caption = sprintf("AUPRC = %.3f", auc_val)
+      caption = sprintf("Average precision = %.3f", ap_val)
     ) +
     ggplot2::theme_minimal(base_size = 11) +
     ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
@@ -590,11 +598,49 @@ scatterplot_features <- function(features, x, y, title = "Selected Features", nc
 
 # Coerce and validate binary classifier inputs; returns list(y_true, y_preds).
 .coerce_binary_inputs <- function(y_true, y_preds) {
-  y_true  <- as.integer(y_true)
-  y_preds <- as.numeric(y_preds)
   if (length(y_true) != length(y_preds)) {
     stop("`y_true` and `y_preds` must have the same length.", call. = FALSE)
   }
+
+  if (length(y_true) == 0L) {
+    stop("`y_true` and `y_preds` must be non-empty.", call. = FALSE)
+  }
+
+  if (!(is.logical(y_true) || is.numeric(y_true))) {
+    stop(
+      "`y_true` must be a binary 0/1 numeric or logical vector. ",
+      "Recode factor or character labels explicitly so the positive class is unambiguous.",
+      call. = FALSE
+    )
+  }
+
+  if (anyNA(y_true) || any(!is.finite(as.numeric(y_true)))) {
+    stop("`y_true` must not contain missing or non-finite values.", call. = FALSE)
+  }
+
+  y_true_numeric <- as.numeric(y_true)
+  if (!all(y_true_numeric %in% c(0, 1))) {
+    stop("`y_true` must be binary, containing only 0/1 or FALSE/TRUE values.", call. = FALSE)
+  }
+
+  y_true <- as.integer(y_true_numeric)
+  if (length(unique(y_true)) < 2L) {
+    stop("`y_true` must contain both classes for ROC/PRC plotting.", call. = FALSE)
+  }
+
+  if (!is.numeric(y_preds)) {
+    stop("`y_preds` must be a numeric vector.", call. = FALSE)
+  }
+
+  y_preds <- as.numeric(y_preds)
+  if (anyNA(y_preds) || any(!is.finite(y_preds))) {
+    stop("`y_preds` must contain only finite values.", call. = FALSE)
+  }
+
+  if (any(y_preds < 0 | y_preds > 1)) {
+    stop("`y_preds` values must be between 0 and 1.", call. = FALSE)
+  }
+
   list(y_true = y_true, y_preds = y_preds)
 }
 
@@ -611,13 +657,15 @@ scatterplot_features <- function(features, x, y, title = "Selected Features", nc
 .roc_curve <- function(y_true, y_preds) {
   ord    <- order(y_preds, decreasing = TRUE)
   y_s    <- y_true[ord]
+  pred_s <- y_preds[ord]
   n_pos  <- sum(y_true)
   n_neg  <- length(y_true) - n_pos
-  tp_cum <- cumsum(y_s)
-  fp_cum <- cumsum(1L - y_s)
+  threshold_ends <- cumsum(rle(pred_s)$lengths)
+  tp_cum <- cumsum(y_s)[threshold_ends]
+  fp_cum <- cumsum(1L - y_s)[threshold_ends]
   data.frame(
-    fpr = c(0, fp_cum / max(n_neg, 1L), 1),
-    tpr = c(0, tp_cum / max(n_pos, 1L), 1)
+    fpr = c(0, fp_cum / n_neg),
+    tpr = c(0, tp_cum / n_pos)
   )
 }
 
@@ -625,9 +673,11 @@ scatterplot_features <- function(features, x, y, title = "Selected Features", nc
 .prc_curve <- function(y_true, y_preds) {
   ord    <- order(y_preds, decreasing = TRUE)
   y_s    <- y_true[ord]
+  pred_s <- y_preds[ord]
   n_pos  <- sum(y_true)
-  tp_cum <- cumsum(y_s)
-  prec   <- tp_cum / seq_along(tp_cum)
+  threshold_ends <- cumsum(rle(pred_s)$lengths)
+  tp_cum <- cumsum(y_s)[threshold_ends]
+  prec   <- tp_cum / threshold_ends
   rec    <- tp_cum / max(n_pos, 1L)
   data.frame(
     precision = c(1, prec),
@@ -641,6 +691,12 @@ scatterplot_features <- function(features, x, y, title = "Selected Features", nc
   x   <- x[ord]
   y   <- y[ord]
   sum(diff(x) * (head(y, -1) + tail(y, -1))) / 2
+}
+
+# Stepwise area under the precision-recall curve, equivalent to average
+# precision for grouped prediction thresholds.
+.average_precision <- function(prc_df) {
+  sum(diff(prc_df$recall) * prc_df$precision[-1])
 }
 
 # Build long data frame for boxplot_features

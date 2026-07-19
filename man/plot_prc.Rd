@@ -7,11 +7,13 @@
 plot_prc(y_true, y_preds, show_iso = TRUE, title = "Precision-Recall Curve")
 }
 \arguments{
-\item{y_true}{Integer or logical vector of binary outcomes (1/\code{TRUE} for
-the positive class).  Must be the same length as \code{y_preds}.}
+\item{y_true}{Numeric 0/1 or logical vector of binary outcomes (1/\code{TRUE}
+for the positive class, 0/\code{FALSE} for the negative class).  Must contain
+both classes and be the same length as \code{y_preds}.  Character or factor
+labels should be recoded explicitly so the positive class is unambiguous.}
 
 \item{y_preds}{Numeric vector of predicted probabilities for the positive
-class.}
+class.  Values must be finite and in \eqn{[0, 1]}.}
 
 \item{show_iso}{Logical; if \code{TRUE} (default), four iso-F1 contour lines
 at F1 = 0.2, 0.4, 0.6, 0.8 are drawn as reference guides.}
@@ -20,7 +22,7 @@ at F1 = 0.2, 0.4, 0.6, 0.8 are drawn as reference guides.}
 \code{"Precision-Recall Curve"}.}
 }
 \value{
-A \code{ggplot} object.  The AUPRC is shown as a caption.
+A \code{ggplot} object.  Average precision is shown as a caption.
 }
 \description{
 Generates a ggplot2 Precision-Recall Curve (PRC) from binary outcome labels
@@ -31,8 +33,11 @@ Precision-recall curves are preferred over ROC curves when the positive
 class is rare (class imbalance), because they focus on the model's
 performance on positive predictions without being diluted by the large
 number of true negatives.  Use this plot after applying STABL feature
-selection and fitting a downstream binary classifier.  The Area Under the
-PRC (AUPRC) is shown in the caption.
+selection and fitting a downstream binary classifier.  Tied prediction
+scores are aggregated at a single threshold before stepwise average
+precision computation, making the result invariant to row order and avoiding
+optimistic linear interpolation across precision drops.  Average precision
+is shown in the caption.
 }
 \examples{
 if (requireNamespace("ggplot2", quietly = TRUE)) {

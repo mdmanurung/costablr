@@ -8,6 +8,7 @@
 #   S3method(coef,multiview)      -- cooperative-multiview.R
 #   S3method(family,cv.multiview) -- cooperative-family.multiview.R:16
 #   S3method(family,multiview)    -- cooperative-family.multiview.R
+#   S3method(plot,multiview)      -- cooperative-multiview.R:637
 #   S3method(predict,cv.multiview)-- cooperative-predict.cv.multiview.R:57
 #   S3method(predict,multiview)   -- cooperative-predict.multiview.R:60
 #

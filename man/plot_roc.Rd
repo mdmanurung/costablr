@@ -7,12 +7,13 @@
 plot_roc(y_true, y_preds, title = "ROC Curve")
 }
 \arguments{
-\item{y_true}{Integer or logical vector of binary outcomes (1/\code{TRUE} for
-the positive class, 0/\code{FALSE} for the negative class).  Must be the same
-length as \code{y_preds}.}
+\item{y_true}{Numeric 0/1 or logical vector of binary outcomes (1/\code{TRUE}
+for the positive class, 0/\code{FALSE} for the negative class).  Must contain
+both classes and be the same length as \code{y_preds}.  Character or factor
+labels should be recoded explicitly so the positive class is unambiguous.}
 
 \item{y_preds}{Numeric vector of predicted probabilities for the positive
-class.  Values must be in \eqn{[0, 1]} for interpretable results.}
+class.  Values must be finite and in \eqn{[0, 1]}.}
 
 \item{title}{Character scalar; plot title.  Default \code{"ROC Curve"}.}
 }
@@ -29,7 +30,9 @@ ROC curves visualise the trade-off between sensitivity (TPR) and
 specificity (1 - FPR) across all possible classification thresholds.  Use
 this plot to assess overall discriminative ability after applying STABL
 feature selection and fitting a downstream classifier on the selected
-features.  The Area Under the Curve (AUC) is shown in the caption.
+features.  Tied prediction scores are aggregated at a single threshold
+before AUC computation, making the result invariant to row order.  The Area
+Under the Curve (AUC) is shown in the caption.
 }
 \examples{
 if (requireNamespace("ggplot2", quietly = TRUE)) {

@@ -39,8 +39,8 @@ validation, performance/vectorization, and public API clarity.
 Run:
 
 - `devtools::test()`
-- `R CMD build --no-build-vignettes`
-- `R CMD check --no-manual --ignore-vignettes --no-build-vignettes`
+- `R CMD build`
+- `R CMD check --as-cran`
 - `pkgdown::build_site('.', install = FALSE, override = list(destination = '/tmp/stablr-pkgdown'))`
 
 ## Notes

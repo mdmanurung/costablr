@@ -1,16 +1,22 @@
 ## R CMD check results
 
-0 errors | 0 warnings | 0 notes
+0 errors | 0 warnings | 1 note
 
 Checked with:
 
 ```sh
-R CMD build --no-build-vignettes .
-R CMD check --no-manual --ignore-vignettes --no-build-vignettes stablr_0.1.0.tar.gz
+R CMD build .
+R CMD check --as-cran stablr_0.1.0.tar.gz
 ```
 
-Local testthat result: `FAIL 0 | WARN 0 | SKIP 1 | PASS 1611`.
-The no-manual/no-vignette release check completed with `Status: OK`.
+The full local `--as-cran` check completed with `Status: 1 NOTE`.
+The remaining NOTE is the expected CRAN incoming feasibility note for a first
+submission:
+
+- New submission
+
+Installed testthat result in the `--as-cran` check:
+`FAIL 0 | WARN 0 | SKIP 4 | PASS 1657`.
 
 Documentation review builds:
 
@@ -19,31 +25,36 @@ Documentation review builds:
 
 ## Submission notes
 
-### Package-level startup messages (6)
+### Vendored cooperative S3 registrations
 
-When the package loads, 6 informational messages are emitted by the vendored
-cooperative-learning engine. These arise because the S3 method registrations for
-`coef.multiview`, `coef_ordered.multiview`, `predict.multiview`,
-`predict.cv.multiview`, `coef.cv.multiview`, and `family.multiview` live in
-parity-locked vendored source files (`R/cooperative-*.R`) that cannot carry
-`@export` roxygen tags without breaking Python-parity guarantees. The NAMESPACE
-entries for these six S3 methods are maintained manually with an explanatory
-comment block. The messages are benign and do not affect functionality.
+The package vendors a parity-locked subset of the cooperative-learning engine.
+Seven cooperative S3 registrations are maintained manually in `NAMESPACE`
+because the vendored source files (`R/cooperative-*.R`) cannot carry roxygen
+`@export` tags without breaking parity provenance: `coef.multiview`,
+`coef.cv.multiview`, `family.multiview`, `family.cv.multiview`,
+`plot.multiview`, `predict.multiview`, and `predict.cv.multiview`.
+`R CMD check --as-cran` reports S3 registration as OK.
 
-### Tests skipped on CRAN (2)
+### Tests skipped on CRAN (3)
 
-`tests/testthat/test-fdp-calibration.R` and
+`tests/testthat/test-fdp-calibration.R`,
+`tests/testthat/test-methodology-validation-runner.R`, and
 `tests/testthat/test-signal-recovery.R` carry `skip_on_cran()` guards. These
-tests run long-form FDP calibration sweeps and signal-recovery benchmarks that
-take several minutes. They run in CI (GitHub Actions) on push and pull-request
-events; they are skipped on CRAN to stay within check time limits.
+tests run long-form FDP calibration, deterministic methodology-validation, and
+signal-recovery sweeps that take several minutes. They run in CI (GitHub
+Actions) on push and pull-request events; they are skipped on CRAN to stay
+within check time limits.
 
-### Tests skipped in the local sandbox (1)
+### Additional local skips (1)
 
-The local release check skipped one environment-dependent test because
-`Sample Data/data.zip` is not available in this workspace
-(`tests/testthat/test-phase7.R`). This does not affect the no-failure
-release-check result.
+The local `--as-cran` check also skipped one environment-dependent real-data
+test because `Sample Data/data.zip` is not available in this workspace
+(`tests/testthat/test-phase7.R`). This explicit environment guard does not
+affect the no-failure release-check result.
+
+Source-tree metadata and vignette-readiness tests run under `devtools::test()`
+but are excluded from the built tarball because their inputs (`cran-comments.md`,
+`.Rbuildignore`, and source `vignettes/`) are not installed test artifacts.
 
 ### Compiled code (C++17)
 

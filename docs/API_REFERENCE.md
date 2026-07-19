@@ -182,8 +182,13 @@ Cox and Poisson cooperative fusion are intentionally rejected.
 - `scatterplot_features(features, x, y, title = "Selected Features", ncol =
   3L)` plots selected features against a continuous outcome.
 
-Plot titles are validated as non-empty character scalars. `ncol` and similar
-numeric controls are finite integer-like scalars.
+ROC/PRC helpers require explicit 0/1 numeric or logical outcomes with both
+classes present, plus finite predicted probabilities in `[0, 1]`. Character or
+factor outcomes should be recoded by the caller so the positive class is
+unambiguous. Tied prediction scores are aggregated at a single threshold before
+ROC AUC and precision-recall average-precision computation, so metrics do not
+depend on row order. Plot titles are validated as non-empty character scalars.
+`ncol` and similar numeric controls are finite integer-like scalars.
 
 ## Export
 

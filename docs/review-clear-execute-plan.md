@@ -38,8 +38,8 @@ Harden stablr for release across API completeness, validation, FDP+/decoy semant
 - `Rscript -e "devtools::test()"`
 - `Rscript -e "devtools::test(filter = 'rng-determinism|input-validation|fdp|multiomic|accessor|phase7')"`
 - `Rscript -e "roxygen2::roxygenise(roclets = 'rd')"`
-- `cd /tmp && R CMD build --no-build-vignettes /exports/para-lipg-hpc/mdmanurung/stablr`
-- `R CMD check --no-manual --ignore-vignettes --no-build-vignettes /tmp/stablr_0.1.0.tar.gz`
+- `cd /tmp && R CMD build /exports/para-lipg-hpc/mdmanurung/stablr`
+- `R CMD check --as-cran /tmp/stablr_0.1.0.tar.gz`
 - `Rscript -e "pkgdown::build_site('/exports/para-lipg-hpc/mdmanurung/stablr', install = FALSE, override = list(destination = '/tmp/stablr-pkgdown'))"`
 - `Rscript /exports/para-lipg-hpc/mdmanurung/stablr/inst/analysis/run_methodology_validation.R --out /tmp/stablr-methodology-validation`
 - `Rscript /exports/para-lipg-hpc/mdmanurung/stablr/bench/stacked_multi_omic_benchmark.R --out /tmp/stablr-benchmarks`

@@ -7,8 +7,15 @@
 ^vignettes/.*\.html$
 ^vignettes/.*-cache$
 ^vignettes/tcga_results$
+^tests/testthat/test-release-hygiene[.]R$
+^tests/testthat/test-vignette-readiness[.]R$
 # stray graphics-device byproducts produced on headless hosts during tests
 Rplots\.pdf$
+# local R build/check byproducts
+^.*[.]Rcheck$
+^.*[.]tar[.]gz$
+^.*[.]tar[.]xz$
+^src/.*[.](o|so|dll)$
 # CI configuration and CRAN submission notes — not part of the package source tarball
 ^\.github$
 ^\.claude$

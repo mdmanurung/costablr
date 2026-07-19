@@ -598,6 +598,104 @@ test_that("plot_roc errors on mismatched lengths", {
   expect_error(plot_roc(c(0,1,0), c(0.2, 0.8)), "same length")
 })
 
+test_that("ROC and PRC helpers reject scientifically invalid classifier inputs", {
+  skip_if_not_installed("ggplot2")
+
+  expect_error(
+    plot_roc(factor(c("case", "control")), c(0.9, 0.1)),
+    "0/1 numeric or logical"
+  )
+  expect_error(
+    plot_prc(c("case", "control"), c(0.9, 0.1)),
+    "0/1 numeric or logical"
+  )
+  expect_error(
+    plot_roc(c(0, 1, 2), c(0.1, 0.8, 0.9)),
+    "binary"
+  )
+  expect_error(
+    plot_prc(c(0, 1, 0.2), c(0.1, 0.8, 0.4)),
+    "binary"
+  )
+  expect_error(
+    plot_prc(c(0, 0, 0), c(0.1, 0.2, 0.3)),
+    "both classes"
+  )
+  expect_error(
+    plot_roc(c(0, 1), c(-0.1, 0.8)),
+    "between 0 and 1"
+  )
+  expect_error(
+    plot_prc(c(0, 1), c(NA_real_, 0.8)),
+    "finite"
+  )
+  expect_error(
+    plot_roc(c(0, 1), c(0.2, Inf)),
+    "finite"
+  )
+  expect_error(
+    plot_prc(c(0, 1), c(0.2, NaN)),
+    "finite"
+  )
+  expect_error(
+    plot_prc(c(0, 1), c(0.2, 1.1)),
+    "between 0 and 1"
+  )
+  expect_error(
+    plot_roc(c(0, 0), c(0.1, 0.2)),
+    "both classes"
+  )
+  expect_error(
+    plot_roc(numeric(0), numeric(0)),
+    "non-empty"
+  )
+  expect_error(
+    plot_prc(c(0, NA), c(0.2, 0.8)),
+    "missing or non-finite"
+  )
+  expect_error(
+    plot_roc(c(0, Inf), c(0.2, 0.8)),
+    "missing or non-finite"
+  )
+  expect_error(
+    plot_roc(c(0, 1), c("low", "high")),
+    "numeric vector"
+  )
+})
+
+test_that("ROC and PRC helpers aggregate tied prediction thresholds", {
+  skip_if_not_installed("ggplot2")
+
+  roc_pos_first <- plot_roc(c(1, 0), c(0.5, 0.5))
+  roc_neg_first <- plot_roc(c(0, 1), c(0.5, 0.5))
+  expect_equal(roc_pos_first$labels$caption, "AUC = 0.500")
+  expect_equal(roc_neg_first$labels$caption, "AUC = 0.500")
+
+  prc_pos_first <- plot_prc(c(1, 0), c(0.5, 0.5), show_iso = FALSE)
+  prc_neg_first <- plot_prc(c(0, 1), c(0.5, 0.5), show_iso = FALSE)
+  expect_equal(prc_pos_first$labels$caption, "Average precision = 0.500")
+  expect_equal(prc_neg_first$labels$caption, "Average precision = 0.500")
+})
+
+test_that("ROC and PRC helpers handle mixed tied thresholds with stable curves", {
+  skip_if_not_installed("ggplot2")
+
+  y_true <- c(1, 0, 1, 0)
+  y_pred <- c(0.9, 0.8, 0.8, 0.1)
+
+  roc_plot <- plot_roc(y_true, y_pred)
+  roc_line <- ggplot2::ggplot_build(roc_plot)$data[[2]]
+  expect_equal(roc_plot$labels$caption, "AUC = 0.875")
+  expect_equal(roc_line$x, c(0, 0, 0.5, 1))
+  expect_equal(roc_line$y, c(0, 0.5, 1, 1))
+
+  prc_plot <- plot_prc(y_true, y_pred, show_iso = FALSE)
+  prc_line <- ggplot2::ggplot_build(prc_plot)$data[[1]]
+  expect_equal(prc_plot$labels$caption, "Average precision = 0.833")
+  expect_equal(prc_line$x, c(0, 0.5, 1, 1))
+  expect_equal(prc_line$y, c(1, 1, 2 / 3, 0.5))
+})
+
 test_that("plot_prc returns a ggplot object", {
   skip_if_not_installed("ggplot2")
   set.seed(2L)
