@@ -156,8 +156,10 @@ cf_fit
 
 - **`selection`** --- how `rho` was tuned: `"cv"` here.
 - **`rho (chosen)`** --- the `rho` value selected by cross-validation.  A value
-  of `0` means the data did not benefit from cross-view cooperation; a larger
-  value means views actively helped each other.
+  of `0` means the specified metric and folds preferred independent fits within
+  the supplied grid.  A larger value means that the same tuning surface preferred
+  some coupling between views; it is not by itself evidence of biological
+  cooperation.
 - **`selector`** --- which lambda rule was applied (`lambda.min`).
 - **`type.measure`** --- the CV metric used for tuning (e.g., `mse`).
 - **`score`** --- the CV score at the chosen `rho` and `lambda`.
@@ -423,7 +425,7 @@ analysis: did the views need to cooperate, and if so, how strongly?
 | **`cooperation_selection = "validation"`** | Use when you have a true held-out set and want to tune `rho` and `lambda` together on it. |
 | **Native v1 families** | Cooperative fusion supports `family = "gaussian"` and `"binomial"` only. |
 | **Binomial tuning metrics** | Try `cooperation_type_measure = "auc"` or `"class"` when the outcome is binary. |
-| **rho = 0 wins** | If the chosen `rho` is always 0, the views are not benefiting from cooperation.  Consider whether the omics share any biological pathway. |
+| **rho = 0 wins** | If the chosen `rho` is always 0, the chosen metric prefers independent fits under this grid and fold design.  Treat that as a prompt for sensitivity analysis, not proof that the omics share no useful structure. |
 
 ---
 

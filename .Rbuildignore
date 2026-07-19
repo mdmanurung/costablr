@@ -1,7 +1,6 @@
 ^doc$
 ^Meta$
 ^docs$
-^R/RcppExports\.R$
 ^scripts$
 ^bench$
 ^papers$

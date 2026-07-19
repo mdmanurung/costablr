@@ -20,7 +20,9 @@ knitr::opts_chunk$set(
 )
 ```
 
-> **Note:** This vignette is illustrative — code chunks are set to `eval = FALSE`
+> **Note:** This vignette documents the benchmark design and cache-reading
+> workflow.  The benchmark results are external and are not bundled with the
+> package until the expected cache exists.  Code chunks are set to `eval = FALSE`
 > because the nested-CV comparison against DIABLO requires the TCGA dataset and
 > runs for several hours. To run it interactively, set `eval = TRUE` in the setup
 > chunk above and supply the TCGA data (available via the `mixOmics` package), or
@@ -28,9 +30,10 @@ knitr::opts_chunk$set(
 
 ## Overview
 
-The compact TCGA vignette shows the workflow.  This vignette asks for evidence.
-It compares `stablr` and mixOmics DIABLO on the same three-class PAM50 breast
-cancer task: Basal, Her2, and LumA.
+The compact TCGA vignette shows the workflow.  This vignette defines the
+evidence-generating benchmark and reports results only when an external cache is
+available.  It compares `stablr` and mixOmics DIABLO on the same three-class
+PAM50 breast cancer task: Basal, Her2, and LumA.
 
 The design is nested cross-validation.  Outer folds estimate generalisation.
 Inner folds tune the models.  Feature selection is repeated inside each
@@ -44,7 +47,9 @@ while all 220 samples have mRNA and miRNA.  Excluding protein keeps both
 methods on the same samples and blocks.
 
 The heavy computation is not run while rendering this vignette.  It is executed
-through SLURM and cached as an RDS file.
+outside the package through SLURM and cached as an RDS file.  Until that cache is
+present, the vignette is a methodological protocol rather than bundled empirical
+evidence.
 
 ## Methodological Audit
 
@@ -73,20 +78,33 @@ most recurrent features, with explicit post-selection qualification.
 ## Run on SLURM
 
 ```{r cache-setup, eval = TRUE}
+use_external_cache <- identical(
+  tolower(Sys.getenv("STABLR_USE_EXTERNAL_TCGA_CACHE", unset = "false")),
+  "true"
+)
 experiments_root <- Sys.getenv(
   "STABLR_EXPERIMENTS_ROOT",
   unset = file.path(dirname(getwd()), "stablr-experiments")
 )
 analysis_dir <- file.path(experiments_root, "analysis")
 analysis_script <- file.path(analysis_dir, "run_tcga_nestedcv.R")
-if (file.exists(analysis_script)) {
+tcga_cache_complete <- function(path) FALSE
+if (use_external_cache && file.exists(analysis_script)) {
   source(analysis_script)
-} else {
+} else if (use_external_cache) {
   tcga_cache_complete <- function(path) file.exists(path)
 }
 
-cache_path <- file.path(analysis_dir, "cache", "tcga_nestedcv_results.rds")
-slurm_cmd <- paste("sbatch", file.path(analysis_dir, "tcga_nestedcv.slurm"))
+cache_path <- if (use_external_cache) {
+  file.path(analysis_dir, "cache", "tcga_nestedcv_results.rds")
+} else {
+  "<external TCGA cache disabled>"
+}
+slurm_cmd <- if (use_external_cache) {
+  paste("sbatch", file.path(analysis_dir, "tcga_nestedcv.slurm"))
+} else {
+  "Set STABLR_USE_EXTERNAL_TCGA_CACHE=true before using external artifacts."
+}
 has_results <- FALSE  # updated by cache-status chunk below
 cat("Expected cache:", cache_path, "\n")
 cat("Submit command:", slurm_cmd, "\n")
@@ -97,7 +115,8 @@ has_results <- tcga_cache_complete(cache_path)
 if (!has_results) {
   cat(
     "Nested-CV cache is not available yet.\n",
-    "Submit the SLURM job above, then render this notebook again.\n",
+    "No TCGA head-to-head benchmark results are bundled in this render.\n",
+    "Opt in to external artifacts, submit the SLURM job above, then render this notebook again.\n",
     sep = ""
   )
 }
@@ -124,9 +143,10 @@ and the locked outer-fold model is evaluated with weighted-vote
 
 ## Predictive Performance
 
-The performance table is the first readout.  The confusion matrices show where
-the methods make their mistakes, which is often more informative than a single
-accuracy number.
+When the cache is present, the performance table is the first readout.  The
+confusion matrices show where the methods make their mistakes, which is often
+more informative than a single accuracy number.  Without the cache, this section
+intentionally produces no numeric claim.
 
 ```{r performance, eval = has_results}
 res$performance

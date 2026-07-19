@@ -221,7 +221,10 @@ plot_prc(y_true = y_test, y_preds = lf_preds,
          title = "Late fusion - PRC curve (test set)")
 
 pred_class <- as.integer(lf_preds >= 0.5)
-conf_mat   <- table(Predicted = pred_class, Actual = y_test)
+conf_mat <- table(
+  Predicted = factor(pred_class, levels = c(0, 1)),
+  Actual    = factor(y_test, levels = c(0, 1))
+)
 print(conf_mat)
 
 sensitivity <- conf_mat["1", "1"] / sum(conf_mat[, "1"])

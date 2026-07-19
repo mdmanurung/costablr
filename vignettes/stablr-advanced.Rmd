@@ -121,7 +121,11 @@ get_feature_names_out(fit_multi)
 
 ## 3. Knockoff artificial features
 
-Supported artificial-feature settings are `"random_permutation"`, `"knockoff"`, `"knockoff_equi"`, `"knockoff_mvr"`, and `NULL`. Model-X knockoffs (`artificial_type = "knockoff"`) provide stronger FDP control than random permutations when the optional `knockoff` package is installed.
+Supported artificial-feature settings are `"random_permutation"`, `"knockoff"`,
+`"knockoff_equi"`, `"knockoff_mvr"`, and `NULL`.  Use
+`artificial_type = "knockoff"` for fixed-X knockoffs.  Use
+`artificial_type = "knockoff_equi"` or `"knockoff_mvr"` for Model-X Gaussian
+knockoffs when the optional `knockoff` package is installed.
 
 ```{r knockoff-check, include = FALSE}
 has_knockoff <- requireNamespace("knockoff", quietly = TRUE)
@@ -148,7 +152,7 @@ fit_ko <- stabl_fit(
   lambda_grid     = lambda_ko,
   family          = "binomial",
   n_bootstraps    = 30L,
-  artificial_type = "knockoff",
+  artificial_type = "knockoff_equi",
   random_state    = 7L
 )
 

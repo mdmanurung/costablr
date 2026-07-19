@@ -82,7 +82,7 @@ Collate:
     'stabl_fit.R'
     'cooperative-utils.R'
     'cooperative-multiview.control.R'
-    'cooperative-RcppExports.R'
+    'RcppExports.R'
     'cooperative-get_start.R'
     'cooperative-mvglmnet.fit.R'
     'cooperative-multiview.path.R'

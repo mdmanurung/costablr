@@ -5,8 +5,6 @@
 /vignettes/tcga_results/
 # testthat edition-3 failure-debug snapshots (transient, regenerated on failures)
 /tests/testthat/_problems/
-# Rcpp auto-generated stub (vendored as cooperative-RcppExports.R; keep that, not this)
-/R/RcppExports.R
 # Build outputs (regenerable)
 *.Rcheck/
 *.tar.gz
