@@ -31,9 +31,12 @@
     "  run_methodology_validation.R --out /tmp/output-dir [options]",
     "",
     "Options:",
-    "  --replicates N              Monte Carlo replicates per scenario/type. Default: 3",
+    "  --profile NAME             bounded (default) or locked release profile",
+    "  --replicates N              Monte Carlo replicates per family/scenario/type. Default: 3",
     "  --n-bootstraps N            STABL bootstraps per fit. Default: 12",
     "  --n-lambda N                Auto lambda-grid size. Default: 6",
+    "  --workers N                 Independent replicate workers. Default: 1",
+    "  --families CSV              Default: gaussian (release: all advertised families)",
     "  --artificial-types CSV      Default: random_permutation,knockoff_equi",
     "  --scenarios CSV             Default: all bounded scenarios",
     "  --seed N                    Top-level seed. Default: 270627",
@@ -44,8 +47,25 @@
     "  methodology_validation_summary.csv",
     "  methodology_validation_warnings.csv",
     "  python_metrics_parity.csv",
+    "  methodology_validation_gates.csv",
     "  methodology_validation_manifest.txt",
     sep = "\n"
+  )
+}
+
+.advertised_families <- c("gaussian", "binomial", "multinomial", "cox")
+.advertised_artificial_types <- c(
+  "random_permutation", "knockoff", "knockoff_equi", "knockoff_mvr"
+)
+
+.release_profile_settings <- function() {
+  list(
+    replicates = 100L,
+    n_bootstraps = 1000L,
+    n_lambda = 30L,
+    families = .advertised_families,
+    artificial_types = .advertised_artificial_types,
+    scenario_ids = "all"
   )
 }
 
@@ -77,16 +97,19 @@
     scenario = c(
       "null_independent",
       "null_correlated",
+      "signal_independent",
       "signal_correlated",
+      "null_high_dim",
       "signal_high_dim"
     ),
-    regime = c("null", "null", "signal", "signal"),
-    profile = c("low_dim", "low_dim", "low_dim", "high_dim"),
-    n = c(60L, 60L, 60L, 45L),
-    p = c(30L, 30L, 30L, 75L),
-    n_signal = c(0L, 0L, 5L, 5L),
-    correlation = c(0.0, 0.7, 0.7, 0.6),
-    noise_sd = c(1.0, 1.0, 0.8, 0.8),
+    regime = c("null", "null", "signal", "signal", "null", "signal"),
+    profile = c("low_dim", "low_dim", "low_dim", "low_dim", "high_dim", "high_dim"),
+    n = c(60L, 60L, 60L, 60L, 45L, 45L),
+    p = c(30L, 30L, 30L, 30L, 75L, 75L),
+    n_signal = c(0L, 0L, 5L, 5L, 0L, 5L),
+    correlation = c(0.0, 0.7, 0.0, 0.7, 0.6, 0.6),
+    noise_sd = c(1.0, 1.0, 0.8, 0.8, 1.0, 0.8),
+    signal_strength = c(0, 0, 2, 2, 0, 2),
     stringsAsFactors = FALSE
   )
 }
@@ -106,7 +129,11 @@
   outer(idx, idx, function(i, j) rho^abs(i - j))
 }
 
-.simulate_scenario <- function(scenario, seed) {
+.sample_multinomial <- function(probabilities) {
+  apply(probabilities, 1L, function(p) sample.int(ncol(probabilities), 1L, prob = p))
+}
+
+.simulate_scenario <- function(scenario, family, seed) {
   set.seed(seed)
   sigma <- .ar1_matrix(scenario$p, scenario$correlation)
   z <- matrix(stats::rnorm(scenario$n * scenario$p), nrow = scenario$n)
@@ -124,23 +151,49 @@
   if (scenario$n_signal > 0L) {
     beta <- seq(1.0, 0.45, length.out = scenario$n_signal)
     eta <- drop(x[, seq_len(scenario$n_signal), drop = FALSE] %*% beta)
-    eta <- eta / stats::sd(eta)
-    y <- eta + stats::rnorm(scenario$n, sd = scenario$noise_sd)
+    eta <- scenario$signal_strength * eta / stats::sd(eta)
     signal <- paste0("f", seq_len(scenario$n_signal))
   } else {
-    y <- stats::rnorm(scenario$n, sd = scenario$noise_sd)
+    eta <- rep.int(0, scenario$n)
     signal <- character(0L)
   }
 
+  y <- switch(
+    family,
+    gaussian = eta + stats::rnorm(scenario$n, sd = scenario$noise_sd),
+    binomial = stats::rbinom(scenario$n, 1L, stats::plogis(eta)),
+    multinomial = {
+      logits <- cbind(eta, -eta, rep.int(0, scenario$n))
+      logits <- logits - apply(logits, 1L, max)
+      probabilities <- exp(logits)
+      probabilities <- probabilities / rowSums(probabilities)
+      factor(.sample_multinomial(probabilities), levels = 1:3,
+             labels = c("A", "B", "C"))
+    },
+    cox = {
+      event_time <- stats::rexp(scenario$n, rate = 0.1 * exp(eta))
+      censor_time <- stats::rexp(scenario$n, rate = 0.06)
+      outcome <- survival::Surv(
+        time = pmin(event_time, censor_time),
+        event = event_time <= censor_time
+      )
+      rownames(outcome) <- rownames(x)
+      outcome
+    },
+    stop("Unsupported family: ", family, call. = FALSE)
+  )
+
+  if (!identical(family, "cox")) names(y) <- rownames(x)
+
   list(
     x = x,
-    y = stats::setNames(y, rownames(x)),
+    y = y,
     signal = signal
   )
 }
 
-.fit_with_warning_capture <- function(data, artificial_type, n_bootstraps,
-                                      n_lambda, seed) {
+.fit_with_warning_capture <- function(data, family, artificial_type,
+                                      n_bootstraps, n_lambda, seed) {
   warnings <- character()
   elapsed <- system.time({
     fit <- tryCatch(
@@ -148,6 +201,7 @@
         stablr::stabl_fit(
           x = data$x,
           y = data$y,
+          family = family,
           lambda_grid = "auto",
           n_lambda = n_lambda,
           n_bootstraps = n_bootstraps,
@@ -172,12 +226,15 @@
 
 .empty_replicate_row <- function() {
   data.frame(
+    family = character(),
     scenario = character(),
     regime = character(),
     correlation = numeric(),
     profile = character(),
     replicate = integer(),
     artificial_type = character(),
+    data_seed = integer(),
+    fit_seed = integer(),
     status = character(),
     n = integer(),
     p = integer(),
@@ -204,7 +261,8 @@
   )
 }
 
-.replicate_row <- function(scenario, replicate, artificial_type, status,
+.replicate_row <- function(scenario, family, replicate, artificial_type,
+                           data_seed, fit_seed, status,
                            n_bootstraps, n_lambda, warnings, elapsed_sec,
                            selected = character(), signal = character(),
                            fit = NULL, error = "") {
@@ -215,12 +273,15 @@
   real_scores <- if (!is.null(fit)) fit$stabl_scores_ else NULL
 
   data.frame(
+    family = family,
     scenario = scenario$scenario,
     regime = scenario$regime,
     correlation = scenario$correlation,
     profile = scenario$profile,
     replicate = replicate,
     artificial_type = artificial_type,
+    data_seed = data_seed,
+    fit_seed = fit_seed,
     status = status,
     n = scenario$n,
     p = scenario$p,
@@ -247,9 +308,10 @@
   )
 }
 
-.warning_rows <- function(scenario, replicate, artificial_type, warnings) {
+.warning_rows <- function(scenario, family, replicate, artificial_type, warnings) {
   if (!length(warnings)) {
     return(data.frame(
+      family = character(),
       scenario = character(),
       replicate = integer(),
       artificial_type = character(),
@@ -259,6 +321,7 @@
     ))
   }
   data.frame(
+    family = family,
     scenario = scenario$scenario,
     replicate = replicate,
     artificial_type = artificial_type,
@@ -268,15 +331,18 @@
   )
 }
 
-.run_one_condition <- function(scenario, replicate, artificial_type,
-                               n_bootstraps, n_lambda, seed) {
+.run_one_condition <- function(scenario, family, replicate, artificial_type, data,
+                               n_bootstraps, n_lambda, data_seed, fit_seed) {
   if (startsWith(artificial_type, "knockoff") &&
       !requireNamespace("knockoff", quietly = TRUE)) {
     return(list(
       replicate = .replicate_row(
         scenario = scenario,
+        family = family,
         replicate = replicate,
         artificial_type = artificial_type,
+        data_seed = data_seed,
+        fit_seed = fit_seed,
         status = "skipped_missing_knockoff",
         n_bootstraps = n_bootstraps,
         n_lambda = n_lambda,
@@ -284,24 +350,29 @@
         elapsed_sec = NA_real_,
         error = "The optional knockoff package is not installed."
       ),
-      warnings = .warning_rows(scenario, replicate, artificial_type, character())
+      warnings = .warning_rows(
+        scenario, family, replicate, artificial_type, character()
+      )
     ))
   }
 
-  data <- .simulate_scenario(scenario, seed = seed)
   result <- .fit_with_warning_capture(
     data = data,
+    family = family,
     artificial_type = artificial_type,
     n_bootstraps = n_bootstraps,
     n_lambda = n_lambda,
-    seed = seed
+    seed = fit_seed
   )
 
   if (inherits(result$fit, "error")) {
     row <- .replicate_row(
       scenario = scenario,
+      family = family,
       replicate = replicate,
       artificial_type = artificial_type,
+      data_seed = data_seed,
+      fit_seed = fit_seed,
       status = "error",
       n_bootstraps = n_bootstraps,
       n_lambda = n_lambda,
@@ -313,8 +384,11 @@
     selected <- stablr::get_feature_names_out(result$fit)
     row <- .replicate_row(
       scenario = scenario,
+      family = family,
       replicate = replicate,
       artificial_type = artificial_type,
+      data_seed = data_seed,
+      fit_seed = fit_seed,
       status = "ok",
       n_bootstraps = n_bootstraps,
       n_lambda = n_lambda,
@@ -330,6 +404,7 @@
     replicate = row,
     warnings = .warning_rows(
       scenario = scenario,
+      family = family,
       replicate = replicate,
       artificial_type = artificial_type,
       warnings = result$warnings
@@ -342,9 +417,20 @@
   if (!length(x)) NA_real_ else mean(x)
 }
 
+.sd_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 2L) NA_real_ else stats::sd(x)
+}
+
+.se_or_na <- function(x) {
+  x <- x[is.finite(x)]
+  if (length(x) < 2L) NA_real_ else stats::sd(x) / sqrt(length(x))
+}
+
 .summarise_replicates <- function(rows, target_fdp) {
   if (!nrow(rows)) {
     return(data.frame(
+      family = character(),
       scenario = character(),
       artificial_type = character(),
       profile = character(),
@@ -356,26 +442,41 @@
       replicates = integer(),
       ok_replicates = integer(),
       mean_selected = numeric(),
+      sd_selected = numeric(),
+      se_selected = numeric(),
       mean_empirical_fdp = numeric(),
+      sd_empirical_fdp = numeric(),
+      se_empirical_fdp = numeric(),
       mean_tpr = numeric(),
+      sd_tpr = numeric(),
+      se_tpr = numeric(),
       empirical_fdp_exceedance_rate = numeric(),
+      sd_empirical_fdp_exceedance = numeric(),
+      se_empirical_fdp_exceedance_rate = numeric(),
       mean_min_fdp_plus = numeric(),
       mean_fdp_threshold = numeric(),
       fallback_random_permutation_rate = numeric(),
+      se_fallback_random_permutation_rate = numeric(),
       fallback_equi_rate = numeric(),
+      se_fallback_equi_rate = numeric(),
       mean_elapsed_sec = numeric(),
       stringsAsFactors = FALSE
     ))
   }
 
-  groups <- unique(rows[c("scenario", "artificial_type")])
+  groups <- unique(rows[c("family", "scenario", "artificial_type")])
   summaries <- vector("list", nrow(groups))
   for (i in seq_len(nrow(groups))) {
-    idx <- rows$scenario == groups$scenario[[i]] &
+    idx <- rows$family == groups$family[[i]] &
+      rows$scenario == groups$scenario[[i]] &
       rows$artificial_type == groups$artificial_type[[i]]
     d <- rows[idx, , drop = FALSE]
     ok <- d$status == "ok"
+    fdp_exceeded <- as.numeric(d$empirical_fdp[ok] > target_fdp)
+    fallback_rp <- as.numeric(d$fallback_random_permutation_warnings[ok] > 0L)
+    fallback_equi <- as.numeric(d$fallback_equi_warnings[ok] > 0L)
     summaries[[i]] <- data.frame(
+      family = d$family[[1L]],
       scenario = d$scenario[[1L]],
       artificial_type = d$artificial_type[[1L]],
       profile = d$profile[[1L]],
@@ -387,13 +488,23 @@
       replicates = nrow(d),
       ok_replicates = sum(ok),
       mean_selected = .mean_or_na(d$n_selected[ok]),
+      sd_selected = .sd_or_na(d$n_selected[ok]),
+      se_selected = .se_or_na(d$n_selected[ok]),
       mean_empirical_fdp = .mean_or_na(d$empirical_fdp[ok]),
+      sd_empirical_fdp = .sd_or_na(d$empirical_fdp[ok]),
+      se_empirical_fdp = .se_or_na(d$empirical_fdp[ok]),
       mean_tpr = .mean_or_na(d$tpr[ok]),
-      empirical_fdp_exceedance_rate = .mean_or_na(as.numeric(d$empirical_fdp[ok] > target_fdp)),
+      sd_tpr = .sd_or_na(d$tpr[ok]),
+      se_tpr = .se_or_na(d$tpr[ok]),
+      empirical_fdp_exceedance_rate = .mean_or_na(fdp_exceeded),
+      sd_empirical_fdp_exceedance = .sd_or_na(fdp_exceeded),
+      se_empirical_fdp_exceedance_rate = .se_or_na(fdp_exceeded),
       mean_min_fdp_plus = .mean_or_na(d$min_fdp_plus[ok]),
       mean_fdp_threshold = .mean_or_na(d$fdp_threshold[ok]),
-      fallback_random_permutation_rate = .mean_or_na(as.numeric(d$fallback_random_permutation_warnings[ok] > 0L)),
-      fallback_equi_rate = .mean_or_na(as.numeric(d$fallback_equi_warnings[ok] > 0L)),
+      fallback_random_permutation_rate = .mean_or_na(fallback_rp),
+      se_fallback_random_permutation_rate = .se_or_na(fallback_rp),
+      fallback_equi_rate = .mean_or_na(fallback_equi),
+      se_fallback_equi_rate = .se_or_na(fallback_equi),
       mean_elapsed_sec = .mean_or_na(d$elapsed_sec[ok]),
       stringsAsFactors = FALSE
     )
@@ -413,6 +524,59 @@
     if (identical(parent, path)) return(NA_character_)
     path <- parent
   }
+}
+
+.validation_runtime <- new.env(parent = emptyenv())
+
+.git_provenance <- function(root) {
+  empty <- list(commit = NA_character_, tree = NA_character_, dirty = NA)
+  if (is.na(root) || !file.exists(file.path(root, ".git")) ||
+      !nzchar(Sys.which("git"))) return(empty)
+  git <- function(...) {
+    out <- suppressWarnings(system2(
+      "git", c("-C", shQuote(root), ...), stdout = TRUE, stderr = TRUE
+    ))
+    if (!is.null(attr(out, "status")) && attr(out, "status") != 0L) {
+      return(NA_character_)
+    }
+    paste(out, collapse = "\n")
+  }
+  status <- git("status", "--porcelain", "--untracked-files=no")
+  list(
+    commit = git("rev-parse", "HEAD"),
+    tree = git("rev-parse", "HEAD^{tree}"),
+    dirty = if (is.na(status)) NA else nzchar(status)
+  )
+}
+
+.sha256_file <- function(path) {
+  if (nzchar(Sys.which("sha256sum"))) {
+    out <- system2("sha256sum", shQuote(path), stdout = TRUE)
+    return(strsplit(out[[1L]], "[[:space:]]+")[[1L]][[1L]])
+  }
+  if (nzchar(Sys.which("shasum"))) {
+    out <- system2("shasum", c("-a", "256", shQuote(path)), stdout = TRUE)
+    return(strsplit(out[[1L]], "[[:space:]]+")[[1L]][[1L]])
+  }
+  NA_character_
+}
+
+.load_validation_package <- function() {
+  if (isTRUE(.validation_runtime$loaded)) return(.validation_runtime$mode)
+  root <- .find_package_root()
+  if (!is.na(root) && requireNamespace("pkgload", quietly = TRUE)) {
+    pkgload::load_all(root, quiet = TRUE)
+    mode <- paste0("source:", normalizePath(root, winslash = "/"))
+  } else {
+    if (!requireNamespace("stablr", quietly = TRUE)) {
+      stop("stablr must be installed when source loading via pkgload is unavailable.",
+           call. = FALSE)
+    }
+    mode <- paste0("installed:", system.file(package = "stablr"))
+  }
+  .validation_runtime$loaded <- TRUE
+  .validation_runtime$mode <- mode
+  mode
 }
 
 .metric_inputs <- function() {
@@ -552,14 +716,25 @@
 }
 
 .write_manifest <- function(path, settings, artifacts) {
+  artifact_paths <- unlist(artifacts[c(
+    "replicates", "summary", "warnings", "parity", "gates"
+  )], use.names = FALSE)
   lines <- c(
     "stablr methodology validation manifest",
     paste0("created_at: ", format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")),
     paste0("seed: ", settings$seed),
+    paste0("validation_profile: ", settings$profile),
     paste0("replicates: ", settings$replicates),
     paste0("n_bootstraps: ", settings$n_bootstraps),
     paste0("n_lambda: ", settings$n_lambda),
     paste0("target_fdp: ", settings$target_fdp),
+    paste0("workers: ", settings$workers),
+    paste0("package_mode: ", settings$package_mode),
+    paste0("package_version: ", settings$package_version),
+    paste0("source_git_commit: ", settings$git$commit),
+    paste0("source_git_tree: ", settings$git$tree),
+    paste0("source_tracked_dirty: ", settings$git$dirty),
+    paste0("families: ", paste(settings$families, collapse = ",")),
     paste0("artificial_types: ", paste(settings$artificial_types, collapse = ",")),
     paste0("scenarios: ", paste(settings$scenarios$scenario, collapse = ",")),
     "",
@@ -568,24 +743,176 @@
     "2. In signal settings, empirical FDP and TPR quantify the calibration-power tradeoff across artificial-feature strategies.",
     "3. Knockoff fallback frequency should be visible through warnings and additive fit provenance.",
     "4. Bundled Python metric fixtures should remain numerically identical to exported R metrics.",
+    "5. The fitting rule selects the FDP+ minimizer; target_fdp is a reporting reference, not a fitting target or universal guarantee.",
     "",
     "artifacts:",
     paste0("replicates: ", artifacts$replicates),
     paste0("summary: ", artifacts$summary),
     paste0("warnings: ", artifacts$warnings),
-    paste0("parity: ", artifacts$parity)
+    paste0("parity: ", artifacts$parity),
+    paste0("gates: ", artifacts$gates),
+    "",
+    "artifact_sha256:",
+    paste(basename(artifact_paths),
+          vapply(artifact_paths, .sha256_file, character(1L)))
   )
   writeLines(lines, con = path)
 }
 
+.wilson_bound <- function(successes, trials, side = c("upper", "lower"),
+                          confidence = 0.95) {
+  side <- match.arg(side)
+  if (trials <= 0L) return(NA_real_)
+  z <- stats::qnorm(confidence)
+  p <- successes / trials
+  centre <- (p + z^2 / (2 * trials)) / (1 + z^2 / trials)
+  half <- z * sqrt(p * (1 - p) / trials + z^2 / (4 * trials^2)) /
+    (1 + z^2 / trials)
+  if (side == "upper") min(1, centre + half) else max(0, centre - half)
+}
+
+.one_sided_mean_bound <- function(x, side = c("upper", "lower"),
+                                  confidence = 0.95) {
+  side <- match.arg(side)
+  x <- x[is.finite(x)]
+  if (length(x) < 2L) return(NA_real_)
+  half <- stats::qt(confidence, df = length(x) - 1L) *
+    stats::sd(x) / sqrt(length(x))
+  if (side == "upper") min(1, mean(x) + half) else max(0, mean(x) - half)
+}
+
+.gate_cell_status <- function(cell, expected_replicates) {
+  expected_ids <- seq_len(expected_replicates)
+  if (!nrow(cell)) return("missing_cell")
+  if (anyDuplicated(cell$replicate) ||
+      !identical(sort(cell$replicate), expected_ids)) {
+    return("incomplete_replicates")
+  }
+  if (any(cell$status != "ok")) return("fit_not_ok")
+  "complete"
+}
+
+.release_gate_table <- function(rows, scenarios = NULL, families = NULL,
+                                artificial_types = NULL,
+                                expected_replicates = NULL) {
+  if (is.null(scenarios)) {
+    scenarios <- unique(rows[c(
+      "scenario", "regime", "profile", "correlation", "n", "p", "n_signal"
+    )])
+  }
+  if (is.null(families)) families <- unique(rows$family)
+  if (is.null(artificial_types)) {
+    artificial_types <- unique(rows$artificial_type)
+  }
+  if (is.null(expected_replicates)) {
+    expected_replicates <- if (nrow(rows)) max(rows$replicate) else 0L
+  }
+
+  gate_rows <- list()
+  k <- 0L
+  for (family in families) {
+    for (scenario_i in seq_len(nrow(scenarios))) {
+      scenario <- scenarios[scenario_i, , drop = FALSE]
+      for (artificial_type in artificial_types) {
+        cell <- rows[
+          rows$family == family &
+            rows$scenario == scenario$scenario &
+            rows$artificial_type == artificial_type,
+          , drop = FALSE
+        ]
+        cell_status <- .gate_cell_status(cell, expected_replicates)
+        complete <- identical(cell_status, "complete")
+
+        if (identical(scenario$regime, "null")) {
+          select_any <- if (complete) {
+            .wilson_bound(sum(cell$n_selected > 0L), expected_replicates, "upper")
+          } else NA_real_
+          # Each Monte Carlo replicate contributes one bounded selected-fraction
+          # observation. Fractional Wilson successes retain the replicate, not
+          # individual correlated features, as the experimental unit.
+          selected_fraction <- if (complete) {
+            .wilson_bound(
+              sum(cell$n_selected / cell$p), expected_replicates, "upper"
+            )
+          } else NA_real_
+          collapses <- if (complete) {
+            sum(cell$n_selected >= 0.9 * cell$p)
+          } else NA_real_
+          gates <- data.frame(
+            gate = c("null_select_any", "null_selected_fraction",
+                     "null_90pct_collapse"),
+            bound = c(select_any, selected_fraction, collapses),
+            criterion = c("<= 0.10", "<= 0.10", "== 0"),
+            pass = complete & c(
+              is.finite(select_any) && select_any <= 0.10,
+              is.finite(selected_fraction) && selected_fraction <= 0.10,
+              is.finite(collapses) && collapses == 0L
+            ),
+            stringsAsFactors = FALSE
+          )
+        } else {
+          fdp_upper <- if (complete) {
+            .one_sided_mean_bound(cell$empirical_fdp, "upper")
+          } else NA_real_
+          tpr_lower <- if (complete) {
+            .one_sided_mean_bound(cell$tpr, "lower")
+          } else NA_real_
+          gates <- data.frame(
+            gate = c("signal_mean_fdp", "signal_tpr"),
+            bound = c(fdp_upper, tpr_lower),
+            criterion = c("<= 0.12", ">= 0.50"),
+            pass = complete & c(
+              is.finite(fdp_upper) && fdp_upper <= 0.12,
+              is.finite(tpr_lower) && tpr_lower >= 0.50
+            ),
+            stringsAsFactors = FALSE
+          )
+        }
+
+        k <- k + 1L
+        gate_rows[[k]] <- cbind(
+          data.frame(
+            family = family,
+            scenario = scenario$scenario,
+            regime = scenario$regime,
+            profile = scenario$profile,
+            artificial_type = artificial_type,
+            expected_replicates = expected_replicates,
+            observed_replicates = nrow(cell),
+            ok_replicates = sum(cell$status == "ok"),
+            cell_status = cell_status,
+            stringsAsFactors = FALSE
+          ),
+          gates
+        )
+      }
+    }
+  }
+  do.call(rbind, gate_rows)
+}
+
 run_methodology_validation <- function(out,
+                                       profile = c("bounded", "release"),
                                        replicates = 3L,
                                        n_bootstraps = 12L,
                                        n_lambda = 6L,
+                                       families = "gaussian",
                                        artificial_types = c("random_permutation", "knockoff_equi"),
                                        scenario_ids = "all",
                                        seed = 270627L,
-                                       target_fdp = 0.1) {
+                                       target_fdp = 0.1,
+                                       workers = 1L) {
+  package_mode <- .load_validation_package()
+  profile <- match.arg(profile)
+  if (identical(profile, "release")) {
+    locked <- .release_profile_settings()
+    replicates <- locked$replicates
+    n_bootstraps <- locked$n_bootstraps
+    n_lambda <- locked$n_lambda
+    families <- locked$families
+    artificial_types <- locked$artificial_types
+    scenario_ids <- locked$scenario_ids
+  }
   if (missing(out) || is.null(out) || !nzchar(out)) {
     stop("`out` must be a non-empty output directory.", call. = FALSE)
   }
@@ -593,43 +920,95 @@ run_methodology_validation <- function(out,
   n_bootstraps <- as.integer(n_bootstraps)
   n_lambda <- as.integer(n_lambda)
   seed <- as.integer(seed)
-  if (any(is.na(c(replicates, n_bootstraps, n_lambda, seed))) ||
-      replicates < 1L || n_bootstraps < 1L || n_lambda < 1L) {
-    stop("`replicates`, `n_bootstraps`, `n_lambda`, and `seed` must be positive integers.",
+  workers <- as.integer(workers)
+  if (any(is.na(c(replicates, n_bootstraps, n_lambda, seed, workers))) ||
+      replicates < 1L || n_bootstraps < 1L || n_lambda < 1L || workers < 1L) {
+    stop("`replicates`, `n_bootstraps`, `n_lambda`, `seed`, and `workers` must be positive integers.",
+         call. = FALSE)
+  }
+  if (workers > 1L && .Platform$OS.type == "windows") {
+    stop("`workers > 1` is currently supported only on Unix-alike systems.",
          call. = FALSE)
   }
   if (!is.numeric(target_fdp) || length(target_fdp) != 1L ||
       is.na(target_fdp) || target_fdp < 0 || target_fdp > 1) {
     stop("`target_fdp` must be a numeric scalar in [0, 1].", call. = FALSE)
   }
+  if (!is.character(artificial_types) || length(artificial_types) == 0L ||
+      anyNA(artificial_types) || any(!nzchar(artificial_types))) {
+    stop("`artificial_types` must be a non-empty character vector.", call. = FALSE)
+  }
+  if (anyDuplicated(artificial_types)) {
+    stop(
+      "`artificial_types` must not contain duplicates; duplicate same-seed runs are not independent replicates.",
+      call. = FALSE
+    )
+  }
+  if (!all(artificial_types %in% .advertised_artificial_types)) {
+    stop(
+      "Unknown `artificial_types`: ",
+      paste(setdiff(artificial_types, .advertised_artificial_types), collapse = ", "),
+      call. = FALSE
+    )
+  }
+  if (!is.character(families) || !length(families) || anyNA(families) ||
+      any(!nzchar(families)) || anyDuplicated(families)) {
+    stop("`families` must be a unique, non-empty character vector.", call. = FALSE)
+  }
+  if (!all(families %in% .advertised_families)) {
+    stop(
+      "Unknown `families`: ",
+      paste(setdiff(families, .advertised_families), collapse = ", "),
+      call. = FALSE
+    )
+  }
 
   scenarios <- .select_scenarios(scenario_ids)
   dir.create(out, recursive = TRUE, showWarnings = FALSE)
   out <- normalizePath(out, mustWork = TRUE)
 
-  replicate_rows <- list()
-  warning_rows <- list()
-  k <- 0L
-  for (scenario_i in seq_len(nrow(scenarios))) {
+  tasks <- expand.grid(
+    family_i = seq_along(families),
+    scenario_i = seq_len(nrow(scenarios)),
+    replicate = seq_len(replicates),
+    KEEP.OUT.ATTRS = FALSE
+  )
+  run_task <- function(task_i) {
+    task <- tasks[task_i, , drop = FALSE]
+    family_i <- task$family_i[[1L]]
+    scenario_i <- task$scenario_i[[1L]]
+    replicate <- task$replicate[[1L]]
+    family <- families[[family_i]]
     scenario <- scenarios[scenario_i, , drop = FALSE]
-    for (replicate in seq_len(replicates)) {
-      data_seed <- seed + scenario_i * 100000L + replicate * 1000L
-      for (type_i in seq_along(artificial_types)) {
-        fit_seed <- data_seed + type_i
-        result <- .run_one_condition(
-          scenario = scenario,
-          replicate = replicate,
-          artificial_type = artificial_types[[type_i]],
-          n_bootstraps = n_bootstraps,
-          n_lambda = n_lambda,
-          seed = fit_seed
-        )
-        k <- k + 1L
-        replicate_rows[[k]] <- result$replicate
-        warning_rows[[k]] <- result$warnings
-      }
-    }
+    data_seed <- seed + family_i * 1000000L +
+      scenario_i * 100000L + replicate * 1000L
+    fit_seed <- data_seed + 1L
+    data <- .simulate_scenario(scenario, family = family, seed = data_seed)
+    conditions <- lapply(artificial_types, function(artificial_type) {
+      .run_one_condition(
+        scenario = scenario, family = family, replicate = replicate,
+        artificial_type = artificial_type, data = data,
+        n_bootstraps = n_bootstraps, n_lambda = n_lambda,
+        data_seed = data_seed, fit_seed = fit_seed
+      )
+    })
+    list(
+      replicates = lapply(conditions, `[[`, "replicate"),
+      warnings = lapply(conditions, `[[`, "warnings")
+    )
   }
+  task_results <- if (workers == 1L) {
+    lapply(seq_len(nrow(tasks)), run_task)
+  } else {
+    parallel::mclapply(
+      seq_len(nrow(tasks)), run_task,
+      mc.cores = min(workers, nrow(tasks)), mc.preschedule = TRUE
+    )
+  }
+  replicate_rows <- unlist(lapply(task_results, `[[`, "replicates"),
+                           recursive = FALSE)
+  warning_rows <- unlist(lapply(task_results, `[[`, "warnings"),
+                         recursive = FALSE)
 
   replicates_df <- if (length(replicate_rows)) {
     do.call(rbind, replicate_rows)
@@ -639,7 +1018,9 @@ run_methodology_validation <- function(out,
   warnings_df <- if (length(warning_rows)) {
     do.call(rbind, warning_rows)
   } else {
-    .warning_rows(scenarios[1L, , drop = FALSE], 1L, "", character())
+    .warning_rows(
+      scenarios[1L, , drop = FALSE], "", 1L, "", character()
+    )
   }
   summary_df <- .summarise_replicates(replicates_df, target_fdp = target_fdp)
   parity_df <- .run_python_metrics_parity(.find_package_root())
@@ -649,23 +1030,38 @@ run_methodology_validation <- function(out,
     summary = file.path(out, "methodology_validation_summary.csv"),
     warnings = file.path(out, "methodology_validation_warnings.csv"),
     parity = file.path(out, "python_metrics_parity.csv"),
-    manifest = file.path(out, "methodology_validation_manifest.txt")
+    manifest = file.path(out, "methodology_validation_manifest.txt"),
+    gates = file.path(out, "methodology_validation_gates.csv")
   )
 
   utils::write.csv(replicates_df, artifacts$replicates, row.names = FALSE)
   utils::write.csv(summary_df, artifacts$summary, row.names = FALSE)
   utils::write.csv(warnings_df, artifacts$warnings, row.names = FALSE)
   utils::write.csv(parity_df, artifacts$parity, row.names = FALSE)
+  gates_df <- .release_gate_table(
+    replicates_df,
+    scenarios = scenarios,
+    families = families,
+    artificial_types = artificial_types,
+    expected_replicates = replicates
+  )
+  utils::write.csv(gates_df, artifacts$gates, row.names = FALSE)
   .write_manifest(
     path = artifacts$manifest,
     settings = list(
       seed = seed,
+      profile = profile,
       replicates = replicates,
       n_bootstraps = n_bootstraps,
       n_lambda = n_lambda,
       target_fdp = target_fdp,
+      workers = workers,
+      package_mode = package_mode,
+      package_version = as.character(utils::packageVersion("stablr")),
+      families = families,
       artificial_types = artificial_types,
-      scenarios = scenarios
+      scenarios = scenarios,
+      git = .git_provenance(.find_package_root())
     ),
     artifacts = artifacts
   )
@@ -683,25 +1079,41 @@ run_methodology_validation <- function(out,
     stop(.usage(), call. = FALSE)
   }
 
+  profile <- if (is.null(parsed$profile)) "bounded" else parsed$profile
+  defaults <- if (identical(profile, "release")) {
+    list(replicates = 100L, n_bootstraps = 1000L, n_lambda = 30L)
+  } else {
+    list(replicates = 3L, n_bootstraps = 12L, n_lambda = 6L)
+  }
   artifacts <- run_methodology_validation(
     out = parsed$out,
-    replicates = .int_arg(parsed$replicates, 3L, "replicates"),
-    n_bootstraps = .int_arg(parsed[["n-bootstraps"]], 12L, "n-bootstraps"),
-    n_lambda = .int_arg(parsed[["n-lambda"]], 6L, "n-lambda"),
+    profile = profile,
+    replicates = .int_arg(parsed$replicates, defaults$replicates, "replicates"),
+    n_bootstraps = .int_arg(parsed[["n-bootstraps"]], defaults$n_bootstraps, "n-bootstraps"),
+    n_lambda = .int_arg(parsed[["n-lambda"]], defaults$n_lambda, "n-lambda"),
+    families = .csv_arg(parsed$families, "gaussian"),
     artificial_types = .csv_arg(parsed[["artificial-types"]],
                                 c("random_permutation", "knockoff_equi")),
     scenario_ids = .csv_arg(parsed$scenarios, "all"),
     seed = .int_arg(parsed$seed, 270627L, "seed"),
-    target_fdp = .num_arg(parsed[["target-fdp"]], 0.1, "target-fdp", min = 0, max = 1)
+    target_fdp = .num_arg(parsed[["target-fdp"]], 0.1, "target-fdp", min = 0, max = 1),
+    workers = .int_arg(parsed$workers, 1L, "workers")
   )
 
   message("Wrote methodology validation artifacts:")
   for (name in names(artifacts)) {
     message("  ", name, ": ", artifacts[[name]])
   }
+  if (identical(profile, "release")) {
+    gates <- utils::read.csv(artifacts$gates, stringsAsFactors = FALSE)
+    if (!all(gates$pass)) {
+      stop("Locked release methodology gates failed; release must stop.",
+           call. = FALSE)
+    }
+  }
   invisible(artifacts)
 }
 
-if (identical(environment(), globalenv()) && !interactive()) {
+if (sys.nframe() == 0L && !interactive()) {
   .main()
 }

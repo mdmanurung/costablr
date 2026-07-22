@@ -1,3 +1,4 @@
-omic,weight
-rna,0.7
-protein,0.3
+omic,raw_weight,weight,candidate_id,score
+rna,8,0.80000000000000004,2,1
+protein,2,0.20000000000000001,2,1
+metabolite,0,0,2,1

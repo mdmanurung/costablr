@@ -1,0 +1,4 @@
+lambda_id,lambda,l1_ratio
+lambda_1,0.040000000000000001,1
+lambda_2,0.10000000000000001,1
+lambda_3,0.25,1
