@@ -81,6 +81,27 @@ jobs:
           build_args: 'c("--no-manual", "--no-build-vignettes")'
           upload-snapshots: true
 
+      - name: Publish failed check diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          check_log=$(find check -name 00check.log -print -quit)
+          test_log=$(find check -name 'testthat.Rout*' -print -quit)
+          details=""
+          if [ -n "$check_log" ]; then
+            details="$(tail -n 120 "$check_log")"
+          fi
+          if [ -n "$test_log" ]; then
+            details="$details
+
+          TESTTHAT TAIL
+          $(tail -n 120 "$test_log")"
+          fi
+          details="${details//'%'/'%25'}"
+          details="${details//$'\r'/'%0D'}"
+          details="${details//$'\n'/'%0A'}"
+          echo "::error file=.github,title=R CMD check diagnostics::$details"
+
       - name: Upload check artifacts
         if: always()
         uses: actions/upload-artifact@v4
