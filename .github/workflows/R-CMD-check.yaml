@@ -4,10 +4,9 @@
 # stablr-tcga, stablr-tcga-nestedcv) are gated to eval=FALSE in their
 # setup chunks so they do not execute during the check build.
 #
-# Coverage is reported to Codecov when CODECOV_TOKEN is set in the repo
-# secrets.  The multiview/cooperative backend is not installed from CRAN
-# (it lives under src/); the check therefore skips the cooperative tests
-# that depend on a compiled multiview (those have skip_on_cran() guards).
+# Coverage is uploaded through Codecov v5; a missing third-party token is not a
+# package-check failure. The cooperative multiview backend is vendored and
+# compiled with the package, so CI does not install an external multiview copy.
 
 on:
   push:
