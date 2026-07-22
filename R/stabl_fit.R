@@ -394,7 +394,7 @@ stabl_fit <- function(
   stabl_scores_    <- boot_result$stabl_scores_
   stabl_scores_art <- boot_result$stabl_scores_art
 
-  # ---- FDP+ control ---------------------------------------------------------
+  # ---- FDP+ diagnostic thresholding ----------------------------------------
   fdp <- NULL
   if (!is.null(artificial_type)) {
     fdp <- compute_fdp_plus(

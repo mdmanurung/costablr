@@ -1,5 +1,5 @@
 # Audit V-4: under the null (X is pure noise, no signal in y), STABL with
-# random-permutation artificial features and FDP+ control should select
+# random-permutation artificial features and the FDP+ diagnostic should select
 # essentially nothing.  This protects against any future regression in the
 # FDP+ pipeline that lets noise features through (e.g. wrong comparator,
 # inverted scaling, mis-aligned artificial-vs-real masks).
@@ -10,7 +10,7 @@
 # can still occur; therefore this test asserts robust calibration invariants
 # rather than a near-zero count target.
 
-test_that("FDP+ control under null yields high threshold without all-feature collapse", {
+test_that("FDP+ diagnostic under null yields high threshold without all-feature collapse", {
   skip_on_cran()
   withr::local_seed(0)
 

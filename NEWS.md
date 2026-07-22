@@ -46,8 +46,9 @@
 - **Release infrastructure:** expanded the R CMD check platform matrix,
   installed-package methodology runner resolution, always-uploaded check
   artifacts, one-pass Cobertura/Codecov reporting, release-gated pkgdown
-  deployment, GPL and vendored-code provenance, and reproducible bundled OOL
-  data preparation.
+  deployment, the canonical manual R-hub v2 workflow for sanitizer and
+  specialist-platform checks, GPL and vendored-code provenance, and
+  reproducible bundled OOL data preparation.
 
 # stablr 0.1.0
 
