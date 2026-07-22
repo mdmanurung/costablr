@@ -2,9 +2,63 @@
 
 # Paired, independent-test validation of OOF versus historical late fusion.
 `%||%` <- function(x, y) if (is.null(x)) y else x
-.root <- normalizePath(getwd(), mustWork = TRUE)
-if (!requireNamespace("pkgload", quietly = TRUE)) stop("pkgload is required.")
-pkgload::load_all(.root, quiet = TRUE)
+.find_source_root <- function() {
+  args <- commandArgs(trailingOnly = FALSE)
+  script <- grep("^--file=", args, value = TRUE)
+  starts <- c(getwd(), if (length(script)) dirname(sub("^--file=", "", script[[1L]])))
+  for (start in starts) {
+    path <- normalizePath(start, mustWork = TRUE)
+    repeat {
+      if (file.exists(file.path(path, "DESCRIPTION")) &&
+          file.exists(file.path(path, "R", "stabl_fit.R"))) return(path)
+      parent <- dirname(path)
+      if (identical(parent, path)) break
+      path <- parent
+    }
+  }
+  NA_character_
+}
+.root <- .find_source_root()
+if (!is.na(.root) && requireNamespace("pkgload", quietly = TRUE)) {
+  pkgload::load_all(.root, quiet = TRUE)
+  .package_mode <- paste0("source:", .root)
+} else {
+  if (!requireNamespace("stablr", quietly = TRUE)) stop("stablr must be installed.")
+  .package_mode <- paste0("installed:", system.file(package = "stablr"))
+}
+
+.git_provenance <- function(root) {
+  empty <- list(commit = NA_character_, tree = NA_character_, dirty = NA)
+  if (is.na(root) || !file.exists(file.path(root, ".git")) ||
+      !nzchar(Sys.which("git"))) return(empty)
+  git <- function(...) {
+    out <- suppressWarnings(system2(
+      "git", c("-C", shQuote(root), ...), stdout = TRUE, stderr = TRUE
+    ))
+    if (!is.null(attr(out, "status")) && attr(out, "status") != 0L) {
+      return(NA_character_)
+    }
+    paste(out, collapse = "\n")
+  }
+  status <- git("status", "--porcelain", "--untracked-files=no")
+  list(
+    commit = git("rev-parse", "HEAD"),
+    tree = git("rev-parse", "HEAD^{tree}"),
+    dirty = if (is.na(status)) NA else nzchar(status)
+  )
+}
+
+.sha256_file <- function(path) {
+  if (nzchar(Sys.which("sha256sum"))) {
+    out <- system2("sha256sum", shQuote(path), stdout = TRUE)
+    return(strsplit(out[[1L]], "[[:space:]]+")[[1L]][[1L]])
+  }
+  if (nzchar(Sys.which("shasum"))) {
+    out <- system2("shasum", c("-a", "256", shQuote(path)), stdout = TRUE)
+    return(strsplit(out[[1L]], "[[:space:]]+")[[1L]][[1L]])
+  }
+  NA_character_
+}
 
 .args <- function(x) {
   out <- list(); i <- 1L
@@ -44,6 +98,22 @@ pkgload::load_all(.root, quiet = TRUE)
     test_x = list(a = x1[te, , drop = FALSE], b = x2[te, , drop = FALSE]),
     train_y = y[tr], test_y = y[te]
   )
+}
+
+.simulate_well_posed <- function(family, regime, seed, min_class_count = 10L,
+                                  max_attempts = 100L) {
+  for (attempt in 0:(max_attempts - 1L)) {
+    data_seed <- seed + attempt * 1000003L
+    out <- .simulate(family, regime, data_seed)
+    if (identical(family, "gaussian") ||
+        (min(table(out$train_y)) >= min_class_count &&
+         min(table(out$test_y)) >= min_class_count)) {
+      out$data_seed <- data_seed
+      out$simulation_attempt <- attempt + 1L
+      return(out)
+    }
+  }
+  stop("Could not generate the predeclared minimum class counts.", call. = FALSE)
 }
 
 .metric <- function(family, truth, pred) {
@@ -92,7 +162,7 @@ run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L
   warning_rows <- list()
   for (i in seq_len(nrow(design))) {
     d <- design[i, ]; fit_seed <- seed + i * 101L
-    dat <- .simulate(d$family, d$regime, fit_seed)
+    dat <- .simulate_well_posed(d$family, d$regime, fit_seed)
     common <- list(
       x_train_list = dat$train_x, y_train = dat$train_y,
       lambda_grid = data.frame(lambda = c(0.2, 0.1, 0.05)),
@@ -102,6 +172,10 @@ run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L
       late_fusion = TRUE, late_fusion_nfolds = 5L,
       n_iter_lf = n_iter, random_state = fit_seed
     )
+    if (d$family %in% c("binomial", "multinomial")) {
+      common$stratify_bootstrap <- TRUE
+      common$bootstrap_strata_train <- dat$train_y
+    }
     legacy_result <- .capture_fit(c(common, list(late_fusion_training = "python_legacy")))
     oof_result <- .capture_fit(c(common, list(late_fusion_training = "oof")))
     for (mode in c("python_legacy", "oof")) {
@@ -115,7 +189,8 @@ run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L
     if (inherits(legacy_result$fit, "error") || inherits(oof_result$fit, "error")) {
       rows[[i]] <- data.frame(
         family = d$family, regime = d$regime, replicate = d$replicate,
-        seed = fit_seed, status = "error",
+        seed = fit_seed, data_seed = dat$data_seed,
+        simulation_attempt = dat$simulation_attempt, status = "error",
         legacy_train = NA_real_, oof_train = NA_real_,
         legacy_test = NA_real_, oof_test = NA_real_,
         legacy_optimism = NA_real_, oof_optimism = NA_real_,
@@ -136,11 +211,13 @@ run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L
     oof_train <- .train_metric(d$family, dat$train_y, oof)
     rows[[i]] <- data.frame(
       family = d$family, regime = d$regime, replicate = d$replicate,
-      seed = fit_seed, status = "ok", legacy_train = legacy_train,
+      seed = fit_seed, data_seed = dat$data_seed,
+      simulation_attempt = dat$simulation_attempt,
+      status = "ok", legacy_train = legacy_train,
       oof_train = oof_train, legacy_test = legacy_test,
       oof_test = oof_test,
-      legacy_optimism = abs(legacy_train - legacy_test),
-      oof_optimism = abs(oof_train - oof_test),
+      legacy_optimism = legacy_train - legacy_test,
+      oof_optimism = oof_train - oof_test,
       oof_fallback_rate = .fallback_rate(oof), error = "", stringsAsFactors = FALSE
     )
   }
@@ -171,14 +248,23 @@ run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L
     seed = integer(), mode = character(), warning = character()
   )
   utils::write.csv(warnings, warnings_path, row.names = FALSE)
+  provenance <- .git_provenance(.root)
+  artifact_paths <- c(results_path, summary_path, warnings_path)
   writeLines(c(
     paste("R", R.version.string),
     paste("stablr", as.character(utils::packageVersion("stablr"))),
+    paste("package_mode", .package_mode),
+    paste("source_git_commit", provenance$commit),
+    paste("source_git_tree", provenance$tree),
+    paste("source_tracked_dirty", provenance$dirty),
     paste("replicates_per_cell", replicates),
     paste("n_bootstraps", n_bootstraps), paste("n_iter", n_iter),
     "Families: gaussian, binomial, multinomial; regimes: null, signal.",
+    "Classification simulations require at least 10 samples per class in train and test; classification bootstraps are stratified.",
     "Independent test samples are never used to fit selectors, learners, or weights.",
-    "Gates: fallback < 5% in signal, reduced optimism, test noninferiority margin 0.02."
+    "Gates: fallback < 5% in signal, reduced directional optimism, test noninferiority margin 0.02.",
+    "artifact_sha256:",
+    paste(basename(artifact_paths), vapply(artifact_paths, .sha256_file, character(1L)))
   ), file.path(out, "late_fusion_manifest.txt"))
   if (!all(summary$reduced_optimism & summary$noninferior & summary$fallback_ok)) {
     stop("Late-fusion release gates failed; release must stop.", call. = FALSE)

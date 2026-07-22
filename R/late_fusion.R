@@ -21,7 +21,8 @@
   }
   folds <- .make_multiomic_cv_folds(
     sample_ids = sample_ids, groups = groups_train, v = nfolds,
-    random_state = .derive_nested_seed(random_state, 1L, 29001L)
+    random_state = .derive_nested_seed(random_state, 1L, 29001L),
+    strata = if (task_type %in% c("binary", "multiclass")) y_downstream else NULL
   )
   fold_id <- setNames(integer(length(sample_ids)), sample_ids)
   fold_details <- vector("list", length(folds))
@@ -52,7 +53,7 @@
     fold_params$random_state <- fold_seed
 
     captured <- withCallingHandlers(
-      .fit_multiomic_per_omic(
+      .late_fusion_select_per_omic_safe(
         x_train_list = .subset_multiomic_rows(x_train_list, train_ids),
         y_train = .subset_outcome_by_ids(y_train, train_ids),
         lambda_by_omic = lambda_by_omic,
@@ -72,7 +73,8 @@
         y_train = .subset_outcome_by_ids(y_downstream, train_ids),
         x_valid_sel = captured$selected_valid[[omic]],
         task_type = task_type,
-        levels = if (identical(task_type, "multiclass")) classes else NULL
+        levels = if (identical(task_type, "multiclass")) classes else NULL,
+        selection_error = captured$selection_errors[[omic]]
       )
       warnings_seen <- unique(c(warnings_seen, pred$warnings))
       fallback[[omic]] <- pred$fallback_reason %||% NA_character_
@@ -89,7 +91,8 @@
       artificial_feature_provenance = lapply(
         captured$fits, function(x) x$artificial_feature_provenance %||% NULL
       ),
-      fallback_reasons = fallback
+      fallback_reasons = fallback,
+      selector_errors = captured$selection_errors
     )
   }
 
@@ -154,8 +157,15 @@
 }
 
 .late_fusion_fit_omic_safe <- function(x_train_sel, y_train, x_valid_sel,
-                                       task_type, levels = NULL) {
-  fallback_reason <- if (ncol(x_train_sel) == 0L) "no_selected_features" else NULL
+                                       task_type, levels = NULL,
+                                       selection_error = NULL) {
+  fallback_reason <- if (!is.null(selection_error)) {
+    paste0("selector_fit_error: ", selection_error)
+  } else if (ncol(x_train_sel) == 0L) {
+    "no_selected_features"
+  } else {
+    NULL
+  }
   y_mean <- if (identical(task_type, "regression")) mean(unname(y_train)) else NA_real_
   captured_warnings <- character()
   out <- tryCatch(
@@ -197,6 +207,44 @@
   }
   out$fallback_reason <- fallback_reason
   out$warnings <- captured_warnings
+  out
+}
+
+.late_fusion_select_per_omic_safe <- function(x_train_list, y_train,
+                                               lambda_by_omic, x_valid_list,
+                                               omic_names, fit_params, ...) {
+  out <- list(
+    fits = setNames(vector("list", length(omic_names)), omic_names),
+    selected_features = setNames(vector("list", length(omic_names)), omic_names),
+    selected_train = setNames(vector("list", length(omic_names)), omic_names),
+    selected_valid = if (is.null(x_valid_list)) NULL else
+      setNames(vector("list", length(omic_names)), omic_names),
+    selection_errors = setNames(vector("list", length(omic_names)), omic_names)
+  )
+  for (omic in omic_names) {
+    one <- tryCatch(
+      .fit_multiomic_per_omic(
+        x_train_list = x_train_list[omic], y_train = y_train,
+        lambda_by_omic = lambda_by_omic[omic],
+        x_valid_list = if (is.null(x_valid_list)) NULL else x_valid_list[omic],
+        omic_names = omic, fit_params = fit_params, ...
+      ),
+      error = function(e) e
+    )
+    if (inherits(one, "error")) {
+      out$selection_errors[[omic]] <- conditionMessage(one)
+      out$selected_features[[omic]] <- character()
+      out$selected_train[[omic]] <- as.matrix(x_train_list[[omic]])[, FALSE, drop = FALSE]
+      if (!is.null(x_valid_list)) {
+        out$selected_valid[[omic]] <- as.matrix(x_valid_list[[omic]])[, FALSE, drop = FALSE]
+      }
+    } else {
+      out$fits[[omic]] <- one$fits[[omic]]
+      out$selected_features[[omic]] <- one$selected_features[[omic]]
+      out$selected_train[[omic]] <- one$selected_train[[omic]]
+      if (!is.null(x_valid_list)) out$selected_valid[[omic]] <- one$selected_valid[[omic]]
+    }
+  }
   out
 }
 

@@ -746,14 +746,13 @@ stabl_multiomic_cv <- function(
 }
 
 .validate_late_fusion_outcomes <- function(y_train, y_valid, family) {
-  if (is.null(y_valid)) return(invisible(NULL))
-  if (length(y_valid) == 0L || anyNA(y_valid)) {
+  if (!is.null(y_valid) && (length(y_valid) == 0L || anyNA(y_valid))) {
     stop("`y_valid` must be non-empty and complete for late fusion.", call. = FALSE)
   }
   if (identical(family, "binomial")) {
     mapping <- .late_fusion_binary_outcome(y_train)$mapping
-    valid <- factor(y_valid, levels = names(mapping))
-    if (anyNA(valid)) {
+    valid <- if (is.null(y_valid)) NULL else factor(y_valid, levels = names(mapping))
+    if (!is.null(valid) && anyNA(valid)) {
       stop("Validation outcomes must use the training binary event levels.",
            call. = FALSE)
     }
@@ -763,13 +762,15 @@ stabl_multiomic_cv <- function(
       stop("Multiclass training outcomes must contain at least two complete levels.",
            call. = FALSE)
     }
-    valid <- factor(y_valid, levels = levels(train))
-    if (anyNA(valid)) {
+    valid <- if (is.null(y_valid)) NULL else factor(y_valid, levels = levels(train))
+    if (!is.null(valid) && anyNA(valid)) {
       stop("Validation outcomes must use the training multiclass levels.",
            call. = FALSE)
     }
-  } else if (!is.numeric(y_valid) || any(!is.finite(y_valid))) {
-    stop("Regression `y_valid` must be a complete finite numeric vector.",
+  } else if (!is.numeric(y_train) || anyNA(y_train) || any(!is.finite(y_train)) ||
+             (!is.null(y_valid) &&
+              (!is.numeric(y_valid) || any(!is.finite(y_valid))))) {
+    stop("Regression outcomes must be complete finite numeric vectors.",
          call. = FALSE)
   }
   invisible(NULL)
@@ -792,7 +793,8 @@ stabl_multiomic_cv <- function(
 .make_multiomic_cv_folds <- function(sample_ids,
                                      groups,
                                      v,
-                                     random_state = NULL) {
+                                     random_state = NULL,
+                                     strata = NULL) {
   units <- if (is.null(groups)) {
     sample_ids
   } else {
@@ -804,9 +806,37 @@ stabl_multiomic_cv <- function(
          call. = FALSE)
   }
 
-  ordered_units <- .permute_for_cv(units, random_state)
-  unit_to_fold <- rep(seq_len(v), length.out = length(ordered_units))
-  names(unit_to_fold) <- ordered_units
+  unit_strata <- NULL
+  if (!is.null(strata)) {
+    strata <- as.character(strata[sample_ids])
+    if (anyNA(strata)) stop("CV strata must be complete and named by sample ID.")
+    if (is.null(groups)) {
+      unit_strata <- setNames(strata, sample_ids)
+    } else {
+      group_values <- split(strata, as.character(groups[sample_ids]))
+      if (all(vapply(group_values, function(x) length(unique(x)) == 1L, logical(1L)))) {
+        unit_strata <- vapply(group_values, `[[`, character(1L), 1L)
+      } else {
+        warning("Grouped CV could not stratify groups containing multiple outcome levels; preserving group separation.",
+                call. = FALSE)
+      }
+    }
+  }
+  if (is.null(unit_strata)) {
+    ordered_units <- .permute_for_cv(units, random_state)
+    unit_to_fold <- setNames(rep(seq_len(v), length.out = length(ordered_units)),
+                             ordered_units)
+  } else {
+    strata_levels <- sort(unique(unit_strata))
+    mappings <- lapply(seq_along(strata_levels), function(i) {
+      members <- names(unit_strata)[unit_strata == strata_levels[[i]]]
+      ordered <- .permute_for_cv(
+        members, .derive_nested_seed(random_state, i, 39001L)
+      )
+      setNames(rep(seq_len(v), length.out = length(ordered)), ordered)
+    })
+    unit_to_fold <- unlist(mappings, use.names = TRUE)
+  }
 
   assessment_fold <- if (is.null(groups)) {
     unit_to_fold[sample_ids]
@@ -1277,6 +1307,9 @@ stabl_multiomic_cv <- function(
                                        family = "gaussian",
                                        random_state = NULL,
                                        cooperative_args) {
+  if (!.has_cooperative_backend()) {
+    stop("Cooperative fusion backend is unavailable.", call. = FALSE)
+  }
   omic_names <- names(x_train_list)
   x_train_mv <- .coerce_multiomic_matrix_list(x_train_list)
   x_valid_mv <- if (is.null(x_valid_list)) NULL else .coerce_multiomic_matrix_list(x_valid_list)

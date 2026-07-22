@@ -80,6 +80,27 @@ test_that("stacking rejects malformed scalar outcomes and infinite predictions",
   expect_error(stacked_multi_omic(p, c(0, 0, 0, 0), "binary"), "both event")
   p[1, 1] <- Inf
   expect_error(stacked_multi_omic(p, 1:4, "regression"), "finite")
+  p <- cbind(a = c(NA, 2:4), b = c(NA, 3:1))
+  stacked <- stacked_multi_omic(p, 1:4, "regression", n_iter = 2L,
+                                random_state = 1L)
+  expect_true(is.na(stacked$predictions[["Stacked Gen. Predictions"]][[1L]]))
+})
+
+test_that("late fusion validates training outcomes without a validation split", {
+  ids <- paste0("s", 1:8)
+  x <- matrix(rnorm(16), 8, 2, dimnames = list(ids, c("x1", "x2")))
+  common <- list(
+    x_train_list = list(a = x), lambda_grid = data.frame(lambda = 0.1),
+    artificial_type = NULL, hard_threshold = 1, n_bootstraps = 2L,
+    late_fusion = TRUE, late_fusion_nfolds = 2L, n_iter_lf = 2L
+  )
+  expect_error(do.call(stabl_multiomic_train_validate, c(
+    common, list(y_train = setNames(letters[1:8], ids), family = "gaussian")
+  )), "finite numeric")
+  expect_error(do.call(stabl_multiomic_train_validate, c(
+    common, list(y_train = setNames(factor(rep("A", 8)), ids),
+                 family = "multinomial")
+  )), "at least two")
 })
 
 test_that("OOF binomial fusion maps named factor events deterministically", {
@@ -276,4 +297,29 @@ test_that("OOF late fusion is identical for sequential and parallel bootstraps",
                    parallel$late_fusion$train_predictions)
   expect_identical(sequential$late_fusion$valid_predictions,
                    parallel$late_fusion$valid_predictions)
+})
+
+test_that("OOF selector errors fall back to fold-training predictions", {
+  ids <- paste0("s", 1:12)
+  x <- matrix(rnorm(24), 12, 2, dimnames = list(ids, c("x1", "x2")))
+  y <- setNames(rnorm(12), ids)
+  captured <- stablr:::.late_fusion_select_per_omic_safe(
+    x_train_list = list(a = x), y_train = y,
+    lambda_by_omic = list(a = data.frame(lambda = 0.1)),
+    x_valid_list = NULL, omic_names = "a",
+    fit_params = list(
+      base_learner = "not-a-learner", family = "gaussian",
+      n_bootstraps = 2L, artificial_type = NULL, hard_threshold = 1,
+      groups = NULL, stratify_bootstrap = FALSE, bootstrap_strata = NULL,
+      l1_ratio = NULL, random_state = 1L
+    )
+  )
+  expect_match(captured$selection_errors$a, "base_learner")
+  expect_identical(ncol(captured$selected_train$a), 0L)
+  pred <- stablr:::.late_fusion_fit_omic_safe(
+    captured$selected_train$a, y, NULL, "regression",
+    selection_error = captured$selection_errors$a
+  )
+  expect_equal(pred$train_preds, rep(mean(y), length(y)))
+  expect_match(pred$fallback_reason, "selector_fit_error")
 })
