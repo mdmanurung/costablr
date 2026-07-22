@@ -1,10 +1,15 @@
 # Bundled Onset of Labor data provenance
 
-The bounded examples in `inst/extdata` derive from the Dryad dataset
-“Multiomics modeling of the immunome, transcriptome, microbiome, proteome and
-metabolome adaptations during human pregnancy”
-(<https://doi.org/10.5061/dryad.stqjq2c7d>), released under CC0. The associated
-study is <https://doi.org/10.1126/scitranslmed.abd9898>.
+The bounded examples in `inst/extdata` derive from the Onset of Labor files in
+the Dryad dataset “Discovery of sparse, reliable omic biomarkers with Stabl”
+(<https://doi.org/10.5061/dryad.stqjq2c7d>), released under CC0. The Onset of
+Labor source study is <https://doi.org/10.1126/scitranslmed.abd9898>.
+
+Dryad publishes these files in `data.zip` (SHA-256
+`302dfd9919d416f0afb394d1560dad44180894210389bc9bd91d47f501e34ddf`).
+The identical archive is mirrored in `Sample Data/data.zip` at the pinned
+public reference commit
+`gregbellan/Stabl@1d07f85a13cfbecb4f08ce21075bf4fbb8e34678`.
 
 Only the sample identifier, DOS outcome, and the first 100 CyTOF and proteomic
 feature columns (in source order) are retained. The six source tables already
