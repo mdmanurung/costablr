@@ -12,6 +12,9 @@
   artificial-feature metadata, warnings, fallbacks, and full-refit diagnostics.
 - Scalar stacking now rejects malformed outcomes and infinite observed
   predictions instead of allowing invalid metric inputs.
+- Binary event levels and multiclass probability columns are now validated
+  explicitly; probability rows must be complete, finite, and normalized, and
+  metric calculations no longer silently discard malformed observations.
 
 ## Architecture, profiling, and calibration hardening
 
@@ -49,6 +52,19 @@
   deployment, the canonical manual R-hub v2 workflow for sanitizer and
   specialist-platform checks, GPL and vendored-code provenance, and
   reproducible bundled OOL data preparation.
+- **Metadata and documentation:** set the release version to 0.1.1, refreshed
+  the citation and method DOIs, credited the STABL and multiview contributors,
+  recorded the bundled OOL data source and CC0 terms, and replaced "Pure-R"
+  with the accurate "R-native without a Python runtime" description.
+  Documentation now describes FDP+ as a data-dependent diagnostic minimizer,
+  states its assumptions and fallback limitations, and distinguishes frozen-
+  score parity from end-to-end solver ranking parity.
+- **Release evidence:** added deterministic tests for sample-order invariance,
+  grouped OOF separation, validation-outcome independence, fold perturbations,
+  sequential/parallel agreement, legacy stacking parity, MVR feasibility, and
+  locked statistical release gates. Validation commands, versions, hashes,
+  warnings, profiling limitations, and platform results are recorded in
+  `docs/release/0.1.1-validation.md`.
 
 # stablr 0.1.0
 
