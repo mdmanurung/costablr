@@ -11,8 +11,9 @@ plot_fdr_graph(object, title = "FDR Estimate", fdr_target = 0.05)
 
 \item{title}{Character scalar; plot title.  Default \code{"FDR Estimate"}.}
 
-\item{fdr_target}{Numeric scalar or \code{NULL}; FDP target shown as a horizontal
-dashed line.  Use \code{NULL} to omit the target line.  Default \code{0.05}.}
+\item{fdr_target}{Numeric scalar or \code{NULL}; a visual horizontal reference
+line only. It is not used for fitting or threshold selection. Use \code{NULL}
+to omit the line. Default \code{0.05}.}
 }
 \value{
 A \code{ggplot} object.  The curve shows the FDP+ estimate at each
@@ -26,12 +27,11 @@ the full range of candidate stability thresholds, and marks the threshold
 that achieves the minimum FDR estimate.
 }
 \details{
-This diagnostic is essential for understanding why a particular stability
-threshold was chosen during fitting.  A well-calibrated run will show a
-clear "valley" — a region where the FDP+ is minimised — confirming that
-the artificial-feature injection produced a meaningful separation between
-real signal and noise.  Flat or monotone curves indicate that the
-regularisation grid may need adjustment or that the signal is very weak.
+This diagnostic shows why a particular stability threshold was chosen during
+fitting: the current rule selects the first minimum of the displayed FDP+
+curve. Curve shape is descriptive and does not by itself establish FDP
+control, calibration, or signal/noise separation. Interpretation depends on
+the artificial-feature assumptions and the fitted data.
 
 Requires that \code{object} was fitted with \code{artificial_type} set (not \code{NULL}).
 }

@@ -293,8 +293,9 @@ frequency survives resampling and passes an FDP-aware threshold**.
 
 **Choose stablr when:**
 
-- The goal is a **reproducible sparse biomarker list** with explicit control of
-  false discovery in the stability-selection layer.
+- The goal is a **reproducible sparse biomarker list** with an FDP+ diagnostic
+  under the artificial-feature assumptions. The fitted threshold minimises the
+  diagnostic curve; it is not a universal false-discovery guarantee.
 - You need gaussian, binomial, multinomial, or Cox STABL on the same API, with
   grouped bootstrap for repeated measures.
 - You want to compare integration strategies (per-omic, early, late, cooperative)

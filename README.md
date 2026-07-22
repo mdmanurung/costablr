@@ -1,12 +1,12 @@
 # stablr: Sparse and Reliable Biomarker Discovery in R
 
-`stablr` is a pure-R implementation of STABL for sparse, stable biomarker
+`stablr` is an R-native implementation of STABL for sparse, stable biomarker
 selection in high-dimensional clinical and omic data. It ports the
 parity-critical STABL semantics from the Python implementation while exposing
 R-native S3 objects, `glmnet`-ecosystem learners, multi-omic workflows,
 visualization helpers, and CSV/disk export utilities.
 
-The package has no Python or tidymodels runtime dependency.
+The package compiles C++ but has no Python or tidymodels runtime dependency.
 
 ## Feature Summary
 
@@ -56,7 +56,6 @@ Optional functionality uses optional packages:
   `"knockoff_mvr"`
 - `future`, `furrr`: parallel bootstrap execution
 - `sparsegl`: `base_learner = "sparse_group_lasso"`
-- `multiview`: optional live parity checks in development (cooperative fusion is built in)
 - `mixOmics`: TCGA vignette dataset
 
 ## Quick Start
@@ -173,6 +172,20 @@ Selection reproducibility metrics:
 - `pearson_similarity()`, `pearson_similarity_values()`,
   `pearson_similarity_measure()`
 - `fdr_similarity()`, `tpr_similarity()`, `fscore_similarity()`
+
+## Interpretation limits
+
+The fitted threshold is the first minimizer of the observed FDP+ diagnostic
+curve. A plotted `fdr_target` is a visual reference, not a fitting target, and
+neither is a universal false-discovery guarantee. Interpretation depends on the
+artificial-feature assumptions; high-dimensional MVR chunking is explicitly
+marked approximate because global exchangeability has not been established.
+
+Late-fusion weights default to leakage-safe OOF training. Empty selections or
+downstream fit failures use fold-training means/event priors/class priors and
+record the reason. The historical in-sample algorithm is available only through
+`late_fusion_training = "python_legacy"`. Cross-language solver validation uses
+ranking/support contracts; it does not claim bit-identical coefficients.
 
 ## Vignettes
 

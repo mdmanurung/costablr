@@ -1,3 +1,54 @@
+# stablr 0.1.1
+
+## Release correctness
+
+- Late-fusion weights now default to leakage-safe out-of-fold training. Each
+  stacking fold reruns STABL selection and its downstream learner using only
+  fold-training samples; `late_fusion_training = "python_legacy"` preserves
+  the historical Python-compatible in-sample algorithm.
+- Named outcomes, groups, bootstrap strata, and validation outcomes are
+  canonically aligned to omic sample identifiers before fusion.
+- OOF provenance records named fold assignments, seeds, selected features,
+  artificial-feature metadata, warnings, fallbacks, and full-refit diagnostics.
+- Scalar stacking now rejects malformed outcomes and infinite observed
+  predictions instead of allowing invalid metric inputs.
+
+## Architecture, profiling, and calibration hardening
+
+- **Fixed-X knockoff correctness:** fixed-X construction now rejects row-
+  augmented knockoffs and uses the documented random-permutation fallback.
+  Truncating only the knockoff matrix to the original row count violated the
+  fixed-X Gram identities when `p < n < 2p`; fallback provenance records the
+  reason.
+- **FDP+ performance and contracts:** threshold counts now sort once per score
+  vector and use interval lookup, preserving strict `>` tie semantics and
+  first-minimum threshold selection while avoiding feature-by-threshold logical
+  allocations. Public inputs now reject malformed, non-finite, out-of-range,
+  or column-incompatible score matrices.
+- **Learner-module depth:** public single-lambda glmnet and adaptive-lasso
+  adapters now delegate to the same path-fitting implementations used by the
+  batched bootstrap interface, removing duplicate fitting and coefficient-
+  extraction logic without changing seeded fitted outputs.
+- **Methodology runner:** artificial-feature strategies are compared on paired
+  simulated data and fit seeds. Replicate artifacts record both seeds, and
+  summaries report SD and Monte Carlo SE for selection count, empirical FDP,
+  and TPR, plus Monte Carlo SE for FDP-exceedance and fallback rates.
+- **ROC/PRC diagnostics:** `plot_roc()` and `plot_prc()` reject ambiguous or
+  incomplete labels and probabilities, and aggregate tied scores so metrics
+  are row-order invariant.
+- **Python parity evidence:** reproducible Python 3.11 fixtures pin the public
+  STABL reference commit and include frozen matrices, bootstrap schedules,
+  artificial features, lambda grids, masks, FDP+ curves, stacking candidates,
+  solver-ranking contracts, provenance, and a SHA-256 manifest.
+- **MVR knockoffs:** solver checks now cover PSD feasibility, objective
+  behaviour, determinism, and caller RNG isolation. Fallbacks and approximate
+  high-dimensional chunking carry explicit provenance.
+- **Release infrastructure:** expanded the R CMD check platform matrix,
+  installed-package methodology runner resolution, always-uploaded check
+  artifacts, one-pass Cobertura/Codecov reporting, release-gated pkgdown
+  deployment, GPL and vendored-code provenance, and reproducible bundled OOL
+  data preparation.
+
 # stablr 0.1.0
 
 ## Publication-readiness blocker remediation
@@ -51,12 +102,6 @@
   `stacked_multi_omic()` evaluation for binary/regression tasks. The multiclass
   stacking path remains scalar by design to preserve probability-normalization
   parity.
-- **ROC/PRC diagnostics:** `plot_roc()` and `plot_prc()` now reject ambiguous
-  factor/character labels, non-binary numeric outcomes, single-class outcomes,
-  and non-finite or out-of-range probabilities. Tied prediction scores are
-  aggregated at unique thresholds so ROC AUC and precision-recall average
-  precision are row-order invariant.
-
 ## Quality and publication-readiness sweep
 
 - **Infrastructure:** corrected `License:` field; lowered `Depends: R (>=
@@ -84,10 +129,11 @@
   extracted `.scores_to_long_df` to deduplicate the real- and
   artificial-feature long-data-frame loops in `plot_stabl_path`.
 - **Tests:** added tests for `get_stabl_scores` and `load_ool_data`; modernised
-  `skip()` to `skip_if()` idiom. Release verification now includes a full
-  `R CMD check --as-cran`; the only remaining NOTE is the expected first
-  submission incoming-feasibility note. All six source vignettes rendered to
-  `/tmp/stablr-vignette-review`; pkgdown built to `/tmp/stablr-pkgdown`.
+  `skip()` to `skip_if()` idiom. Current local no-vignette release check:
+  FAIL 0 | WARN 0 | SKIP 1 | PASS 1611.
+  No-manual/no-vignette `R CMD check` is `Status: OK`; all six source
+  vignettes rendered to `/tmp/stablr-vignette-review`; pkgdown built to
+  `/tmp/stablr-pkgdown`.
 - **CI:** added `.github/workflows/R-CMD-check.yaml` (ubuntu release+devel,
   macOS release) with a separate covr/Codecov coverage job; gated heavy
   vignettes (`stablr-multiomic`, `stablr-tcga`, `stablr-tcga-nestedcv`) with
@@ -105,7 +151,7 @@
 
 ## Application-note release candidate
 
-- Pure-R STABL implementation with glmnet backends (lasso, elastic net,
+- R-native STABL implementation without a Python runtime, with glmnet backends (lasso, elastic net,
   adaptive lasso, optional sparse group lasso).
 - FDP+ thresholding with random-permutation and knockoff artificial features.
 - Multi-omic train/validation, outer CV, and nested CV workflows.

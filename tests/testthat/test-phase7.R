@@ -30,53 +30,10 @@ library(stablr)
 }
 
 .load_real_biobank_binary_fixture <- function(max_features = 48L) {
-  anchored_zip <- testthat::test_path("..", "..", "..", "..", "Sample Data", "data.zip")
-  zip_candidates <- c(
-    anchored_zip,
-    file.path("Sample Data", "data.zip"),
-    file.path("..", "Sample Data", "data.zip"),
-    file.path("..", "..", "Sample Data", "data.zip")
-  )
-  existing <- zip_candidates[file.exists(zip_candidates)]
-  skip_if(length(existing) == 0L, "Sample Data/data.zip not available in workspace.")
-  zip_path <- existing[[1L]]
-
-  prot <- utils::read.csv(
-    unz(zip_path, "Biobank SSI/Proteomics.csv"),
-    check.names = FALSE,
-    stringsAsFactors = FALSE
-  )
-  out <- utils::read.csv(
-    unz(zip_path, "Biobank SSI/outcome.csv"),
-    stringsAsFactors = FALSE
-  )
-
-  skip_if(!all(c("sampleID", "model1b") %in% colnames(out)),
-          "Biobank SSI outcome schema does not match expected columns.")
-  skip_if(!"sampleID" %in% colnames(prot),
-          "Biobank SSI proteomics schema does not contain sampleID.")
-
-  ids <- intersect(prot$sampleID, out$sampleID)
-  skip_if(length(ids) < 20L, "Not enough aligned samples in Biobank SSI fixture.")
-
-  prot <- prot[match(ids, prot$sampleID), , drop = FALSE]
-  out <- out[match(ids, out$sampleID), , drop = FALSE]
-
-  n_feat <- min(max_features, ncol(prot) - 1L)
-  x <- as.matrix(prot[, seq.int(2L, n_feat + 1L), drop = FALSE])
-  storage.mode(x) <- "double"
-  rownames(x) <- prot$sampleID
-
-  y <- as.numeric(out$model1b)
-  names(y) <- out$sampleID
-
-  keep <- !is.na(y)
-  x <- x[keep, , drop = FALSE]
-  y <- y[keep]
-
-  skip_if(length(unique(y)) < 2L,
-          "Biobank SSI fixture requires at least two classes for binomial fit.")
-
+  ool <- load_ool_data("train")
+  x <- ool$x_list$proteomics[, seq_len(min(max_features, ncol(ool$x_list$proteomics))),
+                                  drop = FALSE]
+  y <- setNames(as.integer(ool$y >= stats::median(ool$y)), ool$ids)
   list(x = x, y = y)
 }
 
@@ -467,7 +424,7 @@ test_that("save_stabl_results gives informative error when ggplot2 is absent", {
   )
 })
 
-test_that("real-data Biobank SSI export helpers write stable artifact schema", {
+test_that("bundled OOL smoke export helpers write stable artifact schema", {
   skip_if_not_installed("ggplot2")
 
   fixture <- .load_real_biobank_binary_fixture(max_features = 48L)

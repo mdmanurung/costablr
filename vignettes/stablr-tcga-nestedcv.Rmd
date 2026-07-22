@@ -255,7 +255,7 @@ Report paired fold deltas with bootstrap confidence intervals (see
 | Criterion | Prefer stablr | Prefer DIABLO |
 |-----------|---------------|---------------|
 | Primary deliverable | Named biomarker list with stability evidence | Integrative classification + component visualisation |
-| False-discovery control | Knockoff / FDP+ built in | Not part of the default workflow |
+| False-discovery diagnostic | Knockoff / FDP+ estimate built in | Not part of the default workflow |
 | Outcome types | gaussian, binomial, multinomial, Cox | Classification-centric multiblock sPLS-DA |
 | Block coupling | Cooperative `rho` or fusion modes | Design matrix + shared latent space |
 | Ecosystem | glmnet, native R, Python STABL parity | mixOmics tutorials, circos, network plots |

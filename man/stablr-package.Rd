@@ -6,8 +6,9 @@
 \alias{stablr-package}
 \title{stablr: Sparse and Reliable Biomarker Discovery in R}
 \description{
-\code{stablr} is a pure-R implementation of STABL for sparse, stable biomarker
-selection in high-dimensional clinical and omic datasets.  The package
+\code{stablr} is an R-native implementation of STABL for sparse, stable biomarker
+selection in high-dimensional clinical and omic datasets. The package
+compiles C++ for its cooperative-learning backend and
 provides a core bootstrap stability-selection engine, FDP+ threshold
 calibration with artificial features, glmnet-family learner adapters, and
 multi-omic workflows for per-omic, early-fusion, late-fusion, and
@@ -45,11 +46,11 @@ output.
 \code{\link[=get_support]{get_support()}}, \code{\link[=get_importances]{get_importances()}}, \code{\link[=plot_stabl_path]{plot_stabl_path()}}
 }
 \author{
-\strong{Maintainer}: Mikaël Manurung \email{mikhael.manurung@gmail.com}
+\strong{Maintainer}: Mikaël Manurung \email{mikhael.manurung@gmail.com} [copyright holder]
 
 Authors:
 \itemize{
-  \item Mikaël Manurung \email{mikhael.manurung@gmail.com}
+  \item Mikaël Manurung \email{mikhael.manurung@gmail.com} [copyright holder]
 }
 
 Other contributors:
@@ -62,6 +63,10 @@ Other contributors:
   \item Shuangning Li (Cooperative learning / multiview method (Ding et al., PNAS 2022)) [contributor]
   \item Balasubramanian Narasimhan (Cooperative learning / multiview method (Ding et al., PNAS 2022)) [contributor]
   \item Robert J. Tibshirani (Cooperative learning / multiview method (Ding et al., PNAS 2022)) [contributor]
+  \item Trevor Hastie [contributor]
+  \item Kenneth Tay [contributor]
+  \item James Yang [contributor]
+  \item Jonathan Taylor [contributor]
 }
 
 }

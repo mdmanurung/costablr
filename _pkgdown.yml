@@ -1,6 +1,6 @@
 url: https://mdmanurung.github.io/stablr/
 
-destination: ../../docs/stablr
+destination: _site
 
 template:
   bootstrap: 5
@@ -8,7 +8,7 @@ template:
 home:
   title: stablr
   description: >
-    Pure-R STABL implementation for sparse, reliable single-omic and
+    R-native STABL implementation without a Python runtime for reliable single-omic and
     multi-omic biomarker discovery.
 
 navbar:

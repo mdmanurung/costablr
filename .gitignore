@@ -5,6 +5,7 @@
 /vignettes/tcga_results/
 # testthat edition-3 failure-debug snapshots (transient, regenerated on failures)
 /tests/testthat/_problems/
+/_site/
 # Build outputs (regenerable)
 *.Rcheck/
 *.tar.gz

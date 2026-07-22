@@ -3,6 +3,7 @@
 ^docs$
 ^scripts$
 ^bench$
+^data-raw$
 ^papers$
 ^vignettes/.*\.html$
 ^vignettes/.*-cache$
@@ -21,3 +22,5 @@ Rplots\.pdf$
 ^\.claude$
 ^cran-comments\.md$
 ^_pkgdown\.yml$
+^LICENSE\.md$
+^_site$

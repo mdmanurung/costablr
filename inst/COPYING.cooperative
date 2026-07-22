@@ -6,6 +6,19 @@ Upstream authors:
 
 Source: CRAN multiview version 1.0 (2026-05-11)
 https://cran.r-project.org/package=multiview
+Upstream source tarball SHA-256:
+91ba5b33170392a6298d4d1bb9b051df5ade412aa55ff7fe4ae2c89ff833f9d5
+
+Imported files:
+  R/cooperative-*.R (renamed from the upstream R sources),
+  src/wls_exp.cpp, src/driver.h, and src/glmnetpp/.
+
+Local modifications:
+  upstream R symbols were given the cooperative- file prefix; calls were
+  adapted to the stablr namespace and manual cooperative S3 registrations;
+  a stablr-facing backend and validation/provenance layer were added; and the
+  native registration/build files were integrated with stablr. Algorithmic
+  cooperative-learning code remains derived from multiview 1.0.
 
 This component is licensed under the GNU General Public License, version 2.
 See https://www.gnu.org/licenses/old-licenses/gpl-2.0.html

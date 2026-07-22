@@ -31,7 +31,7 @@ feature appears, and calibrates the result against artificial decoy features.
 The central object is therefore not one coefficient vector.  It is a frequency:
 how often does this feature survive when the data are perturbed?
 
-The `stablr` package is a pure-R implementation built around the `glmnet`
+The `stablr` package is R-native without a Python runtime and built around the `glmnet`
 ecosystem.  This introductory vignette uses small simulated datasets,
 random-permutation decoys, and modest bootstrap counts so the examples remain
 quick enough for routine package builds.

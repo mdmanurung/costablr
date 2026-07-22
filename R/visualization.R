@@ -198,19 +198,19 @@ plot_stabl_path <- function(object, new_hard_threshold = NULL,
 #' the full range of candidate stability thresholds, and marks the threshold
 #' that achieves the minimum FDR estimate.
 #'
-#' This diagnostic is essential for understanding why a particular stability
-#' threshold was chosen during fitting.  A well-calibrated run will show a
-#' clear "valley" — a region where the FDP+ is minimised — confirming that
-#' the artificial-feature injection produced a meaningful separation between
-#' real signal and noise.  Flat or monotone curves indicate that the
-#' regularisation grid may need adjustment or that the signal is very weak.
+#' This diagnostic shows why a particular stability threshold was chosen during
+#' fitting: the current rule selects the first minimum of the displayed FDP+
+#' curve. Curve shape is descriptive and does not by itself establish FDP
+#' control, calibration, or signal/noise separation. Interpretation depends on
+#' the artificial-feature assumptions and the fitted data.
 #'
 #' Requires that `object` was fitted with `artificial_type` set (not `NULL`).
 #'
 #' @param object A fitted `"stabl_fit"` object returned by [stabl_fit()].
 #' @param title Character scalar; plot title.  Default `"FDR Estimate"`.
-#' @param fdr_target Numeric scalar or `NULL`; FDP target shown as a horizontal
-#'   dashed line.  Use `NULL` to omit the target line.  Default `0.05`.
+#' @param fdr_target Numeric scalar or `NULL`; a visual horizontal reference
+#'   line only. It is not used for fitting or threshold selection. Use `NULL`
+#'   to omit the line. Default `0.05`.
 #'
 #' @return A `ggplot` object.  The curve shows the FDP+ estimate at each
 #'   candidate threshold; a vertical dashed line marks the optimal threshold

@@ -1,7 +1,8 @@
 #' stablr: Sparse and Reliable Biomarker Discovery in R
 #'
-#' `stablr` is a pure-R implementation of STABL for sparse, stable biomarker
-#' selection in high-dimensional clinical and omic datasets.  The package
+#' `stablr` is an R-native implementation of STABL for sparse, stable biomarker
+#' selection in high-dimensional clinical and omic datasets. The package
+#' compiles C++ for its cooperative-learning backend and
 #' provides a core bootstrap stability-selection engine, FDP+ threshold
 #' calibration with artificial features, glmnet-family learner adapters, and
 #' multi-omic workflows for per-omic, early-fusion, late-fusion, and
