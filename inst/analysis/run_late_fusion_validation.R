@@ -49,6 +49,13 @@
     identical(provenance$dirty, FALSE)
 }
 
+.git_provenance_is_available <- function(provenance) {
+  is.character(provenance$commit) && length(provenance$commit) == 1L &&
+    !is.na(provenance$commit) && nzchar(provenance$commit) &&
+    is.character(provenance$tree) && length(provenance$tree) == 1L &&
+    !is.na(provenance$tree) && nzchar(provenance$tree)
+}
+
 .git_provenance_is_stable <- function(start, end) {
   identical(start$commit, end$commit) &&
     identical(start$tree, end$tree) &&
@@ -174,7 +181,10 @@ if ("stablr" %in% loadedNamespaces()) {
 run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L,
                                        n_iter = 500L, seed = 220711L) {
   provenance_start <- .source_provenance_start
-  if (!is.na(.root) && file.exists(file.path(.root, ".git")) &&
+  source_repository_present <- !is.na(.root) &&
+    file.exists(file.path(.root, ".git"))
+  if ((source_repository_present ||
+       .git_provenance_is_available(provenance_start)) &&
       !.git_provenance_is_clean(provenance_start)) {
     stop(
       "Late-fusion release validation requires a clean Git source tree with an identifiable commit.",

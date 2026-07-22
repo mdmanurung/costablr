@@ -115,6 +115,10 @@ test_that("release provenance detects dirty and moving source trees", {
 
   late_env <- new.env(parent = globalenv())
   sys.source(.late_fusion_runner_path(), envir = late_env)
+  expect_true(late_env$.git_provenance_is_available(clean))
+  expect_false(late_env$.git_provenance_is_available(list(
+    commit = NA_character_, tree = NA_character_, dirty = NA
+  )))
   late_env$.source_provenance_start <- dirty
   expect_error(
     late_env$run_late_fusion_validation(
