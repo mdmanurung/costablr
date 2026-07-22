@@ -19,7 +19,11 @@
   NA_character_
 }
 .root <- .find_source_root()
-if (!is.na(.root) && requireNamespace("pkgload", quietly = TRUE)) {
+if ("stablr" %in% loadedNamespaces()) {
+  .package_mode <- paste0(
+    "loaded:", getNamespaceInfo(asNamespace("stablr"), "path")
+  )
+} else if (!is.na(.root) && requireNamespace("pkgload", quietly = TRUE)) {
   pkgload::load_all(.root, quiet = TRUE)
   .package_mode <- paste0("source:", .root)
 } else {

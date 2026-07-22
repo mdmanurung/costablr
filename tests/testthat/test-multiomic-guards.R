@@ -45,7 +45,10 @@ test_that("cooperative_fusion errors when cooperative backend is unavailable", {
   x2 <- matrix(rnorm(30 * 4), nrow = 30, dimnames = list(s_ids, paste0("b", 1:4)))
   y  <- setNames(rnorm(30), s_ids)
 
-  testthat::local_mocked_bindings(.has_cooperative_backend = function() FALSE)
+  testthat::local_mocked_bindings(
+    .has_cooperative_backend = function() FALSE,
+    .package = "stablr"
+  )
 
   expect_error(
     stabl_multiomic_train_validate(

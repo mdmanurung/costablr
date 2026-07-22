@@ -564,7 +564,11 @@
 .load_validation_package <- function() {
   if (isTRUE(.validation_runtime$loaded)) return(.validation_runtime$mode)
   root <- .find_package_root()
-  if (!is.na(root) && requireNamespace("pkgload", quietly = TRUE)) {
+  if ("stablr" %in% loadedNamespaces()) {
+    mode <- paste0(
+      "loaded:", getNamespaceInfo(asNamespace("stablr"), "path")
+    )
+  } else if (!is.na(root) && requireNamespace("pkgload", quietly = TRUE)) {
     pkgload::load_all(root, quiet = TRUE)
     mode <- paste0("source:", normalizePath(root, winslash = "/"))
   } else {
