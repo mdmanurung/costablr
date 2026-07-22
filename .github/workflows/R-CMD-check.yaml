@@ -31,7 +31,7 @@ jobs:
           - { os: ubuntu-latest, r: "oldrel-1" }
           - { os: macos-latest,  r: "release" }
           - { os: windows-latest, r: "release" }
-          - { os: ubuntu-22.04, r: "4.1" }
+          - { os: ubuntu-22.04, r: "4.1", minimal: true }
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -47,13 +47,38 @@ jobs:
           r-version: ${{ matrix.config.r }}
           use-public-rspm: true
 
-      - uses: r-lib/actions/setup-r-dependencies@v2
+      - name: Install full check dependencies
+        if: matrix.config.minimal != true
+        uses: r-lib/actions/setup-r-dependencies@v2
         with:
           extra-packages: any::rcmdcheck
           needs: check
 
-      - uses: r-lib/actions/check-r-package@v2
+      - name: Install minimum-R check dependencies
+        if: matrix.config.minimal == true
+        uses: r-lib/actions/setup-r-dependencies@v2
         with:
+          dependencies: '"hard"'
+          extra-packages: |
+            any::rcmdcheck
+            any::testthat
+            any::withr
+            any::ggplot2
+
+      - name: Check package
+        if: matrix.config.minimal != true
+        uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+
+      - name: Check package at declared minimum R
+        if: matrix.config.minimal == true
+        uses: r-lib/actions/check-r-package@v2
+        env:
+          _R_CHECK_FORCE_SUGGESTS_: false
+        with:
+          args: 'c("--no-manual", "--ignore-vignettes")'
+          build_args: 'c("--no-manual", "--no-build-vignettes")'
           upload-snapshots: true
 
       - name: Upload check artifacts
