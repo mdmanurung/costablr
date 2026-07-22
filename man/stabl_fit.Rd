@@ -162,7 +162,8 @@ generation modes and fallback counts/reasons, or \code{NULL} when
 \description{
 Performs the STABL bootstrap stability-selection procedure over a grid of
 regularisation parameters, optionally injecting artificial features for
-automatic FDP+ threshold control.  This is the R counterpart of
+data-adaptive FDP+ threshold diagnostics. The fitting rule chooses the FDP+
+minimizer; it is not a universal false-discovery guarantee. This is the R counterpart of
 \code{Stabl.fit()} in the Python STABL library.
 }
 \section{Methods (by generic)}{

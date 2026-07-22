@@ -53,28 +53,14 @@ make_glmnet_adapter <- function(
     bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
 ) {
   .require_pkg("glmnet")
-  cox_ties <- .COX_TIES
+  batch_adapter <- .make_glmnet_batch_adapter(
+    family = family,
+    alpha_fixed = alpha_fixed,
+    bootstrap_threshold = bootstrap_threshold
+  )
 
   function(x, y, lambda_val) {
-    alpha_use <- if (!is.null(alpha_fixed)) {
-      alpha_fixed
-    } else if ("alpha" %in% names(lambda_val)) {
-      lambda_val[["alpha"]]
-    } else {
-      1.0
-    }
-
-    lambda_use <- lambda_val[["lambda"]]
-
-    fit <- glmnet::glmnet(
-      x = x,
-      y = y,
-      family    = family,
-      alpha     = alpha_use,
-      lambda    = lambda_use,
-      cox.ties  = cox_ties
-    )
-    .feature_abs_coefs(fit = fit, s = lambda_use, family = family) > bootstrap_threshold
+    batch_adapter(x, y, lambda_val)[, 1L]
   }
 }
 
@@ -136,41 +122,21 @@ make_adaptive_lasso_adapter <- function(
     bootstrap_threshold = .BOOTSTRAP_COEF_THRESHOLD
 ) {
   .require_pkg("glmnet")
-  cox_ties <- .COX_TIES
   if (!is.numeric(gamma) || length(gamma) != 1L || gamma <= 0) {
     stop("`gamma` must be a positive numeric scalar.", call. = FALSE)
   }
   if (!is.numeric(epsilon) || length(epsilon) != 1L || epsilon <= 0) {
     stop("`epsilon` must be a positive numeric scalar.", call. = FALSE)
   }
+  batch_adapter <- .make_adaptive_lasso_batch_adapter(
+    family = family,
+    gamma = gamma,
+    epsilon = epsilon,
+    bootstrap_threshold = bootstrap_threshold
+  )
 
   function(x, y, lambda_val) {
-    lambda_use <- lambda_val[["lambda"]]
-
-    # Ridge initialization for adaptive weights.
-    init_fit <- glmnet::glmnet(
-      x = x,
-      y = y,
-      family   = family,
-      alpha    = 0,
-      nlambda  = 30L,
-      cox.ties = cox_ties
-    )
-    init_lambda <- tail(init_fit$lambda, n = 1L)
-    init_scores <- .feature_abs_coefs(fit = init_fit, s = init_lambda,
-                      family = family)
-    penalty_factor <- 1 / ((init_scores + epsilon) ^ gamma)
-
-    fit <- glmnet::glmnet(
-      x = x,
-      y = y,
-      family         = family,
-      alpha          = 1,
-      lambda         = lambda_use,
-      penalty.factor = penalty_factor,
-      cox.ties       = cox_ties
-    )
-    .feature_abs_coefs(fit = fit, s = lambda_use, family = family) > bootstrap_threshold
+    batch_adapter(x, y, lambda_val)[, 1L]
   }
 }
 

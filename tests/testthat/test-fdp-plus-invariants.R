@@ -71,6 +71,65 @@ test_that("compute_fdp_plus fdrs_table is bit-identical after vectorization (cha
   expect_equal(res$fdr_min_threshold, 1.0, tolerance = 0)
 })
 
+.slow_compute_fdp_plus_reference <- function(real, artificial, proportion,
+                                             thresholds) {
+  inv_prop <- 1 / proportion
+  max_real <- apply(real, 1L, max)
+  max_art <- apply(artificial, 1L, max)
+  n_real <- colSums(outer(max_real, thresholds, ">"))
+  n_art <- colSums(outer(max_art, thresholds, ">"))
+  fdr <- (inv_prop * n_art + 1) / pmax(1, n_real)
+  nr_table <- vapply(thresholds, function(t) colSums(real > t), numeric(ncol(real)))
+  na_table <- vapply(thresholds, function(t) colSums(artificial > t), numeric(ncol(real)))
+  table <- (inv_prop * na_table + 1) / pmax(1, nr_table)
+  list(FDRs = fdr, fdrs_table = table)
+}
+
+test_that("compute_fdp_plus matches strict-comparison reference on ties and unordered thresholds", {
+  set.seed(12L)
+  real <- matrix(sample(seq(0, 1, by = 0.1), 101L * 7L, replace = TRUE), 101L, 7L)
+  artificial <- matrix(sample(seq(0, 1, by = 0.1), 53L * 7L, replace = TRUE), 53L, 7L)
+  thresholds <- c(0.5, 0.2, 0.5, 1, 0, 0.9)
+
+  observed <- compute_fdp_plus(real, artificial, 0.5, thresholds)
+  reference <- .slow_compute_fdp_plus_reference(real, artificial, 0.5, thresholds)
+
+  expect_equal(observed$FDRs, reference$FDRs, tolerance = 0)
+  expect_equal(observed$fdrs_table, reference$fdrs_table, tolerance = 0)
+})
+
+test_that("compute_fdp_plus preserves lambda-by-threshold shape for one threshold", {
+  real <- matrix(c(0.1, 0.8, 0.4, 0.9, 0.2, 0.6), nrow = 2L)
+  artificial <- matrix(c(0.2, 0.7, 0.5), nrow = 1L)
+  observed <- compute_fdp_plus(real, artificial, 0.5, 0.5)
+  reference <- .slow_compute_fdp_plus_reference(real, artificial, 0.5, 0.5)
+
+  expect_equal(dim(observed$fdrs_table), c(ncol(real), 1L))
+  expect_equal(observed$fdrs_table, reference$fdrs_table, tolerance = 0)
+})
+
+test_that("compute_fdp_plus preserves names on threshold-level FDP output", {
+  real <- matrix(c(0.1, 0.8, 0.4, 0.9), nrow = 2L)
+  artificial <- matrix(c(0.2, 0.7), nrow = 1L)
+  thresholds <- c(low = 0.2, high = 0.5)
+
+  observed <- compute_fdp_plus(real, artificial, 0.5, thresholds)
+  expect_named(observed$FDRs, names(thresholds))
+})
+
+test_that("compute_fdp_plus rejects malformed public inputs", {
+  valid <- matrix(c(0.1, 0.7, 0.2, 0.8), nrow = 2L)
+  expect_error(compute_fdp_plus(as.data.frame(valid), valid, 1), "numeric matrix")
+  expect_error(compute_fdp_plus(valid, valid[, 1L, drop = FALSE], 1), "same number of columns")
+  bad <- valid
+  bad[[1L]] <- NA_real_
+  expect_error(compute_fdp_plus(bad, valid, 1), "finite")
+  expect_error(compute_fdp_plus(valid, valid, 0), "artificial_proportion")
+  expect_error(compute_fdp_plus(valid, valid, 1, numeric()), "fdr_threshold_range")
+  expect_error(compute_fdp_plus(valid, valid, 1, c(0.2, Inf)), "fdr_threshold_range")
+  expect_error(compute_fdp_plus(valid, valid, 1, matrix(0.2)), "fdr_threshold_range")
+})
+
 test_that("compute_fdp_plus caps fdr_min_threshold at 1 when min FDP+ > 1", {
   # Construct a case where min FDP+ exceeds 1 → final cutoff must be 1.
   art  <- matrix(0.99, nrow = 20L, ncol = 2L)

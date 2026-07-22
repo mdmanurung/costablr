@@ -104,17 +104,24 @@ make_knockoff_features <- function(x, n_injected, random_state = NULL) {
   .make_ko_chunk <- function(x_chunk) {
     tryCatch(
       {
+        augmented_rows <- FALSE
         xk <- withCallingHandlers(
           knockoff::create.fixed(x_chunk, sigma = 1)$Xk,
           warning = function(w) {
             if (grepl("Augmenting the model with extra rows",
                       conditionMessage(w), fixed = TRUE)) {
+              augmented_rows <<- TRUE
               invokeRestart("muffleWarning")
             }
           }
         )
-        if (nrow(xk) > nrow(x_chunk)) {
-          xk <- xk[seq_len(nrow(x_chunk)), , drop = FALSE]
+        if (isTRUE(augmented_rows) || nrow(xk) != nrow(x_chunk)) {
+          stop(
+            "knockoff::create.fixed augmented the design from ",
+            nrow(x_chunk), " to ", nrow(xk), " rows; stablr cannot align ",
+            "augmented knockoffs with the unaugmented outcome.",
+            call. = FALSE
+          )
         }
         list(
           x_art = xk,
@@ -333,12 +340,13 @@ make_knockoff_equi_features <- function(x, n_injected, random_state = NULL) {
 #' Make Model-X MVR Knockoff Artificial Features
 #'
 #' Generates **model-X MVR (minimum-variance-reconstructability)** knockoff
-#' features.  The S-matrix is solved via `solve_mvr()` (a pure-R coordinate-
+#' features.  The S-matrix is solved via `solve_mvr()` (an R-native coordinate-
 #' descent port of `knockpy.mrc._solve_mvr_ungrouped`), then the knockoff
 #' sample is drawn with `knockoff::create.gaussian(..., diag_s = S)`.
 #' This is a novel feature exclusive to `stablr` — the Python STABL library
-#' does not implement MVR knockoffs.  Chunking and fallback behaviour mirror
-#' [make_knockoff_equi_features()]: MVR-solver failure falls back to equi;
+#' does not implement MVR knockoffs. High-dimensional chunking is approximate:
+#' global exchangeability across chunks has not been established. Chunking and
+#' fallback behaviour mirror [make_knockoff_equi_features()]: MVR-solver failure falls back to equi;
 #' `create.gaussian` failure falls back to random permutation.
 #'
 #' @param x Numeric matrix of predictors (samples \eqn{\times} features).
@@ -347,7 +355,10 @@ make_knockoff_equi_features <- function(x, n_injected, random_state = NULL) {
 #'   coordinate-shuffle RNG.
 #'
 #' @return Named list with elements `x_augmented`, `noise_col_indices`, and
-#'   `artificial_provenance`; see [make_rp_features()] for details.
+#'   `artificial_provenance`; see [make_rp_features()] for details. For MVR,
+#'   `artificial_provenance$mvr_chunking` records whether the approximate
+#'   high-dimensional chunking path was applied and explicitly reports that
+#'   global exchangeability across chunks has not been established.
 #' @keywords internal
 make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
   .require_pkg("knockoff", "for artificial_type = \"knockoff_mvr\"")
@@ -370,13 +381,6 @@ make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
             warning("solve_mvr failed; using equi S for this chunk. Reason: ",
                     equi_fallback_reason, call. = FALSE)
             NULL
-          },
-          warning = function(w) {
-            # Propagate warning but still try to get a result
-            withCallingHandlers(
-              solve_mvr(Sigma, random_state = random_state),
-              warning = function(w2) invokeRestart("muffleWarning")
-            )
           }
         )
 
@@ -460,14 +464,23 @@ make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
   x_art   <- x_art_full[, sel_idx, drop = FALSE]
   selected_types <- type_map[sel_idx]
 
+  provenance <- .make_artificial_provenance(
+    requested_type = "knockoff_mvr",
+    selected_types = selected_types,
+    chunks = chunks
+  )
+  is_chunked <- n_features > chunk_size
+  provenance$mvr_chunking <- list(
+    applied = is_chunked,
+    chunk_size = chunk_size,
+    approximate = is_chunked,
+    global_exchangeability_established = if (is_chunked) FALSE else NA
+  )
+
   list(
     x_augmented      = cbind(x, x_art),
     noise_col_indices = orig_map[sel_idx],
-    artificial_provenance = .make_artificial_provenance(
-      requested_type = "knockoff_mvr",
-      selected_types = selected_types,
-      chunks = chunks
-    )
+    artificial_provenance = provenance
   )
 }
 
@@ -477,12 +490,12 @@ make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
 #' `type`, returning the augmented predictor matrix together with the column
 #' indices of the injected noise block.
 #'
-#' Injecting artificial features is central to STABL's automatic FDP+ control:
+#' Injecting artificial features supports STABL's FDP+ diagnostic calibration:
 #' by mixing known-noise columns into the predictor matrix alongside real
 #' features, STABL can empirically estimate how often a variable of pure noise
 #' is selected at a given stability threshold.  This observed noise-selection
-#' rate drives the FDP+ bound computed in [compute_fdp_plus()], eliminating
-#' the need to choose a stability threshold by hand.
+#' rate drives the FDP+ estimate computed in [compute_fdp_plus()]. The current
+#' rule chooses its minimum and does not imply universal error-rate control.
 #'
 #' Four noise strategies are supported:
 #' \describe{
@@ -499,7 +512,7 @@ make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
 #'     the parity-correct knockoff type for cross-language comparisons.}
 #'   \item{`"knockoff_mvr"`}{Generates **model-X MVR** (minimum-variance-
 #'     reconstructability) knockoffs.  The S-matrix is solved by `solve_mvr()`
-#'     (a pure-R port of `knockpy.mrc`); sampling uses
+#'     (an R-native port of `knockpy.mrc`); sampling uses
 #'     `knockoff::create.gaussian(..., diag_s = S)`.  This is a novel feature
 #'     exclusive to `stablr`.}
 #' }
@@ -507,7 +520,9 @@ make_knockoff_mvr_features <- function(x, n_injected, random_state = NULL) {
 #' @param x Numeric matrix of predictors (samples \eqn{\times} features).
 #'   Must have more columns than `n_injected` for random permutation; for
 #'   knockoffs, a fallback to random permutation is attempted when the
-#'   knockoff constructor fails (e.g., rank-deficient input).
+#'   knockoff constructor fails (e.g., rank-deficient input). Fixed-X
+#'   knockoffs that require row augmentation also fall back because augmented
+#'   knockoff rows cannot be aligned with the original outcome.
 #' @param n_injected Positive integer; number of artificial columns to append.
 #'   Typically `round(ncol(x) * artificial_proportion)` as computed in
 #'   [stabl_fit()].

@@ -51,33 +51,64 @@ compute_fdp_plus <- function(
     artificial_proportion,
     fdr_threshold_range = seq(0, 0.99, by = 0.01)
 ) {
+  score_inputs <- list(
+    stabl_scores = stabl_scores,
+    stabl_scores_artificial = stabl_scores_artificial
+  )
+  for (name in names(score_inputs)) {
+    scores <- score_inputs[[name]]
+    if (!is.matrix(scores) || !is.numeric(scores)) {
+      stop("`", name, "` must be a numeric matrix.", call. = FALSE)
+    }
+    if (nrow(scores) == 0L || ncol(scores) == 0L) {
+      stop("`", name, "` must have at least one row and one column.", call. = FALSE)
+    }
+    if (any(!is.finite(scores))) {
+      stop("`", name, "` must contain only finite values.", call. = FALSE)
+    }
+    if (any(scores < 0 | scores > 1)) {
+      stop("`", name, "` values must lie in [0, 1].", call. = FALSE)
+    }
+  }
+  if (ncol(stabl_scores) != ncol(stabl_scores_artificial)) {
+    stop(
+      "`stabl_scores` and `stabl_scores_artificial` must have the same number of columns.",
+      call. = FALSE
+    )
+  }
+  artificial_proportion <- .validate_proportion(
+    artificial_proportion,
+    "artificial_proportion"
+  )
+  if (!is.numeric(fdr_threshold_range) || !is.null(dim(fdr_threshold_range)) ||
+      length(fdr_threshold_range) == 0L ||
+      any(!is.finite(fdr_threshold_range)) ||
+      any(fdr_threshold_range < 0 | fdr_threshold_range > 1)) {
+    stop(
+      "`fdr_threshold_range` must be a non-empty finite numeric vector in [0, 1].",
+      call. = FALSE
+    )
+  }
+
   inv_prop    <- 1.0 / artificial_proportion
   max_scores  <- rowMaxs(stabl_scores)
   max_art     <- rowMaxs(stabl_scores_artificial)
-  n_thresh    <- length(fdr_threshold_range)
 
-  # Vectorized FDP+ across all lambda (uses row-max scores).
-  # outer() produces an (n_features × n_thresh) logical matrix; colSums gives
-  # the count of features exceeding each threshold in one pass.
-  n_real <- colSums(outer(max_scores, fdr_threshold_range, ">"))
-  n_art  <- colSums(outer(max_art,    fdr_threshold_range, ">"))
+  # Sort once, then count values strictly above each threshold using binary
+  # interval lookup. This preserves strict `>` ties while avoiding the large
+  # feature-by-threshold logical matrices produced by outer().
+  n_real <- .count_strict_exceedances(max_scores, fdr_threshold_range)
+  n_art  <- .count_strict_exceedances(max_art, fdr_threshold_range)
   FDRs   <- (inv_prop * n_art + 1.0) / pmax(1.0, n_real)
 
-  # Per-lambda FDP+ table: for each threshold sweep the full score matrix at
-  # once (colSums on the n_features × n_lambdas comparison result), then
-  # collect into an (n_lambdas × n_thresh) matrix in one pass.
-  n_lambdas  <- ncol(stabl_scores)
-  nr_table <- matrix(
-    vapply(fdr_threshold_range,
-           function(t) colSums(stabl_scores > t),
-           numeric(n_lambdas)),
-    nrow = n_lambdas, ncol = n_thresh
+  # Per-lambda table uses the same strict counting implementation column-wise.
+  nr_table <- .count_matrix_strict_exceedances(
+    stabl_scores,
+    fdr_threshold_range
   )
-  na_table <- matrix(
-    vapply(fdr_threshold_range,
-           function(t) colSums(stabl_scores_artificial > t),
-           numeric(n_lambdas)),
-    nrow = n_lambdas, ncol = n_thresh
+  na_table <- .count_matrix_strict_exceedances(
+    stabl_scores_artificial,
+    fdr_threshold_range
   )
   fdrs_table <- (inv_prop * na_table + 1.0) / pmax(1.0, nr_table)
 
@@ -94,4 +125,25 @@ compute_fdp_plus <- function(
     fdr_min_threshold = fdr_min_threshold,
     fdrs_table        = fdrs_table
   )
+}
+
+.count_strict_exceedances <- function(values, thresholds) {
+  sorted <- sort(unname(values), method = "quick")
+  counts <- as.numeric(length(sorted) - findInterval(thresholds, sorted))
+  names(counts) <- names(thresholds)
+  counts
+}
+
+.count_matrix_strict_exceedances <- function(scores, thresholds) {
+  counts <- vapply(
+    seq_len(ncol(scores)),
+    function(j) .count_strict_exceedances(scores[, j], thresholds),
+    numeric(length(thresholds))
+  )
+  counts <- matrix(
+    counts,
+    nrow = length(thresholds),
+    ncol = ncol(scores)
+  )
+  unname(t(counts))
 }

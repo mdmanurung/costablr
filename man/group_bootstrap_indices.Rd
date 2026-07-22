@@ -58,7 +58,7 @@ same subject appear in both the bootstrap subsample and its complement, the
 stability score becomes inflated because the learner can partially memorise
 subject-level patterns.  By sampling complete groups, the subsample and its
 "holdout" are subject-disjoint, preserving the independence assumption
-underlying STABL's FDP+ guarantee.
+underlying STABL's FDP+ diagnostic assumptions.
 
 \strong{How groups are sampled:} Groups are drawn one at a time (without
 replacement by default) until the running tally of included rows reaches

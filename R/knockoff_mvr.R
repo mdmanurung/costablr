@@ -1,6 +1,6 @@
 # knockoff_mvr.R — MVR (minimum-variance-reconstructability) S-matrix solver
 #
-# Pure-R port of knockpy/mrc.py (Spector & Janson 2022, arXiv 2011.14625).
+# R-native port of knockpy/mrc.py (Spector & Janson 2022, arXiv 2011.14625).
 # This implements coordinate descent over diag(S) to minimize the MVR loss:
 #
 #   L(S) = trace((2*Sigma - S)^{-1}) + trace(S^{-1})
@@ -13,8 +13,8 @@
 # make_knockoff_mvr_features() in R/artificial_features.R.
 #
 # Reference:
-#   Spector & Janson (2022). "Maximum Likelihood Estimation in Gaussian
-#   Graphical Models is NP-Hard." arXiv:2011.14625.
+#   Spector & Janson (2022). "Powerful Knockoffs via Minimizing
+#   Reconstructability." arXiv:2011.14625.
 
 # ── Rank-1 Cholesky up/down-date ─────────────────────────────────────────────
 #
@@ -164,7 +164,8 @@
 #                   for _solve_mvr_ungrouped).
 # @param tol        Minimum permissible eigenvalue for the final PSD guards.
 # @param smoothing  Add smoothing to eigenvalues in the loss.  Default 0.
-# @param random_state Optional integer seed for the coordinate-shuffle RNG.
+# @param random_state Optional integer seed for the coordinate-shuffle RNG;
+#                   the caller's RNG state is restored after solving.
 #
 # @return Numeric vector of length p — the diagonal of S (covariance-scale).
 #         Drop-in for the `diag_s` argument of knockoff::create.gaussian().
@@ -174,8 +175,19 @@ solve_mvr <- function(Sigma,
                       tol           = 1e-5,
                       smoothing     = 0,
                       random_state  = NULL) {
-
-  if (!is.null(random_state)) set.seed(random_state)
+  if (!is.null(random_state)) {
+    return(.with_local_seed(
+      random_state,
+      solve_mvr(
+        Sigma = Sigma,
+        num_iter = num_iter,
+        converge_tol = converge_tol,
+        tol = tol,
+        smoothing = smoothing,
+        random_state = NULL
+      )
+    ))
+  }
 
   p    <- nrow(Sigma)
   inds <- seq_len(p)

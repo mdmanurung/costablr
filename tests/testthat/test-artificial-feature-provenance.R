@@ -37,6 +37,49 @@ test_that("make_artificial_features records fixed-X knockoff fallback provenance
   )
 })
 
+test_that("fixed-X row augmentation falls back instead of truncating invalid knockoffs", {
+  skip_if_not_installed("knockoff")
+
+  # For p < n < 2p, knockoff::create.fixed() augments the design to 2p rows.
+  # Truncating only Xk back to n rows destroys the fixed-X Gram identities, so
+  # the current stablr interface must reject that result and use its documented
+  # random-permutation fallback.
+  set.seed(1003L)
+  x <- matrix(
+    rnorm(15L * 10L),
+    nrow = 15L,
+    dimnames = list(paste0("s", 1:15), paste0("f", 1:10))
+  )
+
+  saw_fallback_warning <- FALSE
+  result <- withCallingHandlers(
+    make_artificial_features(
+      x = x,
+      n_injected = 10L,
+      type = "knockoff",
+      random_state = 1003L
+    ),
+    warning = function(w) {
+      if (grepl("falling back to random permutation", conditionMessage(w),
+                fixed = TRUE)) {
+        saw_fallback_warning <<- TRUE
+      }
+      invokeRestart("muffleWarning")
+    }
+  )
+
+  expect_true(saw_fallback_warning)
+  expect_equal(dim(result$x_augmented), c(nrow(x), 2L * ncol(x)))
+  expect_equal(
+    result$artificial_provenance$selected_type_counts[["random_permutation"]],
+    ncol(x)
+  )
+  expect_match(
+    result$artificial_provenance$chunks$fallback_reason,
+    "augmented.*rows"
+  )
+})
+
 test_that("stabl_fit preserves artificial-feature fallback provenance", {
   skip_if_not_installed("knockoff")
 

@@ -10,7 +10,9 @@ make_artificial_features(x, n_injected, type, random_state = NULL)
 \item{x}{Numeric matrix of predictors (samples \eqn{\times} features).
 Must have more columns than \code{n_injected} for random permutation; for
 knockoffs, a fallback to random permutation is attempted when the
-knockoff constructor fails (e.g., rank-deficient input).}
+knockoff constructor fails (e.g., rank-deficient input). Fixed-X
+knockoffs that require row augmentation also fall back because augmented
+knockoff rows cannot be aligned with the original outcome.}
 
 \item{n_injected}{Positive integer; number of artificial columns to append.
 Typically \code{round(ncol(x) * artificial_proportion)} as computed in
@@ -47,12 +49,12 @@ Selects and calls the appropriate artificial-feature generator based on
 indices of the injected noise block.
 }
 \details{
-Injecting artificial features is central to STABL's automatic FDP+ control:
+Injecting artificial features supports STABL's FDP+ diagnostic calibration:
 by mixing known-noise columns into the predictor matrix alongside real
 features, STABL can empirically estimate how often a variable of pure noise
 is selected at a given stability threshold.  This observed noise-selection
-rate drives the FDP+ bound computed in \code{\link[=compute_fdp_plus]{compute_fdp_plus()}}, eliminating
-the need to choose a stability threshold by hand.
+rate drives the FDP+ estimate computed in \code{\link[=compute_fdp_plus]{compute_fdp_plus()}}. The current
+rule chooses its minimum and does not imply universal error-rate control.
 
 Four noise strategies are supported:
 \describe{
@@ -69,7 +71,7 @@ via \code{knockoff::create.gaussian(..., method = "equi")}.  This matches the
 the parity-correct knockoff type for cross-language comparisons.}
 \item{\code{"knockoff_mvr"}}{Generates \strong{model-X MVR} (minimum-variance-
 reconstructability) knockoffs.  The S-matrix is solved by \code{solve_mvr()}
-(a pure-R port of \code{knockpy.mrc}); sampling uses
+(an R-native port of \code{knockpy.mrc}); sampling uses
 \code{knockoff::create.gaussian(..., diag_s = S)}.  This is a novel feature
 exclusive to \code{stablr}.}
 }

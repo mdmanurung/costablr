@@ -39,6 +39,20 @@ test_that("make_glmnet_adapter bootstrap_threshold controls sparsity", {
   expect_gte(sum(lax(d$x, d$y, d$lambda_val)), sum(strict(d$x, d$y, d$lambda_val)))
 })
 
+test_that("public glmnet adapter matches one-row batch path exactly", {
+  skip_if_not_installed("glmnet")
+  d <- .make_adapter_data(seed = 11L)
+  public <- make_glmnet_adapter(family = "gaussian")
+  batch <- stablr:::.make_glmnet_batch_adapter(
+    family = "gaussian", alpha_fixed = NULL,
+    bootstrap_threshold = stablr:::.BOOTSTRAP_COEF_THRESHOLD
+  )
+  expect_identical(
+    public(d$x, d$y, d$lambda_val),
+    batch(d$x, d$y, d$lambda_val)[, 1L]
+  )
+})
+
 # ---- make_adaptive_lasso_adapter ---------------------------------------------
 
 test_that("make_adaptive_lasso_adapter returns a selection mask", {
@@ -58,6 +72,20 @@ test_that("make_adaptive_lasso_adapter rejects non-positive gamma", {
 test_that("make_adaptive_lasso_adapter rejects non-positive epsilon", {
   expect_error(make_adaptive_lasso_adapter(epsilon = 0),  "epsilon")
   expect_error(make_adaptive_lasso_adapter(epsilon = -1), "epsilon")
+})
+
+test_that("public adaptive adapter matches one-row batch path exactly", {
+  skip_if_not_installed("glmnet")
+  d <- .make_adapter_data(seed = 12L)
+  public <- make_adaptive_lasso_adapter(family = "gaussian")
+  batch <- stablr:::.make_adaptive_lasso_batch_adapter(
+    family = "gaussian", gamma = 1, epsilon = 1e-6,
+    bootstrap_threshold = stablr:::.BOOTSTRAP_COEF_THRESHOLD
+  )
+  expect_identical(
+    public(d$x, d$y, d$lambda_val),
+    batch(d$x, d$y, d$lambda_val)[, 1L]
+  )
 })
 
 # ---- make_sgl_adapter --------------------------------------------------------

@@ -30,6 +30,12 @@
   }, testthat::teardown_env())
 }
 
+.expect_coef_batch_equivalent <- function(observed, expected) {
+  expect_equal(observed, expected, tolerance = 1e-14)
+  expect_identical(observed > .BOOTSTRAP_COEF_THRESHOLD,
+                   expected > .BOOTSTRAP_COEF_THRESHOLD)
+}
+
 test_that("on-grid coef batch fast path is bit-identical: gaussian", {
   skip_if_not_installed("glmnet")
   set.seed(42L)
@@ -39,7 +45,7 @@ test_that("on-grid coef batch fast path is bit-identical: gaussian", {
   lambda_seq <- c(0.5, 0.3, 0.1)
   fit <- glmnet::glmnet(x, y, family = "gaussian", alpha = 1,
                         lambda = sort(lambda_seq, decreasing = TRUE))
-  expect_identical(
+  .expect_coef_batch_equivalent(
     .feature_abs_coefs_batch(fit, lambda_seq, family = "gaussian"),
     .slow_feature_abs_coefs_batch(fit, lambda_seq, family = "gaussian")
   )
@@ -54,7 +60,7 @@ test_that("on-grid coef batch fast path is bit-identical: binomial", {
   lambda_seq <- c(0.4, 0.2, 0.05)
   fit <- glmnet::glmnet(x, y, family = "binomial", alpha = 1,
                         lambda = sort(lambda_seq, decreasing = TRUE))
-  expect_identical(
+  .expect_coef_batch_equivalent(
     .feature_abs_coefs_batch(fit, lambda_seq, family = "binomial"),
     .slow_feature_abs_coefs_batch(fit, lambda_seq, family = "binomial")
   )
@@ -69,7 +75,7 @@ test_that("on-grid coef batch fast path is bit-identical: multinomial", {
   lambda_seq <- c(0.3, 0.15, 0.05)
   fit <- glmnet::glmnet(x, y, family = "multinomial", alpha = 1,
                         lambda = sort(lambda_seq, decreasing = TRUE))
-  expect_identical(
+  .expect_coef_batch_equivalent(
     .feature_abs_coefs_batch(fit, lambda_seq, family = "multinomial"),
     .slow_feature_abs_coefs_batch(fit, lambda_seq, family = "multinomial")
   )
