@@ -661,7 +661,8 @@ test_that("late_fusion = TRUE adds late_fusion field with weights and prediction
 
   expect_false(is.null(fit$late_fusion))
   lf <- fit$late_fusion
-  expect_named(lf, c("weights", "train_predictions", "valid_predictions", "score"))
+  expect_named(lf, c("weights", "train_predictions", "valid_predictions", "score", "provenance"))
+  expect_identical(lf$provenance$training_mode, "oof")
   expect_s3_class(lf$weights, "data.frame")
   expect_equal(nrow(lf$weights), 2L)             # one row per omic
   expect_s3_class(lf$train_predictions, "data.frame")
@@ -1471,6 +1472,7 @@ test_that("[char-F1] per-omic / early-fusion / late-fusion blocks produce bit-id
     y_valid         = y_all[vl],
     early_fusion    = TRUE,
     late_fusion     = TRUE,
+    late_fusion_training = "python_legacy",
     n_iter_lf       = 200L,
     artificial_type = NULL,
     hard_threshold  = 0.3,

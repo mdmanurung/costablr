@@ -209,9 +209,11 @@ Key arguments:
 | `x_train_list` / `x_valid_list` | Named lists of feature matrices; names must match between train and valid. |
 | `lambda_grid` | Named list of lambda grids, one per omic (names must match `x_train_list`). |
 | `early_fusion` / `late_fusion` | Toggle each strategy on or off independently. |
+| `late_fusion_training` | Use leakage-safe `"oof"` (default), or explicit `"python_legacy"` compatibility mode. |
+| `late_fusion_nfolds` | Number of stacking folds; five folds plus the full refit cost roughly six complete fits. |
 | `n_iter_lf` | Number of optimisation iterations for the late-fusion weight search. |
 
-The printed `multi_fit` object summarises every active branch: per-omic selected-feature counts, whether validation data are present, early-fusion branch presence, and the late-fusion score. Binary and regression late fusion use parity-preserving batched stacking; multiclass stacking remains scalar by design to preserve probability-normalisation and tie behavior.
+The printed `multi_fit` object summarises every active branch: per-omic selected-feature counts, whether validation data are present, early-fusion branch presence, and the late-fusion score. In OOF mode, assessment samples and their groups never enter selector or downstream-model fitting. Binary and regression late fusion use parity-preserving batched stacking; multiclass stacking remains scalar by design to preserve probability-normalisation and tie behavior.
 
 ```{r lambda-grid}
 # Build per-omic lambda grids

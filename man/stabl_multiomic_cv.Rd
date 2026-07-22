@@ -22,6 +22,8 @@ stabl_multiomic_cv(
   random_state = NULL,
   early_fusion = FALSE,
   late_fusion = FALSE,
+  late_fusion_training = c("oof", "python_legacy"),
+  late_fusion_nfolds = 5L,
   n_iter_lf = 10000L,
   cooperative_fusion = FALSE,
   rho = NULL,
@@ -75,6 +77,12 @@ assignment and forwarded to each per-fold \code{\link[=stabl_fit]{stabl_fit()}} 
 
 \item{late_fusion}{Logical.  Forwarded to each per-fold
 \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} call.}
+
+\item{late_fusion_training}{Forwarded to
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
+
+\item{late_fusion_nfolds}{Forwarded to
+\code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
 
 \item{n_iter_lf}{Forwarded to \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}}.}
 

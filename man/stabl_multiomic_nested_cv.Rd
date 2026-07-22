@@ -111,5 +111,8 @@ fold.
 \note{
 Cooperative fusion (\code{cooperative_fusion = TRUE}) is not supported in
 nested CV. Use \code{\link[=stabl_multiomic_train_validate]{stabl_multiomic_train_validate()}} or
-\code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} for cooperative workflows.
+\code{\link[=stabl_multiomic_cv]{stabl_multiomic_cv()}} for cooperative workflows. The held-out metrics
+estimate predictive performance for the declared candidate workflow; they
+do not establish dataset-wide FDP control. Late-fusion stacking is not a
+candidate type in this helper.
 }

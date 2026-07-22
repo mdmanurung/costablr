@@ -23,6 +23,8 @@ stabl_multiomic_train_validate(
   random_state = NULL,
   early_fusion = FALSE,
   late_fusion = FALSE,
+  late_fusion_training = c("oof", "python_legacy"),
+  late_fusion_nfolds = 5L,
   n_iter_lf = 10000L,
   cooperative_fusion = FALSE,
   rho = NULL,
@@ -88,6 +90,13 @@ fusion falls back to class priors for multinomial tasks or the train-set
 mean for other tasks. The \code{task_type} (binary, regression, or multiclass)
 is inferred from \code{family}.  Results are returned in the \code{late_fusion}
 field.}
+
+\item{late_fusion_training}{How stacking weights are trained. \code{"oof"}
+(default) refits STABL selection and the downstream model inside every
+stacking fold. \code{"python_legacy"} preserves the historical in-sample
+Python-compatible algorithm.}
+
+\item{late_fusion_nfolds}{Number of stacking folds used in OOF mode.}
 
 \item{n_iter_lf}{Number of random weight draws passed to
 \code{\link[=stacked_multi_omic]{stacked_multi_omic()}} during late fusion.  Ignored when

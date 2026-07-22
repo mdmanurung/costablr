@@ -121,15 +121,28 @@ Important arguments:
   supported.
 - `early_fusion`: concatenate omics and fit a joint STABL model.
 - `late_fusion`: learn a weighted stack over per-omic downstream predictions.
+- `late_fusion_training`: `"oof"` (default) reruns selection and downstream
+  fitting inside each stacking fold; `"python_legacy"` preserves historical
+  in-sample weight training.
+- `late_fusion_nfolds`: number of leakage-safe stacking folds (default 5).
 - `n_iter_lf`: finite integer-like scalar number of late-fusion weight draws.
 - `cooperative_fusion`: run the native cooperative multiview branch.
 
 `print.stabl_multiomic_fit()` reports branch presence and selected-feature
 counts. When late fusion is present, it reports the late-fusion score rather than validation-metric labels from older drafts.
 
-Binary and regression late fusion use parity-preserving batched stacking.
+Binary and regression late fusion use parity-preserving batched stacking. OOF
+mode costs approximately `nfolds + 1` complete fits because it adds a final
+full-training refit after weights are frozen. Fold IDs, seeds, selected
+features, artificial-feature provenance, warnings, and fallbacks are returned
+under `$late_fusion$provenance`.
 Multiclass stacking remains scalar by design to preserve probability
 normalization and tie behavior.
+
+If a fold selects no usable features or its downstream learner cannot be fit,
+OOF mode predicts from that fold's training data only: the mean for regression,
+the event prior for binary outcomes, and class priors for multiclass outcomes.
+The reason is recorded rather than silently treated as a fitted learner.
 
 ### `stabl_multiomic_cv()`
 
@@ -139,11 +152,19 @@ and cooperative fusion settings are propagated into each outer fold.
 ### `stabl_multiomic_nested_cv()`
 
 Runs nested multi-omic cross-validation for benchmark workflows. Cooperative
-fusion is not forwarded by this nested-CV helper.
+fusion is not forwarded by this nested-CV helper. Nested CV estimates predictive
+performance for the specified workflow; it does not establish dataset-wide FDP
+control, and small outer-training folds can legitimately trigger the documented
+late-fusion prior fallbacks.
 
 ### `stacked_multi_omic()`
 
 Performs random-search late-fusion weight selection for `task_type` values `"binary"`, `"regression"`, or `"multiclass"`.
+
+The pinned cross-language solver evidence compares feature rankings and support,
+not bit-identical coefficients. R and Python use different optimisation paths;
+exact contracts are reserved for accumulation, FDP+, masks, metrics, and the
+committed stacking-candidate matrix.
 
 ### `load_ool_data()`
 

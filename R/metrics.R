@@ -471,8 +471,29 @@ fscore_similarity <- function(list1, list2, beta = 1) {
 # factor vectors.  Called by both nested_cv.R and multiomic_workflows.R so it
 # lives here rather than in either caller file.
 .classification_metrics <- function(truth, predicted) {
-  truth     <- factor(truth)
-  predicted <- factor(predicted, levels = levels(truth))
+  if (length(truth) != length(predicted) || length(truth) == 0L) {
+    stop("`truth` and `predicted` must be non-empty and have equal length.",
+         call. = FALSE)
+  }
+  if (anyNA(truth) || anyNA(predicted)) {
+    stop("Classification metrics require complete truth and predictions.",
+         call. = FALSE)
+  }
+  truth <- if (is.factor(truth)) {
+    factor(truth, levels = levels(truth))
+  } else {
+    factor(truth)
+  }
+  predicted_values <- as.character(predicted)
+  unseen <- setdiff(unique(predicted_values), levels(truth))
+  if (length(unseen)) {
+    stop(
+      "Predicted classes must use the truth levels; unseen: ",
+      paste(unseen, collapse = ", "), ".",
+      call. = FALSE
+    )
+  }
+  predicted <- factor(predicted_values, levels = levels(truth))
   tab       <- table(truth = truth, predicted = predicted)
   recalls    <- diag(tab) / pmax(rowSums(tab), 1L)
   precisions <- diag(tab) / pmax(colSums(tab), 1L)

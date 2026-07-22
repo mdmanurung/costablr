@@ -44,6 +44,11 @@
 #' @param n_iter_lf Number of random weight draws passed to
 #'   [stacked_multi_omic()] during late fusion.  Ignored when
 #'   `late_fusion = FALSE`.
+#' @param late_fusion_training How stacking weights are trained. `"oof"`
+#'   (default) refits STABL selection and the downstream model inside every
+#'   stacking fold. `"python_legacy"` preserves the historical in-sample
+#'   Python-compatible algorithm.
+#' @param late_fusion_nfolds Number of stacking folds used in OOF mode.
 #' @param cooperative_fusion Logical. When `TRUE`, fit a built-in cooperative
 #'   learning branch (vendored multiview engine) in addition to the existing
 #'   per-omic STABL fits. Native v1 supports `family = "gaussian"` and
@@ -102,6 +107,8 @@ stabl_multiomic_train_validate <- function(
     random_state    = NULL,
     early_fusion    = FALSE,
     late_fusion     = FALSE,
+    late_fusion_training = c("oof", "python_legacy"),
+    late_fusion_nfolds = 5L,
     n_iter_lf       = 10000L,
     cooperative_fusion = FALSE,
     rho             = NULL,
@@ -111,12 +118,24 @@ stabl_multiomic_train_validate <- function(
     cooperation_nfolds = 5L,
     ...
 ) {
+  late_fusion_training <- match.arg(late_fusion_training)
+  late_fusion_nfolds <- .validate_scalar_integer_like(
+    late_fusion_nfolds, "late_fusion_nfolds", min = 2L
+  )
   if (!is.null(random_state)) {
     random_state <- .validate_scalar_integer_like(random_state, "random_state")
   }
   n_iter_lf <- .validate_scalar_integer_like(n_iter_lf, "n_iter_lf", min = 1L)
   validate_multiomic_inputs(x_list = x_train_list, y = y_train,
                             groups = groups_train)
+
+  train_ids <- rownames(x_train_list[[1L]])
+  y_train <- .subset_outcome_by_ids(y_train, train_ids)
+  if (!is.null(groups_train)) groups_train <- groups_train[train_ids]
+  bootstrap_strata_train <- .subset_bootstrap_strata_by_ids(
+    bootstrap_strata_train, sample_ids = train_ids,
+    arg = "bootstrap_strata_train"
+  )
 
   omic_names <- names(x_train_list)
   lambda_by_omic <- .resolve_multiomic_lambda_grid(lambda_grid, omic_names)
@@ -127,6 +146,9 @@ stabl_multiomic_train_validate <- function(
       y_valid = y_valid,
       train_omic_names = omic_names
     )
+    valid_ids <- rownames(x_valid_list[[1L]])
+    x_valid_list <- .subset_multiomic_rows(x_valid_list, valid_ids)
+    if (!is.null(y_valid)) y_valid <- .subset_outcome_by_ids(y_valid, valid_ids)
   }
 
   cooperative_args <- NULL
@@ -154,6 +176,9 @@ stabl_multiomic_train_validate <- function(
       call. = FALSE
     )
   }
+  if (isTRUE(late_fusion)) {
+    .validate_late_fusion_outcomes(y_train, y_valid, family)
+  }
 
   fit_params <- list(
     base_learner       = base_learner,
@@ -168,15 +193,13 @@ stabl_multiomic_train_validate <- function(
     random_state       = random_state
   )
 
-  per_omic <- .fit_multiomic_per_omic(
-    x_train_list   = x_train_list,
-    y_train        = y_train,
-    lambda_by_omic = lambda_by_omic,
-    x_valid_list   = x_valid_list,
-    omic_names     = omic_names,
-    fit_params     = fit_params,
-    ...
-  )
+  defer_full_refit <- isTRUE(late_fusion) &&
+    identical(late_fusion_training, "oof")
+  per_omic <- if (defer_full_refit) NULL else .fit_multiomic_per_omic(
+      x_train_list = x_train_list, y_train = y_train,
+      lambda_by_omic = lambda_by_omic, x_valid_list = x_valid_list,
+      omic_names = omic_names, fit_params = fit_params, ...
+    )
 
   ef_result <- if (isTRUE(early_fusion)) {
     .early_fusion_multiomic_fit(
@@ -193,18 +216,34 @@ stabl_multiomic_train_validate <- function(
   }
 
   lf_result <- if (isTRUE(late_fusion)) {
-    .late_fusion_multiomic_fit(
-      selected_train = per_omic$selected_train,
-      selected_valid = per_omic$selected_valid,
-      y_train        = y_train,
-      y_valid        = y_valid,
-      omic_names     = omic_names,
-      family         = family,
-      n_iter_lf      = n_iter_lf,
-      random_state   = random_state
-    )
+    if (identical(late_fusion_training, "python_legacy")) {
+      .late_fusion_multiomic_fit(
+        selected_train = per_omic$selected_train,
+        selected_valid = per_omic$selected_valid,
+        y_train = y_train, y_valid = y_valid, omic_names = omic_names,
+        family = family, n_iter_lf = n_iter_lf, random_state = random_state
+      )
+    } else {
+      .late_fusion_oof_fit(
+        x_train_list = x_train_list, y_train = y_train,
+        x_valid_list = x_valid_list, y_valid = y_valid,
+        groups_train = groups_train,
+        bootstrap_strata_train = bootstrap_strata_train,
+        lambda_by_omic = lambda_by_omic, fit_params = fit_params,
+        omic_names = omic_names,
+        family = family, n_iter_lf = n_iter_lf,
+        nfolds = late_fusion_nfolds, random_state = random_state, ...
+      )
+    }
   } else {
     NULL
+  }
+  if (!is.null(lf_result)) {
+    lf_result$provenance$training_mode <- late_fusion_training
+  }
+  if (defer_full_refit) {
+    per_omic <- lf_result$full_per_omic
+    lf_result$full_per_omic <- NULL
   }
 
   # ---- Cooperative fusion --------------------------------------------------
@@ -276,6 +315,10 @@ stabl_multiomic_train_validate <- function(
 #' @param late_fusion Logical.  Forwarded to each per-fold
 #'   [stabl_multiomic_train_validate()] call.
 #' @param n_iter_lf Forwarded to [stabl_multiomic_train_validate()].
+#' @param late_fusion_training Forwarded to
+#'   [stabl_multiomic_train_validate()].
+#' @param late_fusion_nfolds Forwarded to
+#'   [stabl_multiomic_train_validate()].
 #' @param cooperative_fusion Forwarded to
 #'   [stabl_multiomic_train_validate()].
 #' @param rho Forwarded to [stabl_multiomic_train_validate()].
@@ -316,6 +359,8 @@ stabl_multiomic_cv <- function(
   random_state    = NULL,
   early_fusion    = FALSE,
   late_fusion     = FALSE,
+  late_fusion_training = c("oof", "python_legacy"),
+  late_fusion_nfolds = 5L,
   n_iter_lf       = 10000L,
   cooperative_fusion = FALSE,
   rho               = NULL,
@@ -325,6 +370,10 @@ stabl_multiomic_cv <- function(
   cooperation_nfolds = 5L,
   ...
 ) {
+  late_fusion_training <- match.arg(late_fusion_training)
+  late_fusion_nfolds <- .validate_scalar_integer_like(
+    late_fusion_nfolds, "late_fusion_nfolds", min = 2L
+  )
   v <- .validate_scalar_integer_like(v, "v", min = 2L)
   if (!is.null(random_state)) {
     random_state <- .validate_scalar_integer_like(random_state, "random_state")
@@ -378,6 +427,8 @@ stabl_multiomic_cv <- function(
       random_state    = random_state,
       early_fusion    = early_fusion,
       late_fusion     = late_fusion,
+      late_fusion_training = late_fusion_training,
+      late_fusion_nfolds = late_fusion_nfolds,
       n_iter_lf       = n_iter_lf,
       cooperative_fusion = cooperative_fusion,
       rho             = rho,
@@ -517,13 +568,32 @@ stabl_multiomic_cv <- function(
                                         y_valid, omic_names, family, n_iter_lf,
                                         random_state) {
   task_type <- .family_to_task_type(family)
-  if (identical(task_type, "multiclass")) {
+  binary_mapping <- NULL
+  if (identical(task_type, "binary")) {
+    mapped <- .late_fusion_binary_outcome(y_train)
+    y_train <- mapped$y
+    binary_mapping <- mapped$mapping
+    if (!is.null(y_valid)) {
+      valid_factor <- factor(y_valid, levels = names(binary_mapping))
+      if (anyNA(valid_factor)) {
+        stop("Validation outcomes must use the training binary event levels.",
+             call. = FALSE)
+      }
+      y_valid <- setNames(as.integer(valid_factor) - 1L, names(y_valid))
+    }
+  }
+  out <- if (identical(task_type, "multiclass")) {
     .late_fusion_multiclass(selected_train, selected_valid, y_train, y_valid,
                             omic_names, n_iter_lf, random_state)
   } else {
     .late_fusion_scalar(selected_train, selected_valid, y_train, y_valid,
                         omic_names, task_type, n_iter_lf, random_state)
   }
+  out$provenance <- list(
+    training_mode = "python_legacy",
+    binary_event_mapping = binary_mapping
+  )
+  out
 }
 
 .late_fusion_multiclass <- function(selected_train, selected_valid, y_train, y_valid,
@@ -638,6 +708,7 @@ stabl_multiomic_cv <- function(
     )
   }
 
+  reference_ids <- NULL
   for (omic in train_omic_names) {
     x_valid <- x_valid_list[[omic]]
     if (!(is.data.frame(x_valid) || is.matrix(x_valid))) {
@@ -651,11 +722,56 @@ stabl_multiomic_cv <- function(
     }
     .validate_unique_names(sample_ids, sprintf("validation omic '%s' row names", omic))
     .validate_feature_names(x_valid, sprintf("validation omic '%s'", omic))
+    numeric_matrix <- suppressWarnings(as.matrix(x_valid))
+    if (!is.numeric(numeric_matrix)) {
+      stop(sprintf("Validation omic '%s' must contain only numeric features.", omic),
+           call. = FALSE)
+    }
+    if (any(!is.finite(numeric_matrix))) {
+      stop(sprintf("Validation omic '%s' must contain only finite values.", omic),
+           call. = FALSE)
+    }
+    if (is.null(reference_ids)) {
+      reference_ids <- sample_ids
+    } else if (!setequal(sample_ids, reference_ids)) {
+      stop("All validation omics must contain the same sample-ID set.",
+           call. = FALSE)
+    }
     if (!is.null(y_valid)) {
       validate_sample_alignment(x = x_valid, y = y_valid, groups = NULL)
     }
   }
 
+  invisible(NULL)
+}
+
+.validate_late_fusion_outcomes <- function(y_train, y_valid, family) {
+  if (is.null(y_valid)) return(invisible(NULL))
+  if (length(y_valid) == 0L || anyNA(y_valid)) {
+    stop("`y_valid` must be non-empty and complete for late fusion.", call. = FALSE)
+  }
+  if (identical(family, "binomial")) {
+    mapping <- .late_fusion_binary_outcome(y_train)$mapping
+    valid <- factor(y_valid, levels = names(mapping))
+    if (anyNA(valid)) {
+      stop("Validation outcomes must use the training binary event levels.",
+           call. = FALSE)
+    }
+  } else if (identical(family, "multinomial")) {
+    train <- factor(y_train)
+    if (nlevels(train) < 2L || anyNA(train)) {
+      stop("Multiclass training outcomes must contain at least two complete levels.",
+           call. = FALSE)
+    }
+    valid <- factor(y_valid, levels = levels(train))
+    if (anyNA(valid)) {
+      stop("Validation outcomes must use the training multiclass levels.",
+           call. = FALSE)
+    }
+  } else if (!is.numeric(y_valid) || any(!is.finite(y_valid))) {
+    stop("Regression `y_valid` must be a complete finite numeric vector.",
+         call. = FALSE)
+  }
   invisible(NULL)
 }
 
@@ -1338,6 +1454,20 @@ stacked_multi_omic <- function(
   if (n_omics == 0L) {
     stop("`predictions` must have at least one column.", call. = FALSE)
   }
+  if (!is.numeric(predictions)) {
+    stop("`predictions` must be numeric.", call. = FALSE)
+  }
+  if (length(y) != n_samples || !is.numeric(y) || anyNA(y) ||
+      any(!is.finite(y))) {
+    stop("`y` must be a complete finite numeric vector with one value per prediction row.",
+         call. = FALSE)
+  }
+  if (identical(task_type, "binary") && !setequal(unique(y), c(0, 1))) {
+    stop("Binary `y` must contain both event values 0 and 1.", call. = FALSE)
+  }
+  if (any(!is.finite(predictions[!is.na(predictions)]))) {
+    stop("Observed `predictions` values must be finite.", call. = FALSE)
+  }
 
   # Loop-invariant: NA structure of predictions and y never change across iterations.
   # Hoisting avoids recomputing these inside the n_iter loop.
@@ -1469,6 +1599,19 @@ stacked_multi_omic <- function(
   mats <- lapply(predictions, function(x) {
     x <- as.matrix(x)
     storage.mode(x) <- "double"
+    if (anyNA(x) || any(!is.finite(x))) {
+      stop("Multiclass probability vectors must be complete and finite.",
+           call. = FALSE)
+    }
+    if (any(x < 0 | x > 1)) {
+      stop("Multiclass probabilities must lie in [0, 1].", call. = FALSE)
+    }
+    totals <- rowSums(x)
+    if (any(abs(totals - 1) > 1e-8)) {
+      stop("Each multiclass probability vector must sum to one.",
+           call. = FALSE)
+    }
+    x <- x / totals
     x
   })
   first_dim <- dim(mats[[1L]])
@@ -1541,11 +1684,13 @@ stacked_multi_omic <- function(
 
 .multiclass_log_loss <- function(y, probs, eps = 1e-15) {
   y <- factor(y, levels = colnames(probs))
-  idx <- !is.na(y) & rowSums(!is.finite(probs)) == 0L
-  if (sum(idx) == 0L) return(Inf)
-  probs <- pmin(pmax(probs[idx, , drop = FALSE], eps), 1 - eps)
+  if (anyNA(y) || any(!is.finite(probs))) {
+    stop("Multiclass log loss requires complete outcomes and probability vectors.",
+         call. = FALSE)
+  }
+  probs <- pmin(pmax(probs, eps), 1 - eps)
   probs <- probs / rowSums(probs)
-  truth_idx <- cbind(seq_len(sum(idx)), as.integer(y[idx]))
+  truth_idx <- cbind(seq_len(length(y)), as.integer(y))
   -mean(log(probs[truth_idx]))
 }
 

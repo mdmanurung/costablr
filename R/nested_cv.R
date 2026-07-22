@@ -45,7 +45,10 @@
 #'
 #' @note Cooperative fusion (`cooperative_fusion = TRUE`) is not supported in
 #'   nested CV. Use [stabl_multiomic_train_validate()] or
-#'   [stabl_multiomic_cv()] for cooperative workflows.
+#'   [stabl_multiomic_cv()] for cooperative workflows. The held-out metrics
+#'   estimate predictive performance for the declared candidate workflow; they
+#'   do not establish dataset-wide FDP control. Late-fusion stacking is not a
+#'   candidate type in this helper.
 #'
 #' @return An object of class `"stabl_multiomic_nested_cv"` containing fold
 #'   definitions, inner candidate diagnostics, outer held-out predictions,
