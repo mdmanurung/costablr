@@ -51,6 +51,11 @@ Rscript inst/analysis/run_methodology_validation.R \
   --profile release --workers 32 --out /tmp/stablr-v0.1.1-methodology
 ```
 
+The release profile requires an identifiable, clean Git source tree before it
+starts. The runner records both start and end commit/tree state and rejects the
+artifacts if tracked provenance changes during the run. The late-fusion release
+runner applies the same invariant.
+
 Release gates are evaluated separately for every
 family/scenario/artificial-strategy cell. Missing, incomplete, skipped, or
 errored cells fail. For each global-null cell, the one-sided 95% Wilson upper
@@ -80,8 +85,9 @@ All artifacts are written under the user-specified `--out` directory.
   expose `artificial_provenance` for direct per-fit reporting.
 - `python_metrics_parity.csv`: observed R metric values compared against bundled
   Python parity fixtures with absolute error and `ok`/`mismatch` status.
-- `methodology_validation_manifest.txt`: run settings, hypotheses, and artifact
-  paths.
+- `methodology_validation_manifest.txt`: run settings, hypotheses, start/end Git
+  provenance, source-stability status, artifact paths, and artifact SHA-256
+  hashes.
 - `methodology_validation_gates.csv`: per-cell gate bounds, completeness status,
   criteria, and pass/fail results.
 

@@ -19,17 +19,6 @@
   NA_character_
 }
 .root <- .find_source_root()
-if ("stablr" %in% loadedNamespaces()) {
-  .package_mode <- paste0(
-    "loaded:", getNamespaceInfo(asNamespace("stablr"), "path")
-  )
-} else if (!is.na(.root) && requireNamespace("pkgload", quietly = TRUE)) {
-  pkgload::load_all(.root, quiet = TRUE)
-  .package_mode <- paste0("source:", .root)
-} else {
-  if (!requireNamespace("stablr", quietly = TRUE)) stop("stablr must be installed.")
-  .package_mode <- paste0("installed:", system.file(package = "stablr"))
-}
 
 .git_provenance <- function(root) {
   empty <- list(commit = NA_character_, tree = NA_character_, dirty = NA)
@@ -50,6 +39,34 @@ if ("stablr" %in% loadedNamespaces()) {
     tree = git("rev-parse", "HEAD^{tree}"),
     dirty = if (is.na(status)) NA else nzchar(status)
   )
+}
+
+.git_provenance_is_clean <- function(provenance) {
+  is.character(provenance$commit) && length(provenance$commit) == 1L &&
+    !is.na(provenance$commit) && nzchar(provenance$commit) &&
+    is.character(provenance$tree) && length(provenance$tree) == 1L &&
+    !is.na(provenance$tree) && nzchar(provenance$tree) &&
+    identical(provenance$dirty, FALSE)
+}
+
+.git_provenance_is_stable <- function(start, end) {
+  identical(start$commit, end$commit) &&
+    identical(start$tree, end$tree) &&
+    identical(start$dirty, end$dirty)
+}
+
+.source_provenance_start <- .git_provenance(.root)
+
+if ("stablr" %in% loadedNamespaces()) {
+  .package_mode <- paste0(
+    "loaded:", getNamespaceInfo(asNamespace("stablr"), "path")
+  )
+} else if (!is.na(.root) && requireNamespace("pkgload", quietly = TRUE)) {
+  pkgload::load_all(.root, quiet = TRUE)
+  .package_mode <- paste0("source:", .root)
+} else {
+  if (!requireNamespace("stablr", quietly = TRUE)) stop("stablr must be installed.")
+  .package_mode <- paste0("installed:", system.file(package = "stablr"))
 }
 
 .sha256_file <- function(path) {
@@ -156,6 +173,14 @@ if ("stablr" %in% loadedNamespaces()) {
 
 run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L,
                                        n_iter = 500L, seed = 220711L) {
+  provenance_start <- .source_provenance_start
+  if (!is.na(.root) && file.exists(file.path(.root, ".git")) &&
+      !.git_provenance_is_clean(provenance_start)) {
+    stop(
+      "Late-fusion release validation requires a clean Git source tree with an identifiable commit.",
+      call. = FALSE
+    )
+  }
   dir.create(out, recursive = TRUE, showWarnings = FALSE)
   design <- expand.grid(
     family = c("gaussian", "binomial", "multinomial"),
@@ -252,15 +277,23 @@ run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L
     seed = integer(), mode = character(), warning = character()
   )
   utils::write.csv(warnings, warnings_path, row.names = FALSE)
-  provenance <- .git_provenance(.root)
+  provenance_end <- .git_provenance(.root)
+  provenance_stable <- .git_provenance_is_stable(
+    provenance_start,
+    provenance_end
+  )
   artifact_paths <- c(results_path, summary_path, warnings_path)
   writeLines(c(
     paste("R", R.version.string),
     paste("stablr", as.character(utils::packageVersion("stablr"))),
     paste("package_mode", .package_mode),
-    paste("source_git_commit", provenance$commit),
-    paste("source_git_tree", provenance$tree),
-    paste("source_tracked_dirty", provenance$dirty),
+    paste("source_git_commit", provenance_start$commit),
+    paste("source_git_tree", provenance_start$tree),
+    paste("source_tracked_dirty", provenance_start$dirty),
+    paste("end_git_commit", provenance_end$commit),
+    paste("end_git_tree", provenance_end$tree),
+    paste("end_tracked_dirty", provenance_end$dirty),
+    paste("source_git_stable", provenance_stable),
     paste("replicates_per_cell", replicates),
     paste("n_bootstraps", n_bootstraps), paste("n_iter", n_iter),
     "Families: gaussian, binomial, multinomial; regimes: null, signal.",
@@ -270,6 +303,12 @@ run_late_fusion_validation <- function(out, replicates = 50L, n_bootstraps = 20L
     "artifact_sha256:",
     paste(basename(artifact_paths), vapply(artifact_paths, .sha256_file, character(1L)))
   ), file.path(out, "late_fusion_manifest.txt"))
+  if (!isTRUE(provenance_stable)) {
+    stop(
+      "Git source provenance changed during late-fusion release validation; artifacts are not release evidence.",
+      call. = FALSE
+    )
+  }
   if (!all(summary$reduced_optimism & summary$noninferior & summary$fallback_ok)) {
     stop("Late-fusion release gates failed; release must stop.", call. = FALSE)
   }

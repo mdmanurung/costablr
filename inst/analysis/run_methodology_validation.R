@@ -549,6 +549,20 @@
   )
 }
 
+.git_provenance_is_clean <- function(provenance) {
+  is.character(provenance$commit) && length(provenance$commit) == 1L &&
+    !is.na(provenance$commit) && nzchar(provenance$commit) &&
+    is.character(provenance$tree) && length(provenance$tree) == 1L &&
+    !is.na(provenance$tree) && nzchar(provenance$tree) &&
+    identical(provenance$dirty, FALSE)
+}
+
+.git_provenance_is_stable <- function(start, end) {
+  identical(start$commit, end$commit) &&
+    identical(start$tree, end$tree) &&
+    identical(start$dirty, end$dirty)
+}
+
 .sha256_file <- function(path) {
   if (nzchar(Sys.which("sha256sum"))) {
     out <- system2("sha256sum", shQuote(path), stdout = TRUE)
@@ -735,9 +749,13 @@
     paste0("workers: ", settings$workers),
     paste0("package_mode: ", settings$package_mode),
     paste0("package_version: ", settings$package_version),
-    paste0("source_git_commit: ", settings$git$commit),
-    paste0("source_git_tree: ", settings$git$tree),
-    paste0("source_tracked_dirty: ", settings$git$dirty),
+    paste0("source_git_commit: ", settings$git_start$commit),
+    paste0("source_git_tree: ", settings$git_start$tree),
+    paste0("source_tracked_dirty: ", settings$git_start$dirty),
+    paste0("end_git_commit: ", settings$git_end$commit),
+    paste0("end_git_tree: ", settings$git_end$tree),
+    paste0("end_tracked_dirty: ", settings$git_end$dirty),
+    paste0("source_git_stable: ", settings$git_stable),
     paste0("families: ", paste(settings$families, collapse = ",")),
     paste0("artificial_types: ", paste(settings$artificial_types, collapse = ",")),
     paste0("scenarios: ", paste(settings$scenarios$scenario, collapse = ",")),
@@ -906,8 +924,17 @@ run_methodology_validation <- function(out,
                                        seed = 270627L,
                                        target_fdp = 0.1,
                                        workers = 1L) {
-  package_mode <- .load_validation_package()
   profile <- match.arg(profile)
+  package_root <- .find_package_root()
+  git_start <- .git_provenance(package_root)
+  if (identical(profile, "release") &&
+      !.git_provenance_is_clean(git_start)) {
+    stop(
+      "Locked release methodology validation requires a clean Git source tree with an identifiable commit.",
+      call. = FALSE
+    )
+  }
+  package_mode <- .load_validation_package()
   if (identical(profile, "release")) {
     locked <- .release_profile_settings()
     replicates <- locked$replicates
@@ -1050,6 +1077,8 @@ run_methodology_validation <- function(out,
     expected_replicates = replicates
   )
   utils::write.csv(gates_df, artifacts$gates, row.names = FALSE)
+  git_end <- .git_provenance(package_root)
+  git_stable <- .git_provenance_is_stable(git_start, git_end)
   .write_manifest(
     path = artifacts$manifest,
     settings = list(
@@ -1065,10 +1094,19 @@ run_methodology_validation <- function(out,
       families = families,
       artificial_types = artificial_types,
       scenarios = scenarios,
-      git = .git_provenance(.find_package_root())
+      git_start = git_start,
+      git_end = git_end,
+      git_stable = git_stable
     ),
     artifacts = artifacts
   )
+
+  if (identical(profile, "release") && !isTRUE(git_stable)) {
+    stop(
+      "Git source provenance changed during locked release methodology validation; artifacts are not release evidence.",
+      call. = FALSE
+    )
+  }
 
   artifacts
 }

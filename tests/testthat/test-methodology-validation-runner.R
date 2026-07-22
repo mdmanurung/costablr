@@ -50,6 +50,11 @@ test_that("methodology validation runner writes bounded artifact schema", {
   expect_true(file.exists(artifacts$parity))
   expect_true(file.exists(artifacts$manifest))
 
+  manifest <- readLines(artifacts$manifest, warn = FALSE)
+  expect_true(any(startsWith(manifest, "source_git_commit: ")))
+  expect_true(any(startsWith(manifest, "end_git_commit: ")))
+  expect_true(any(startsWith(manifest, "source_git_stable: ")))
+
   replicate_rows <- utils::read.csv(artifacts$replicates, stringsAsFactors = FALSE)
   expect_named(
     replicate_rows,
@@ -85,6 +90,41 @@ test_that("methodology validation runner writes bounded artifact schema", {
   expect_true(all(c(
     "family", "scenario", "artificial_type", "cell_status", "gate", "pass"
   ) %in% names(gate_rows)))
+})
+
+test_that("release provenance detects dirty and moving source trees", {
+  env <- new.env(parent = globalenv())
+  sys.source(.methodology_runner_path(), envir = env)
+  clean <- list(commit = "abc", tree = "tree-a", dirty = FALSE)
+  dirty <- list(commit = "abc", tree = "tree-a", dirty = TRUE)
+  moved <- list(commit = "def", tree = "tree-b", dirty = FALSE)
+
+  expect_true(env$.git_provenance_is_clean(clean))
+  expect_false(env$.git_provenance_is_clean(dirty))
+  expect_true(env$.git_provenance_is_stable(clean, clean))
+  expect_false(env$.git_provenance_is_stable(clean, moved))
+
+  env$.git_provenance <- function(root) dirty
+  expect_error(
+    env$run_methodology_validation(
+      out = tempfile("method-dirty-release-"),
+      profile = "release"
+    ),
+    "requires a clean Git source tree"
+  )
+
+  late_env <- new.env(parent = globalenv())
+  sys.source(.late_fusion_runner_path(), envir = late_env)
+  late_env$.source_provenance_start <- dirty
+  expect_error(
+    late_env$run_late_fusion_validation(
+      out = tempfile("late-fusion-dirty-release-"),
+      replicates = 1L,
+      n_bootstraps = 2L,
+      n_iter = 2L
+    ),
+    "requires a clean Git source tree"
+  )
 })
 
 test_that("locked release methodology profile covers the advertised matrix", {

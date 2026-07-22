@@ -65,6 +65,9 @@
   locked statistical release gates. Validation commands, versions, hashes,
   warnings, profiling limitations, and platform results are recorded in
   `docs/release/0.1.1-validation.md`.
+  Locked long-running validators now require a clean Git source tree, record
+  both start and end provenance, and reject evidence if the tracked tree moves
+  during computation.
 
 # stablr 0.1.0
 
