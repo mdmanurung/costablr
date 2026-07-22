@@ -101,6 +101,7 @@ test_that("make_sgl_adapter returns a selection mask", {
 })
 
 test_that("make_sgl_adapter rejects cox family", {
+  skip_if_not_installed("sparsegl")
   expect_error(
     make_sgl_adapter(family = "cox", feature_groups = 1:3),
     "Cox family is not supported"
@@ -108,5 +109,6 @@ test_that("make_sgl_adapter rejects cox family", {
 })
 
 test_that("make_sgl_adapter requires feature_groups", {
+  skip_if_not_installed("sparsegl")
   expect_error(make_sgl_adapter(), "feature_groups")
 })
